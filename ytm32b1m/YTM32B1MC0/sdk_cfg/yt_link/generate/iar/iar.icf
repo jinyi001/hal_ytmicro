@@ -1,0 +1,226 @@
+{{ytCopyright "yt_linker.icf"}}
+
+define memory mem with size = 4G;
+
+{{setVar2 'level1' (createArray)~}}
+{{#each this.data~}}
+{{#if this.children~}}
+{{#each (sortBy this.children (createArray 'order' 'name'))~}}
+{{#if this.isFlash}}
+{{push2 @root.level1 this~}}
+{{/if}}
+{{/each~}}
+{{/if~}}
+{{/each~}}
+{{#each this.data~}}
+{{#if this.children~}}
+{{#each (sortBy this.children (createArray 'order' 'name'))~}}
+{{#if (not this.isFlash)}}
+{{push2 @root.level1 this~}}
+{{/if}}
+{{/each~}}
+{{/if~}}
+{{/each~}}
+{{setVar2 'sections' (createObject)~}}
+{{#each @root.level1~}}
+{{setVar2 'parent' this}}
+{{#if this.children~}}
+{{#each this.children~}}
+{{#if this.children~}}
+{{#each this.children~}}
+{{set2 this 'parent' @root.parent~}}
+{{set2 @root.sections this.id this~}}
+{{/each~}}
+{{/if}}
+{{/each~}}
+{{/if}}
+{{/each~}}
+{{setVar2 'sectionList' (createArray)~}}
+{{#each @root.level1~}}
+{{#if this.children~}}
+{{#each (sortBy this.children (createArray 'order' 'name'))~}}
+{{#if this.children~}}
+{{#each (sortBy this.children (createArray 'order' 'name'))~}}
+{{#if this.copyFrom~}}
+{{set2 (get this.copyFrom @root.sections) 'needCopy' true}}
+{{set2 (get this.copyFrom @root.sections) 'name' this.name}}
+{{set2 (get this.copyFrom @root.sections) 'children' this.children}}
+{{/if}}
+{{push2 @root.sectionList this.id~}}
+{{/each~}}
+{{/if~}}
+{{/each~}}
+{{/if~}}
+{{/each~}}
+
+{{#each @root.level1}}
+define exported symbol {{this.name}}_memory_start = 0x{{nToString this.startAddress 16}};
+define exported symbol {{this.name}}_memory_end = 0x{{nToString (minus (add (Number this.startAddress) (Number this.size)) 1) 16}};
+define region {{this.name}} = mem:[from {{this.name}}_memory_start to {{this.name}}_memory_end]; /*{{this.size}}*/
+
+{{/each}}
+
+
+
+{{#each @root.sectionList}}
+{{setVar2 'i' (get this @root.sections)~}}
+{{#if @root.i.needCopy}}
+
+define root section {{@root.i.name}}_rom_start_section
+{
+    public {{@root.i.name}}_rom_start:
+};
+define root section {{@root.i.name}}_rom_end_section
+{
+    public {{@root.i.name}}_rom_end:
+};
+define block {{@root.i.name}}_rom_block with fixed order{{#if @root.i.align}}, alignment = {{@root.i.align}}{{/if}}{{#if @root.i.endAlign}}, end alignment = {{@root.i.endAlign}}{{/if}}
+{
+    section {{@root.i.name}}_rom_start_section,
+{{#each (sortBy @root.i.children (createArray 'order' 'name'))}}
+    block {{this.name}}_rom{{#if this.align}} with alignment = {{this.align}}{{/if}} { {{#if this.binFile}}{{#each (split this.binFile ';')}}object {{{this}}} ,{{/each}}{{/if}} section {{#if (not this.removeDot)}}.{{/if}}{{this.name}}_init{{#if this.wildcard}} ,section {{#if (not this.removeDot)}}.{{/if}}{{this.name}}_init*{{/if}} },
+{{/each}}
+    section {{@root.i.name}}_rom_end_section
+};
+
+"{{@root.i.parent.name}}_{{@root.i.name}}_rom": place in {{@root.i.parent.name}}
+{
+    block {{@root.i.name}}_rom_block
+};
+
+{{else}}
+define root section {{@root.i.name}}_start_section
+{
+{{#if @root.i.copyFrom}}
+    public {{@root.i.name}}_ram_start:
+{{/if}}
+    public {{@root.i.name}}_start:
+{{#if @root.i.altSymbolStart}}
+    public {{@root.i.altSymbolStart}}:
+{{/if}}
+};
+define root section {{@root.i.name}}_end_section
+{
+{{#if @root.i.copyFrom}}
+    public {{@root.i.name}}_ram_end:
+{{/if}}
+    public {{@root.i.name}}_end:
+{{#if @root.i.altSymbolEnd}}
+    public {{@root.i.altSymbolEnd}}:
+{{/if}}
+};
+{{#each (sortBy @root.i.children (createArray 'order' 'name'))}} 
+define root section {{this.name}}_region_start_section{{#if this.align}} with alignment = {{this.align}}{{/if}}
+{
+    public {{this.name}}_region_start:
+{{#if this.altSymbolStart}}
+    public {{this.altSymbolStart}}:
+{{/if}}
+};
+define root section {{this.name}}_region_end_section
+{
+    public {{this.name}}_region_end:
+{{#if this.altSymbolEnd}}
+    public {{this.altSymbolEnd}}:
+{{/if}}
+};
+{{/each}}
+{{#if (and @root.i.groupSize (eq (length @root.i.children) 0))}}
+define root section {{@root.i.name}}_region_start_section
+{
+    public {{@root.i.name}}_region_start:
+};
+define root section {{@root.i.name}}_region_end_section
+{
+    public {{@root.i.name}}_region_end:
+};
+{{/if}}
+define block {{@root.i.name}}_block with fixed order{{#if @root.i.align}}, alignment = {{@root.i.align}}{{/if}}{{#if @root.i.endAlign}}, end alignment = {{@root.i.endAlign}}{{/if}}
+{
+    section {{@root.i.name}}_start_section, 
+{{#each (sortBy @root.i.children (createArray 'order' 'name'))}} 
+    section {{this.name}}_region_start_section,
+    block {{this.name}}{{#if this.align}} with alignment = {{this.align}}{{/if}} { {{#if this.binFile}}{{#each (split this.binFile ';')}}object {{{this}}} ,{{/each}}{{/if}} section {{#if (not this.removeDot)}}.{{/if}}{{this.name}}{{#if this.wildcard}} ,section {{#if (not this.removeDot)}}.{{/if}}{{this.name}}*{{/if}} },
+    section {{this.name}}_region_end_section,
+{{/each}}
+{{#if (and @root.i.groupSize (eq (length @root.i.children) 0))}}
+    section {{@root.i.name}}_region_start_section,
+    block {{@root.i.name}}_empty_block with size = {{@root.i.groupSize}} {},
+    section {{@root.i.name}}_region_end_section,
+{{/if}}
+    section {{@root.i.name}}_end_section
+};
+"{{@root.i.parent.name}}_{{@root.i.name}}": place in {{@root.i.parent.name}}
+{
+    block {{@root.i.name}}_block
+};
+
+{{#if @root.i.copyFrom}}
+check that size(block {{@root.i.name}}_block) == size(block {{@root.i.name}}_rom_block);
+{{/if}}
+
+{{#if (and @root.i.groupSize (eq (length @root.i.children) 0))}}
+keep
+{
+    block {{@root.i.name}}_empty_block
+};
+{{/if}}
+{{setVar2 'hasKeep' 0~}}
+{{#each @root.i.children~}}
+{{#eq this.flags 'KEEP'~}}
+{{setVar2 'hasKeep' 1~}}
+{{/eq~}}
+{{/each~}}
+{{#if @root.hasKeep}}
+keep
+{
+{{#each (sortBy @root.i.children (createArray 'order' 'name'))}}
+    section {{#if (not this.removeDot)}}.{{/if}}{{this.name}},
+{{#if this.wildcard}}
+    section {{#if (not this.removeDot)}}.{{/if}}{{this.name}}*,
+{{/if}}
+{{/each}}
+};
+{{/if}}
+{{/if}}
+{{/each}}
+
+initialize manually {
+{{#each @root.sectionList}}
+{{setVar2 'i' (get this @root.sections)~}}
+{{#each (sortBy @root.i.children (createArray 'order' 'name'))}} 
+{{#if @root.i.copyFrom}}
+{{#if this.binFile}}
+{{#each (split this.binFile ';')}}
+    object {{{this}}},
+{{/each}}
+{{/if}}
+    section {{#if (not this.removeDot)}}.{{/if}}{{this.name}},
+{{#if this.wildcard}}
+    section {{#if (not this.removeDot)}}.{{/if}}{{this.name}}*,
+{{/if}}
+{{/if}}
+{{/each}}
+{{/each}}
+};
+
+
+do not initialize {
+{{#each @root.sectionList}}
+{{setVar2 'i' (get this @root.sections)~}}
+{{#each (sortBy @root.i.children (createArray 'order' 'name'))}} 
+{{#if @root.i.copyFrom}}
+{{else}}
+{{#if this.binFile}}
+{{#each (split this.binFile ';')}}
+    object {{{this}}},
+{{/each}}
+{{/if}}
+    section {{#if (not this.removeDot)}}.{{/if}}{{this.name}},
+{{#if this.wildcard}}
+    section {{#if (not this.removeDot)}}.{{/if}}{{this.name}}*,
+{{/if}}
+{{/if}}
+{{/each}}
+{{/each}}
+};

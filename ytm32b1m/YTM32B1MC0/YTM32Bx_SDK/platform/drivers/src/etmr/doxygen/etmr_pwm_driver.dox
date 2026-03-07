@@ -1,0 +1,418 @@
+/*!
+    @defgroup etmr_pwm_driver eTMR Pulse Width Modulation Driver (eTMR_PWM)
+    @ingroup etmr
+    @details
+    @brief eTMR Pulse Width Modulation Peripheral Driver.
+
+    ## Hardware background ##
+    The eTMR module is based on a 16 bits counter and supports: input capture, output compare, PWM and some instances
+    include quadrature decoder.
+
+    ## How to use eTMR driver in your application ##
+    For all operation modes (without Quadrature Decoder mode) the user need to configure etmr_user_config_t. This structure will be used for initialization
+    (eTMR_DRV_Init). The next functions used are specific for each operation mode.
+
+    ### PWM mode ###
+    For this mode, the user needs to configure parameters such: number of PWM channels, frequency, dead time, fault channels and
+    duty cycle, alignment (edge or center). All this information is included in the etmr_pwm_param_t structure.
+
+    eTMR_DRV_UpdatePwmChannel can be used to update duty cycles at run time. If the type of update in the duty cycle
+    when the duty cycle can have value between 0x0 (0%) and 0x8000 (100%). If the type of update in ticks when the firstEdge and secondEdge variables
+    can have value between 0 and etmrPeriod which is stored in the state structure.
+
+    ### Safe state and polarity of the PWM channels ###
+    These 2 parameters are dependent from eTMR hardware perspective, but the eTMR_PWM driver can handle them independently, so polarity field configures the final polarity measured at MCU pins
+    and safeState field is the value of the PWM channel when fault is detected and fault is configured to use safe state, not tri-state mode. The same behavior is available for combined mode, polarity and safe state
+    can be configured independently.
+
+    ## API code changes ##
+    In BETA 2.9.0 the following changes were made in eTMR_PWM API:
+    - from etmr_pwm_ch_param_t the following fields were removed: levelSelect
+    - in etmr_pwm_ch_param_t safeState field was added
+    - from etmr_combined_ch_param_t the following fields were removed: levelSelect, levelSelectOnNextChn.
+    - in etmr_combined_ch_param_t mainChannelSafeState and secondChannelSafeState fields were added.
+    - etmr_safe_state_polarity_t enum was changed
+
+    From application perspective the impact is the following:
+    - second channel can't be used in independent channels, just in combined channels
+    - polarity and safe state should be checked with the new API.
+
+    The advantages of the eTMR_PWM API from BETA 2.9,0 are:
+    - safe state and polarity can be configured without strong understatement of the Reference Manual
+    - dead time will be always inserted
+    Note that:
+    - In the etmr_pwm_ch_param_t structure has the "etmr_safe_state_polarity_t safeState" variable which user can configure the polarity of PWM signal on the channel n+1.
+    and the "etmr_second_channel_polarity_t secondChannelPolarity" is only used to configure the channel n+1 in the complementary mode for the inverted or duplicated channel n.
+    - In the combined channel, the configuration structure has same feature as in the independent mode. It is only difference which the "etmr_safe_state_polarity_t secondChannelSafeState" variable should be set the channel (n+1) polarity if needed.
+    - When the fault input is disabled in the configuration the user should be set the etmr_safe_state_polarity_t as eTMR_LOW_STATE for both cases in the independent and combined channel because it is not necessary.
+
+    ## Integration guideline ##
+
+    ### Compilation units ###
+
+    The following files need to be compiled in the project:
+    \verbatim
+    ${SDK_PATH}\platform\drivers\src\etmr\etmr_pwm_driver.c
+    ${SDK_PATH}\platform\drivers\src\etmr\etmr_common.c
+    ${SDK_PATH}\platform\drivers\src\etmr\etmr_hw_access.c
+    \endverbatim
+
+    ### Include path ###
+
+    The following paths need to be added to the include path of the toolchain:
+    \verbatim
+    ${SDK_PATH}\platform\drivers\inc\
+    ${SDK_PATH}\platform\drivers\src\etmr\
+    \endverbatim
+
+    ### Preprocessor symbols ###
+
+    No special symbols are required for this component
+
+    ### Dependencies ###
+
+    \ref clock_manager
+    \ref interrupt_manager
+
+   Example:
+    @code
+    /* The state structure of instance in the PWM mode */
+    etmr_state_t statePwm;
+    #define eTMR_PWM_INSTANCE        1UL
+    /* Fault configuration structure */
+    etmr_pwm_fault_param_t PWM_FaultConfig =
+    {
+        false,
+        true,
+        5U,                             /* Fault filter value */
+        eTMR_FAULT_CONTROL_MAN_EVEN,
+        {
+            {
+                true,                   /* Fault channel state (Enabled/Disabled) */
+                false,                  /* Fault channel filter state (Enabled/Disabled) */
+                eTMR_POLARITY_INVERT,      /* Channel output state on fault */
+            },
+            {
+                false,                  /* Fault Channel state (Enabled/Disabled) */
+                false,                  /* Fault channel filter state (Enabled/Disabled) */
+                eTMR_POLARITY_NORMAL        /* Channel output state on fault */
+            },
+            {
+                false,                  /* Fault Channel state (Enabled/Disabled) */
+                false,                  /* Fault channel filter state (Enabled/Disabled) */
+                eTMR_POLARITY_NORMAL        /* Channel output state on fault */
+            },
+            {
+                false,                  /* Fault Channel state (Enabled/Disabled) */
+                false,                  /* Fault channel filter state (Enabled/Disabled) */
+                eTMR_POLARITY_NORMAL        /* Channel output state on fault */
+            }
+        }
+    };
+
+    /* Independent channels configuration structure for PWM */
+    etmr_pwm_ch_param_t PWM_IndependentChannelsConfig[1] =
+    {
+        {
+        0U,                     /* hwChannelId */
+        eTMR_POLARITY_NORMAL,         /* Polarity of the PWM signal */
+        4096U,                     /* Duty cycle percent 0-0x8000 */
+        false,                     /* External Trigger */
+        eTMR_LOW_STATE,             /* Safe state of the PWM channel when faults are detected */
+        }
+    };
+
+    /* PWM configuration for PWM */
+    etmr_pwm_param_t PWM_PwmConfig =
+    {
+        1U,                             /* Number of independent PWM channels */
+        0U,                             /* Number of combined PWM channels */
+        eTMR_MODE_EDGE_ALIGNED_PWM,      /* PWM mode */
+        0U,                             /* DeadTime Value */
+        eTMR_DEADTIME_DIVID_BY_4,        /* DeadTime clock divider */
+        7481U,                          /* PWM frequency */
+        PWM_IndependentChannelsConfig,  /* Independent PWM channels configuration structure */
+        NULL,                           /* Combined PWM channels configuration structure */
+        &PWM_FaultConfig                /* PWM fault configuration structure */
+    };
+
+    /* Timer mode configuration for PWM */
+    /* Global configuration of PWM */
+    etmr_user_config_t  PWM_InitConfig =
+    {
+        {
+            true,                       /* Software trigger state */
+            false,                      /* Hardware trigger 1 state */
+            false,                      /* Hardware trigger 2 state */
+            false,                      /* Hardware trigger 3 state */
+            true,                       /* Maximum loading point state */
+            true,                       /* Min loading point state */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for INVCTRL register */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for SWOCTRL register */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for OUTMASK register */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for INIT register */
+            false,                      /* Auto clear trigger state for hardware trigger */
+            eTMR_UPDATE_NOW,             /* Select synchronization method */
+        },
+        eTMR_MODE_EDGE_ALIGNED_PWM,      /* PWM mode */
+        eTMR_CLOCK_DIVID_BY_4,           /* eTMR clock pre-scaler */
+        eTMR_CLOCK_SOURCE_SYSTEMCLK,     /* eTMR clock source */
+        eTMR_BDM_MODE_11,                /* eTMR debug mode */
+        false,                          /* Interrupt state */
+        false                           /* Initialization trigger */
+    };
+    eTMR_DRV_Init(eTMR_PWM_INSTANCE, &PWM_InitConfig, &statePwm);
+    eTMR_DRV_InitPwm(eTMR_PWM_INSTANCE, &PWM_PwmConfig);
+    /* It's recommended to use softwareTrigger = true */
+    /* The SECOND_EDGE value is used only when PWM is used in combined mode */
+    eTMR_DRV_UpdatePwmChannel(eTMR_PWM_INSTANCE, 0UL, 0x2000U, 0U);
+    @endcode
+
+   ### PWM in Modified Combine mode ###
+    For this mode the user needs to configure parameters such: number of PWM channels, frequency, dead time, fault channels and
+    duty cycle, alignment (edge or center). All this information is included in etmr_pwm_param_t data type.
+    The Modified Combine PWM mode is intended to support the generation of PWM signals where the period is not modified while the signal is being generated,
+    but the duty cycle will be varied.
+    eTMR_DRV_UpdatePwmChannel can be used to update duty cycles at run time. If the type of update in the duty cycle
+    when the duty cycle can have value  between 0x0 (0%) and 0x8000 (100%). If the type of update in ticks when the firstEdge and secondEdge variables
+    can have value between 0 and etmrPeriod which is stored in the state structure.In this mode, an even channel (n) and adjacent odd channel (n+1) are
+    combined to generate a PWM signal in the channel (n) output. Thus, the channel (n) match edge is fixed and the channel (n+1) match edge can be varied.
+
+   Example:
+    @code
+    /* The state structure of instance in the PWM mode */
+    etmr_state_t statePwm;
+    #define eTMR_PWM_INSTANCE        0UL
+    /* Fault configuration structure */
+    etmr_pwm_fault_param_t PWM_FaultConfig =
+    {
+        false,
+        true,
+        5U,                             /* Fault filter value */
+        eTMR_FAULT_CONTROL_MAN_EVEN,
+        {
+            {
+                true,                   /* Fault channel state (Enabled/Disabled )*/
+                false,                  /* Fault channel filter state (Enabled/Disabled) */
+                eTMR_POLARITY_INVERT,      /* Channel output state on fault */
+            },
+            {
+                false,                  /* Fault Channel state (Enabled/Disabled) */
+                false,                  /* Fault channel filter state (Enabled/Disabled) */
+                eTMR_POLARITY_NORMAL        /* Channel output state on fault */
+            },
+            {
+                false,                  /* Fault Channel state (Enabled/Disabled) */
+                false,                  /* Fault channel filter state (Enabled/Disabled) */
+                eTMR_POLARITY_NORMAL        /* Channel output state on fault */
+            },
+            {
+                false,                  /* Fault Channel state (Enabled/Disabled) */
+                false,                  /* Fault channel filter state (Enabled/Disabled) */
+                eTMR_POLARITY_NORMAL        /* Channel output state on fault */
+            }
+        }
+    };
+    /* Combine channels configuration structure for PWM */
+    etmr_combined_ch_param_t flexTimer1_CombinedChannelsConfig[1] =
+    {
+        {
+            2U,                   /* Hardware channel for channel (n) */
+            0U,                   /* First edge time */
+            0U,                   /* Second edge time */
+            true,                 /* Dead time enabled/disabled */
+            true,                 /* The modified combine mode enabled/disabled */
+            eTMR_POLARITY_INVERT,     /* Select channel (n) polarity */
+            true,                 /* Enabled/disabled the channel (n+1) output */
+            eTMR_MAIN_INVERTED,     /* Select channel (n+1) output relative to channel (n) */
+            false,                 /* External Trigger on the channel (n) */
+            false,                 /* External Trigger on the channel (n+1) */
+            eTMR_LOW_STATE,         /* Safe state of the PWM channel n when faults are detected */
+            eTMR_LOW_STATE,         /* Safe state of the PWM channel n+1 when faults are detected */
+        }
+    };
+    /* PWM configuration for PWM */
+    etmr_pwm_param_t PWM_PwmConfig =
+    {
+        0U,                                /* Number of independent PWM channels */
+        1U,                                /* Number of combined PWM channels */
+        eTMR_MODE_EDGE_ALIGNED_PWM,         /* PWM mode */
+        0U,                                /* DeadTime Value */
+        eTMR_DEADTIME_DIVID_BY_4,           /* DeadTime clock divider */
+        7481U,                             /* PWM frequency */
+        NULL,                              /* Independent PWM channels configuration structure */
+        flexTimer1_CombinedChannelsConfig, /* Combined PWM channels configuration structure */
+        &PWM_FaultConfig                   /* PWM fault configuration structure */
+    };
+    /* Timer mode configuration for PWM */
+    /* Global configuration of PWM */
+    etmr_user_config_t  PWM_InitConfig =
+    {
+        {
+            true,                       /* Software trigger state */
+            false,                      /* Hardware trigger 1 state */
+            false,                      /* Hardware trigger 2 state */
+            false,                      /* Hardware trigger 3 state */
+            true,                       /* Maximum loading point state */
+            true,                       /* Min loading point state */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for INVCTRL register */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for SWOCTRL register */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for OUTMASK register */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for INIT register */
+            false,                      /* Auto clear trigger state for hardware trigger */
+            eTMR_UPDATE_NOW,             /* Select synchronization method */
+        },
+        eTMR_MODE_EDGE_ALIGNED_PWM,      /* PWM mode */
+        eTMR_CLOCK_DIVID_BY_4,           /* eTMR clock pre-scaler */
+        eTMR_CLOCK_SOURCE_SYSTEMCLK,     /* eTMR clock source */
+        eTMR_BDM_MODE_11,                /* eTMR debug mode */
+        false,                          /* Interrupt state */
+        false                           /* Initialization trigger */
+    };
+    eTMR_DRV_Init(eTMR_PWM_INSTANCE, &PWM_InitConfig, &statePwm);
+    eTMR_DRV_InitPwm(eTMR_PWM_INSTANCE, &PWM_PwmConfig);
+    /* It's recommended to use softwareTrigger = true */
+    /* Only second edge can be updated when eTMR is running. */
+    eTMR_DRV_UpdatePwmChannel(eTMR_PWM_INSTANCE, 0UL, 0x2000U, 0U);
+    @endcode
+
+   ### Edge-Aligned PWM and Input Capture mode ###
+    Support an additional Input Capture mode on other channels in the same eTMR instance:
+    - The measurement range of Input Capture will depend on PWM configuration.
+      The frequency of measured signal must greater than frequency of PWM signal.
+    - For this mode, the recommended synchronization point is the next loading point (not immediately)
+      to avoid breaking the current measurement signal from Input Capture.
+    - The S32CT configuration is not possible to add both drivers on the same instance, even if the driver support this.
+    The initialization sequences below:
+    @code
+    /* The state structure of instance in the PWM and Input Capture mode */
+    etmr_state_t statePwmIc;
+    #define eTMR_PWM_IC_INSTANCE        0UL
+    /* Fault configuration structure */
+    etmr_pwm_fault_param_t PWM_FaultConfig =
+    {
+        false,
+        true,
+        5U,                             /* Fault filter value */
+        eTMR_FAULT_CONTROL_MAN_EVEN,
+        {
+            {
+                true,                   /* Fault channel state (Enabled/Disabled )*/
+                false,                  /* Fault channel filter state (Enabled/Disabled) */
+                eTMR_POLARITY_INVERT,      /* Channel output state on fault */
+            },
+            {
+                false,                  /* Fault Channel state (Enabled/Disabled) */
+                false,                  /* Fault channel filter state (Enabled/Disabled) */
+                eTMR_POLARITY_NORMAL        /* Channel output state on fault */
+            },
+            {
+                false,                  /* Fault Channel state (Enabled/Disabled) */
+                false,                  /* Fault channel filter state (Enabled/Disabled) */
+                eTMR_POLARITY_NORMAL        /* Channel output state on fault */
+            },
+            {
+                false,                  /* Fault Channel state (Enabled/Disabled) */
+                false,                  /* Fault channel filter state (Enabled/Disabled) */
+                eTMR_POLARITY_NORMAL        /* Channel output state on fault */
+            }
+        }
+    };
+    /* Combine channels configuration structure for PWM */
+    etmr_combined_ch_param_t flexTimer1_CombinedChannelsConfig[1] =
+    {
+        {
+            0U,                   /* Hardware channel for channel 0 and channel 1 */
+            0U,                   /* First edge time */
+            0x2000U,              /* Second edge time */
+            true,                 /* Dead time enabled/disabled */
+            true,                 /* The modified combine mode enabled/disabled */
+            eTMR_POLARITY_INVERT,     /* Select channel (n) polarity */
+            true,                 /* Enabled/disabled the channel (n+1) output */
+            eTMR_MAIN_INVERTED,     /* Select channel (n+1) output relative to channel (n) */
+            false,                 /* External Trigger on the channel (n) */
+            false,                 /* External Trigger on the channel (n+1) */
+            eTMR_LOW_STATE,         /* Safe state of the PWM channel n when faults are detected */
+            eTMR_LOW_STATE,         /* Safe state of the PWM channel n+1 when faults are detected */
+        }
+    };
+    /* PWM configuration for PWM */
+    etmr_pwm_param_t PWM_PwmConfig =
+    {
+        0U,                                /* Number of independent PWM channels */
+        1U,                                /* Number of combined PWM channels */
+        eTMR_MODE_EDGE_ALIGNED_PWM,         /* PWM mode */
+        0U,                                /* DeadTime Value */
+        eTMR_DEADTIME_DIVID_BY_4,           /* DeadTime clock divider */
+        7481U,                             /* PWM frequency */
+        NULL,                              /* Independent PWM channels configuration structure */
+        flexTimer1_CombinedChannelsConfig, /* Combined PWM channels configuration structure */
+        &PWM_FaultConfig                   /* PWM fault configuration structure */
+    };
+    /* Channels configuration structure for inputCapture input capture */
+    etmr_input_ch_param_t inputCapture_InputCaptureChannelConfig[1] =
+    {
+        {
+        3U,                             /* Channel 3 (Make sure that the channel ID must different than PWM channels) */
+        eTMR_EDGE_DETECT,                /* Input capture operation Mode */
+        eTMR_RISING_EDGE,                /* Edge alignment Mode */
+        eTMR_NO_MEASUREMENT,             /* Signal measurement operation type */
+        0U,                             /* Filter value */
+        false,                          /* Filter disabled */
+        true                            /* Continuous mode measurement */
+        NULL,                           /* Vector of callbacks  parameters for channels events */
+        NULL                            /* Vector of callbacks for channels events */
+        }
+    };
+    /* Input capture configuration for inputCapture */
+    etmr_input_param_t inputCapture_InputCaptureConfig =
+    {
+        1U,                                     /* Number of channels */
+        65535U,                                 /* Maximum count value (This value is ignored and replaced by period value calculated from PWM configuration) */
+        inputCapture_InputCaptureChannelConfig  /* Channels configuration */
+    };
+    /* Timer mode configuration for PWM and Input Capture */
+    etmr_user_config_t  PWM_IC_InitConfig =
+    {
+        {
+            true,                       /* Software trigger state */
+            false,                      /* Hardware trigger 1 state */
+            false,                      /* Hardware trigger 2 state */
+            false,                      /* Hardware trigger 3 state */
+            true,                       /* Maximum loading point state */
+            true,                       /* Min loading point state */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for INVCTRL register */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for SWOCTRL register */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for OUTMASK register */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for INIT register */
+            false,                      /* Auto clear trigger state for hardware trigger */
+            eTMR_WAIT_LOADING_POINTS,    /* Select synchronization method (Next Loading Point is recommended) */
+        },
+        eTMR_MODE_EDGE_ALIGNED_PWM,      /* Edge-Align PWM mode that can be used with Input Capture mode */
+        eTMR_CLOCK_DIVID_BY_4,           /* eTMR clock pre-scaler */
+        eTMR_CLOCK_SOURCE_SYSTEMCLK,     /* eTMR clock source */
+        eTMR_BDM_MODE_11,                /* eTMR debug mode */
+        false,                          /* Interrupt state */
+        false                           /* Initialization trigger */
+    };
+
+    /* Initialize eTMR module */
+    eTMR_DRV_Init(eTMR_PWM_IC_INSTANCE, &PWM_IC_InitConfig, &statePwmIc);
+    /* Initialize PWM cofiguration (Clock configuration for both PWM and Input Capture mode)
+     * Initialize the additional Input Capture mode for other channels
+     * eTMR_DRV_InitPwm() must be called first before user calls eTMR_DRV_InitInputCapture()
+     */
+    eTMR_DRV_InitPwm(eTMR_PWM_IC_INSTANCE, &PWM_PwmConfig);
+    eTMR_DRV_InitInputCapture(eTMR_PWM_IC_INSTANCE, &inputCapture_InputCaptureConfig);
+
+    ...
+
+    /* De-initialize Input Capture first
+     * PWM signal still work normally
+     */
+    eTMR_DRV_DeinitInputCapture(eTMR_PWM_IC_INSTANCE, &inputCapture_InputCaptureConfig);
+    /* De-initialize PWM (eTMR counter will be disabled) */
+    eTMR_DRV_DeinitPwm(eTMR_PWM_IC_INSTANCE);
+    @endcode
+
+*/

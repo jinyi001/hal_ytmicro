@@ -1,0 +1,4 @@
+config HAS_YTMICRO_HAL
+    bool
+    depends on SOC_FAMILY_YTMICRO_YTM32
+    default y

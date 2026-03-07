@@ -1,0 +1,124 @@
+/*!
+@defgroup ewdg_driver EWDG Driver
+@ingroup ewdg
+@brief External Watchdog Monitor Peripheral Driver.
+
+## Hardware background ##
+
+Features:
+
+ - Independent LPO clock source
+ - Programmable time-out period specified in terms of number of EWDG LPO clock cycles.
+ - Windowed refresh option
+     - Provides robust check that program flow is faster than expected.
+     - Programmable window.
+     - Refresh outside window leads to assertion of EWDG_out.
+ - Robust refresh mechanism
+     - Write values of ``0xA8`` and ``0x6C`` to EWDG Refresh Register within 15 ``EWDG_service_time`` peripheral bus clock cycles.
+ - One output port, ``EWDG_out``, when asserted is used to reset or place the external circuit into safe mode
+ - One Input port, ``EWDG_in``, allows an external circuit to control the ``EWDG_out`` signal.
+
+The EWDG can be initialized only once as all the configuration registers are write once per reset.
+
+
+## Integration guideline ##
+
+### Compilation units ###
+
+The following files need to be compiled in the project:
+
+```
+${S32SDK_PATH}\platform\drivers\src\ewdg\ewdg_driver.c
+```
+
+### Include path ###
+
+The following paths need to be added to the include path of the toolchain:
+
+```
+${S32SDK_PATH}\platform\drivers\inc\
+```
+
+### Compile symbols ###
+
+No special symbols are required for this component
+
+### Dependencies ###
+
+No special dependencies are required for this component
+
+## Clocking and pin configuration ##
+
+The EWDG Driver does not handle clock setup (from PCC) or any kind of pin
+configuration (done by PORT module). This is handled by the Clock Manager and
+PORT module, respectively. The driver assumes that correct clock
+configurations have been made, so it is the user's responsibility to set up
+clocking and pin configurations correctly.
+
+## Interrupts ##
+
+The EWDG module can generate interrupts, if enabled on ``EWDG_DRV_Init()`` but they
+are not handled by the driver. The EWDG shares the interrupt vector with the Watchdog Timer.
+The following code snippet is an example of how enable the interrupt and assign a handler:
+
+```c
+ /* EWDG and watchdog interrupt service routine */
+ void EWDG_Watchdog_ISR()
+ {
+      /* Do something(e.g perform a clean reset) */
+      ...
+ }
+ int main()
+  {
+      /* Init clocks, pins, other modules */
+      ...
+      /* Install interrupt handler for EWDG and Watchdog */
+      INT_SYS_InstallHandler(WDOG_EWDG_IRQn, &EWDG_Watchdog_ISR, (isr_t *)0);
+      /* Enable the interrupt */
+      INT_SYS_EnableIRQ(WDOG_EWDG_IRQn);
+
+      /* Init EWDG */
+      ...
+      /* Infinite loop*/
+      while(1)
+      {
+          /* Do something until the counter needs to be refreshed */
+          ...
+          /* Refresh the counter */
+          EWDG_DRV_Refresh(EWDG_INSTANCE);
+      }
+  }
+  ```
+
+ ## Using the EWDG driver in your application ##
+
+```c
+  /* Declare the EWDG instance you want to use */
+  #define EWDG_INSTANCE    0UL
+
+  int main()
+  {
+      /* Declare the EWDG configuration structure */
+      ewdg_init_config_t ewdgConfig;
+      /* Variable where to store the init status */
+      status_t ewdgStatus;
+      /* Init clocks, pins, other modules */
+      ...
+
+      /* Get the default configuration values */
+      EWDG_DRV_GetDefaultConfig(&ewdgConfig);
+      /* Init the module instance */
+      ewdgStatus = EWDG_DRV_Init(EWDG_INSTANCE, &ewdgConfig);
+
+      /* Infinite loop*/
+      while(1)
+      {
+          /* Do something until the counter needs to be refreshed */
+          ...
+          /* Refresh the counter */
+          EWDG_DRV_Refresh(EWDG_INSTANCE);
+      }
+  }
+```
+
+*/

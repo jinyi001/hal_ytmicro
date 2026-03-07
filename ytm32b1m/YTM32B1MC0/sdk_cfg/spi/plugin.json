@@ -1,0 +1,43 @@
+{
+    "name": "spi",
+    "type": "driver",
+    "mode": "raw",
+    "srcs": [
+        "App.vue"
+    ],
+    "label": "SPI",
+    "depend": [
+        "dma"
+    ],
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/spi_master_driver.h",
+        "./../../YTM32Bx_SDK/platform/drivers/inc/spi_slave_driver.h"
+    ],
+    "generate": [
+        "spi_config.c",
+        "spi_config.h"
+    ],
+    "args": [
+        "SPI_DRV_MasterInit {{#each this.data.master}}(0,&{{this.name}}_State,&{{this.name}});{{/each}}",
+        "SPI_DRV_SlaveInit {{#each this.data.slave}}(0,&{{this.name}}_State,&{{this.name}});{{/each}}"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/spi",
+            "to": "platform/drivers/src/spi"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/spi_master_driver.h",
+            "to": "platform/drivers/inc/spi_master_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/spi_slave_driver.h",
+            "to": "platform/drivers/inc/spi_slave_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/spi_shared_function.h",
+            "to": "platform/drivers/inc/spi_shared_function.h"
+        }
+    ],
+    "sign": "743ac49c519fbb677acfe9b36b06bb29d01175d6813b82e971eb18fa8a350daad1952b828f63b90a0c77e1b5a6148c57966a47a23061a447f02551ba1980dd8840407ea065921fee44617352899aeb2c211b8aac758b235dcbf491d9894149df80187447714bd9f02ed3848309a918a675ca9e0639d4ec8d32e563904d6db3231810c52418dec31cc91681c002b740eae6ae5c95ec954846742f1c1744ac8d2603ba9c7eac5eb780eb02508b8eb8a38be832433c1d009fb613f594381fb65dcf9500b6fe6eb205c2560a873dbfb958ab53d7b64238da6c9be3bf4eec4f5aa2a6d5ed6ffaadec81b798993d0479e6982aab15f018e13f4ad5a8f48e4e22f5b7a0"
+}

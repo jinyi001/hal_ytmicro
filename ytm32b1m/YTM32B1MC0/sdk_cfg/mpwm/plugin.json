@@ -1,0 +1,102 @@
+{
+    "name": "mpwm",
+    "type": "driver",
+    "srcs": [
+        "App.vue",
+        "Common.vue",
+        "IC.vue",
+        "CT.vue",
+        "OC.vue",
+        "PC.vue",
+        "PWM.vue"
+    ],
+    "mode": "raw",
+    "label": "MPWM",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/mpwm_common.h",
+        "./../../YTM32Bx_SDK/platform/drivers/inc/mpwm_ic_driver.h",
+        "./../../YTM32Bx_SDK/platform/drivers/inc/mpwm_oc_driver.h",
+        "./../../YTM32Bx_SDK/platform/drivers/inc/mpwm_pc_driver.h",
+        "./../../YTM32Bx_SDK/platform/drivers/inc/mpwm_pwm_driver.h",
+        "./../../YTM32Bx_SDK/platform/drivers/inc/mpwm_ct_driver.h"
+    ],
+    "args": [
+        "MPWM_DRV_InitInputCapture {{#each this.data.ic.data}}(0,&{{this.name}});{{/each}}",
+        "MPWM_DRV_InitOutputCompare {{#each this.data.oc.data}}(0,&{{this.name}});{{/each}}",
+        "MPWM_DRV_InitPulseCounter {{#each this.data.pc.data}}(0,&{{this.name}});{{/each}}",
+        "MPWM_DRV_InitPwm {{#each this.data.pwm.data}}(0,&{{this.name}});{{/each}}",
+        "MPWM_DRV_InitTimer {{#each this.data.ct.data}}(0,&{{this.name}});{{/each}}",
+        "MPWM_DRV_Init {{#each this.data.common}}(0,&{{this.state_name}});{{/each}}",
+        "MPWM_DRV_SetClkSrc {{#each this.data.common}}(0,MPWM_BUS_CLOCK);{{/each}}"
+    ],
+    "forceEnable": false,
+    "generate": [
+        "mpwm_config.c",
+        "mpwm_config.h"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/mpwm/mpwm_common.c",
+            "to": "platform/drivers/src/mpwm/mpwm_common.c"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/mpwm_common.h",
+            "to": "platform/drivers/inc/mpwm_common.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/mpwm/mpwm_hw_access.h",
+            "to": "platform/drivers/src/mpwm/mpwm_hw_access.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/mpwm/mpwm_ic_driver.c",
+            "to": "platform/drivers/src/mpwm/mpwm_ic_driver.c",
+            "condition": "{{isTruthy this.data.ic.enable}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/mpwm_ic_driver.h",
+            "to": "platform/drivers/inc/mpwm_ic_driver.h",
+            "condition": "{{isTruthy this.data.ic.enable}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/mpwm/mpwm_oc_driver.c",
+            "to": "platform/drivers/src/mpwm/mpwm_oc_driver.c",
+            "condition": "{{isTruthy this.data.oc.enable}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/mpwm_oc_driver.h",
+            "to": "platform/drivers/inc/mpwm_oc_driver.h",
+            "condition": "{{isTruthy this.data.oc.enable}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/mpwm/mpwm_pwm_driver.c",
+            "to": "platform/drivers/src/mpwm/mpwm_pwm_driver.c",
+            "condition": "{{isTruthy this.data.pwm.enable}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/mpwm_pwm_driver.h",
+            "to": "platform/drivers/inc/mpwm_pwm_driver.h",
+            "condition": "{{isTruthy this.data.pwm.enable}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/mpwm/mpwm_pc_driver.c",
+            "to": "platform/drivers/src/mpwm/mpwm_pc_driver.c",
+            "condition": "{{isTruthy this.data.pc.enable}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/mpwm_pc_driver.h",
+            "to": "platform/drivers/inc/mpwm_pc_driver.h",
+            "condition": "{{isTruthy this.data.pc.enable}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/mpwm/mpwm_ct_driver.c",
+            "to": "platform/drivers/src/mpwm/mpwm_ct_driver.c",
+            "condition": "{{isTruthy this.data.ct.enable}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/mpwm_ct_driver.h",
+            "to": "platform/drivers/inc/mpwm_ct_driver.h",
+            "condition": "{{isTruthy this.data.ct.enable}}"
+        }
+    ],
+    "sign": "2eac3b05de48aff6d35df904f368a1bcdbf2d07a1e710dd86a253107c36a41654046a642c8f655e8e59b868bbb233ba62821773f96b316f466eb787a3ca4eac576e3b2da5a71d5e8147c948a0a34392bbde92895bd3b92d34ff28a16d51f48b043cf396383bf34b39fb22d468527e99979876e21f23165c0cfeeb6094613e89c3e76d8b03be8fa860d09fcae9b35eac29a4d153b9910aa2f69180f63f74e00cf13ef2db08bce4ad0084c93c24133bab3f7c737bb3ac189bb0b68ad10f1d0668ff3d841e351679f524777cb18e9f792175a9cf4210007329cc3388fecf448f1dcebe7e2be45cd2a7feb3e582caf7a9c2b07ee5c319d8b5c8662b8272f5cda643f"
+}

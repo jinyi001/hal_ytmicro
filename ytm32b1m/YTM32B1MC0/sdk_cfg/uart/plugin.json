@@ -1,0 +1,49 @@
+{
+    "name": "uart",
+    "type": "driver",
+    "mode": "raw",
+    "srcs": [
+        "App.vue"
+    ],
+    "depend": [
+        "dma"
+    ],
+    "label": "UART",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/uart_driver.h"
+    ],
+    "generate": [
+        "uart_config.c",
+        "uart_config.h"
+    ],
+    "args": [
+        "UART_DRV_Init {{#each this.data}}(0,&{{this.name}}_State,&{{this.name}});{{/each}}"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/uart/uart_driver.c",
+            "to": "platform/drivers/src/uart/uart_driver.c"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/uart/uart_irq.c",
+            "to": "platform/drivers/src/uart/uart_irq.c"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/uart/uart_irq.h",
+            "to": "platform/drivers/src/uart/uart_irq.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/uart/uart_hw_access.h",
+            "to": "platform/drivers/src/uart/uart_hw_access.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/uart/uart_hw_access.c",
+            "to": "platform/drivers/src/uart/uart_hw_access.c"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/uart_driver.h",
+            "to": "platform/drivers/inc/uart_driver.h"
+        }
+    ],
+    "sign": "0d6bf4e19c0443acc124d0b73eb3115a8d94cf61ba29dc74a6dedaf38338de6209eb469b6347c7885db24eaeeb0fa5a911e90b123eabb7f28a36403c13f2ec2993139690359ae315d9fcb8089e3189b552781e5527abdc3ba8d0822cb0c1f653d0f3c3ff4ad7c7446167155f9a9a5de0d0ecb53a1ba6d9c265a1b0096229fee51f9715037a244e431ca73d5b88294ca7a405aebb5c8b87cdb396bd6a60b93afa44bcb00ebd4643b0ddf9f2c635d13bfa3fba02d0fbc5592ad2c5ad864d151bfef0ed8c0707cbb0bf757145cc8fa01ec8b0263280da6ef798fddea2fffd38e789aacbe0896c23d3b7e003a837db4b173bf4df82609538324ce92aff1bd2ed0e57"
+}

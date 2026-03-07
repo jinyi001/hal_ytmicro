@@ -1,0 +1,67 @@
+{{ytCopyright "yt_linker.scf"}}
+
+{{#each (keilScfFileGen this.data)}}
+
+LR_{{this.base.name}}_{{this.index}} {{this.base.startAddress}}{{this.ext}}
+{
+{{#each this.children}}
+{{setVar2 'needFixed' this.copyTo}}
+{{#if this.copyFrom}}
+{{else}}
+        {{this.name}}_start {{#if this.align}}AlignExpr({{this.baseAddr}},{{this.align}}){{else}}{{this.baseAddr}}{{/if}} {{#if (and this.isFixed this.isFlash)}}FIXED{{/if}} EMPTY 0
+        {
+        }
+{{#if this.altSymbolStart}}
+        {{this.altSymbolStart}} +0  EMPTY 0
+        {
+        }
+{{/if}}
+{{#if this.children}}
+{{#each this.children}}
+        {{this.name}}_region_start {{#if this.align}}AlignExpr(+0,{{this.align}}){{else}}+0{{/if}} {{#if this.isFlash}}FIXED{{/if}} EMPTY 0
+        {
+        }
+{{#if this.altSymbolStart}}      
+        {{this.altSymbolStart}} +0 EMPTY 0
+        {
+        }
+{{/if}}
+        {{this.name}}_region +0 NOCOMPRESS
+        {
+                *({{#if (not this.removeDot)}}.{{/if}}{{this.name}}{{#if this.wildcard}}*{{/if}})
+{{#if this.binFile}}
+{{#each (split this.binFile ';')}}
+                {{{this}}} 
+{{/each}}
+{{/if}}
+        }
+{{#if this.altSymbolEnd}}      
+        {{this.altSymbolEnd}} +0  EMPTY 0
+        {
+        }
+{{/if}}
+        {{this.name}}_region_end +0  EMPTY 0
+        {
+        }
+{{/each}}
+{{else}}
+        {{this.name}} {{#if this.align}}AlignExpr({{this.baseAddr}},{{this.align}}){{else}}{{this.baseAddr}}{{/if}} EMPTY {{#if this.groupSize}}{{this.groupSize}}{{else}}0{{/if}}
+        {
+        }
+{{/if}}
+        {{this.name}}_end {{#if this.endAlign}}AlignExpr(+0,{{this.endAlign}}){{else}}+0{{/if}} EMPTY 0
+        {
+        }
+{{#if this.altSymbolEnd}} 
+        {{this.altSymbolEnd}} +0  EMPTY 0
+        {
+        }
+{{/if}}
+{{/if}}
+{{/each}}
+}
+{{#if this.ext}}
+ScatterAssert( {{this.base.size}} >= (0{{this.ext}}))
+{{/if}}
+ScatterAssert(ImageLength(LR_{{this.base.name}}_{{this.index}}) <= {{this.base.size}}{{#if this.ext}}-(0{{this.ext}}){{/if}})
+{{/each}}

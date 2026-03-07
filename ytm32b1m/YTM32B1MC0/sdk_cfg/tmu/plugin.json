@@ -1,0 +1,31 @@
+{
+    "name": "tmu",
+    "type": "driver",
+    "srcs": [
+        "App.vue"
+    ],
+    "mode": "raw",
+    "label": "TMU",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/tmu_driver.h"
+    ],
+    "forceEnable": false,
+    "generate": [
+        "tmu_config.c",
+        "tmu_config.h"
+    ],
+    "args": [
+        "TMU_DRV_Init (0,&tmu_config0);"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/tmu_driver.h",
+            "to": "platform/drivers/inc/tmu_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/tmu",
+            "to": "platform/drivers/src/tmu"
+        }
+    ],
+    "sign": "3e15b28edbb0afe18a3ec1288615b347d7670b80037576e8f400cf7abc026235e3a6eb98ce90db7b22b6a1e74d171461dc0229f51464a423ce10ad4a97eea6f8b22a3ed628528b4d22075d5643d17ee09088bef49cd64954831333f46a5dfc9c764e5850b4b1b043a62c1855ee15d4f823b123188b9da8d1272c360cfe5d3dc00df795b5bf24f98b1489fbf2fc3945c88b9b87b26b3e5ba7f4ecb66bef34ce8282123c615a7dd0946b43cfa4712bfe16d84d5f2c08fde46a2aa0a684da106181fc9fd63f95a191cb97c4fc4f45a4cdfcfcefd4a114707a233469920453775a6de57b4465e9630fe989f43c8ac0c490fad2dd145bf21b2fce7b6b9c853a875acc"
+}

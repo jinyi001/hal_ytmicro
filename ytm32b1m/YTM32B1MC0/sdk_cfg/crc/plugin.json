@@ -1,0 +1,31 @@
+{
+    "name": "crc",
+    "type": "driver",
+    "srcs": [
+        "App.vue"
+    ],
+    "mode": "raw",
+    "label": "CRC",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/crc_driver.h"
+    ],
+    "generate": [
+        "crc_config.c",
+        "crc_config.h"
+    ],
+    "args": [
+        "CRC_DRV_Init {{#each this.data}}(0,&{{this.name}});{{/each}}"
+    ],
+    "depend": [],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/crc_driver.h",
+            "to": "platform/drivers/inc/crc_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/crc",
+            "to": "platform/drivers/src/crc"
+        }
+    ],
+    "sign": "6dbe13aef3db0f785d3fd7d09eab77998df39ab80610a58eaf93dc755c732bc32663443397cf453390d7695642839a8d15d56ebea80d3d4ef522c49947fe15c6a8255c76fc45017632c5f3ab90427d88e8f88a30bdf8a283f50e935edf0bf628364c566ffc6a8b7e8a99bf05bf69878116fea21859310cf5d085ba4dfd7a45fa34193fc5ef13211380ba43b50008fe33219a1e0c6d8ad5e7d83e2cdb077eac2d7ce73420df2d286c8e91e11bed4049ec815642e27e7c8d75b77247c2276904208ef539807bba49de89a3b68dd8f2f3f65d4401d6a4cd7a3c528158b53bfc3cc9f348e8d722ddda7d4c8d4f36d0c7bf82d0f2404c11025411bdb537718ef450b7"
+}

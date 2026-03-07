@@ -1,0 +1,42 @@
+{
+    "name": "uart_lin",
+    "type": "driver",
+    "mode": "raw",
+    "srcs": [
+        "App.vue"
+    ],
+    "depend": [
+        "dma"
+    ],
+    "label": "UART Lin",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/lin_driver.h",
+        "./../../YTM32Bx_SDK/platform/drivers/inc/uart_driver.h"
+    ],
+    "generate": [
+        "lin_config.c",
+        "lin_config.h"
+    ],
+    "args": [
+        "LIN_DRV_Init {{#each this.data}}(0,&{{this.name}},&{{this.name}}_State);{{/each}}"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/uart",
+            "to": "platform/drivers/src/uart"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/lin",
+            "to": "platform/drivers/src/lin"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/lin_driver.h",
+            "to": "platform/drivers/inc/lin_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/uart_driver.h",
+            "to": "platform/drivers/inc/uart_driver.h"
+        }
+    ],
+    "sign": "b63661e0cf2bd6bdef496f55a2bbd322781fb05dc420adcd535093d8b8ac11c6e01d2d59d80340df216b9ce11f2b88783806d1d82523c69b2e6f9f45960f890dfe3217140b8d0b264cc3f143fa3b76396b39bc59b1165d0b4d0013bbd21770b0b4f86f5204c22cc433c24d3227936d1361fd7cf30e3b513fd89a416d858e686a842ab2c25f21be7819016bb7b9dfde3fb53ada3bebbcc6e5f24fe2cdad3b3e09385a9c0d50c0f69497de4af1a5622bb47655b1070a2e5ab1781d34b13c2c328a85ea048e8cd4d6c057ca9c8f5390e5b0b79902c985a2b0f510dca76aac2481154548f04ab2119a09a9dfadf671362ac7aa8f3c186d5cefd39154a86727090ae1"
+}

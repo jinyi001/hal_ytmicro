@@ -1,0 +1,30 @@
+{
+    "name": "ewdg",
+    "type": "driver",
+    "mode": "raw",
+    "srcs": [
+        "App.vue"
+    ],
+    "label": "EWDG",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/ewdg_driver.h"
+    ],
+    "generate": [
+        "ewdg_config.c",
+        "ewdg_config.h"
+    ],
+    "args": [
+        "EWDG_DRV_Init {{#each this.data}}(0,&{{this.name}});{{/each}}"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/ewdg",
+            "to": "platform/drivers/src/ewdg"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/ewdg_driver.h",
+            "to": "platform/drivers/inc/ewdg_driver.h"
+        }
+    ],
+    "sign": "9b2979635b27ca50a2150410d3041263b0daca88e8aa413ec8e31d7447880d91548ad5f5480127bd38b6ae6e8e964da384b9f6a071f215676310f75e6d5f13e63e3347c9123854220413282a639b1125b77b17b7473061681a2cd00655a186cb40e56e1d1217d572b90aea7458df19745348d7032899f8fbd175df2b1a23ebcce74505695feda9523347f3eb7a20840210c1ac030eab0c86e87d94c303718edfa845a25297b8207ac60edc594cb1e8fef67f22657585d6d3237cc1ab1a640cd58a0f6116e60bc884e127a69b8359fad5ede193eae8085853f283cf6e41684f9c3d7c5cd06b81ce22d1e9106f560bff0be71ab11c587133b15b8f4fa8d9972431"
+}

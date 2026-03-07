@@ -1,0 +1,32 @@
+{
+    "name": "ptmr",
+    "type": "driver",
+    "srcs": [
+        "App.vue"
+    ],
+    "mode": "raw",
+    "label": "PTMR",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/ptmr_driver.h"
+    ],
+    "forceEnable": false,
+    "generate": [
+        "ptmr_config.c",
+        "ptmr_config.h"
+    ],
+    "args": [
+        "pTMR_DRV_Init (0,&{{this.data.name}});",
+        "pTMR_DRV_InitChannel {{#each this.data.channel}}(0,0,&ptmr_channel_{{this.channel}});{{/each}}"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/ptmr_driver.h",
+            "to": "platform/drivers/inc/ptmr_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/ptmr",
+            "to": "platform/drivers/src/ptmr"
+        }
+    ],
+    "sign": "5a01a88bb0894e250a09df41f8f2da1019fb9131efbc21d5c407b8d4b379312549076d0156cd1fe3c4b3624ee495bb0c03a3b06d06b3cbf6e39bc3a218a8dda8fbf37cfeb508c886eccae78a21b2497fbedfd16fa426c8d24b5514e61b993573737b4915f7c0cc739451d0635765145e00a232ed215b0c39fff6dbc4476c46756b8db0a0a00670ec812194e57277b41d48f242351aea80b1e5a704fb1a5d139f201140d0344f0a17a8e6b3c9a0754d9b8b334a56b39d3794ca3a69a88ffc4858e9eec97e034c6958a77de0fa52fff76523b8a0532732a303326e18d08851317c1c1b980a69837b5410bc087c10455e76627d96c092a3c690fa7283dbebd7b253"
+}

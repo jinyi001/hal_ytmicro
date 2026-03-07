@@ -1,0 +1,41 @@
+{
+    "name": "clock",
+    "type": "driver",
+    "label": "Clock Configuration",
+    "srcs": [
+        "App.vue",
+        "clock.ts",
+        "Form.vue",
+        "base.ts",
+        "resize.ts"
+    ],
+    "mode": "raw",
+    "args": [
+        "CLOCK_SYS_Init (g_clockManConfigsArr,CLOCK_MANAGER_CONFIG_CNT,g_clockManCallbacksArr,CLOCK_MANAGER_CALLBACK_CNT);",
+        "CLOCK_SYS_UpdateConfiguration (CLOCK_MANAGER_ACTIVE_INDEX,CLOCK_MANAGER_POLICY_AGREEMENT);"
+    ],
+    "includes": [
+        "./../../../YTM32Bx_SDK/platform/drivers/src/clock/YTM32B1Mx/clock_YTM32B1Mx.h",
+        "./../../../YTM32Bx_SDK/platform/drivers/inc/clock.h"
+    ],
+    "headHTML": "<script src='konva.min.js'></script>\r\n",
+    "generate": [
+        "clock_config.c",
+        "clock_config.h"
+    ],
+    "move": [
+        {
+            "from": "./../../../YTM32Bx_SDK/platform/drivers/src/clock/YTM32B1Mx",
+            "to": "platform/drivers/src/clock/YTM32B1Mx"
+        },
+        {
+            "from": "./../../../YTM32Bx_SDK/platform/drivers/inc/clock.h",
+            "to": "platform/drivers/inc/clock.h"
+        },
+        {
+            "from": "./../../../YTM32Bx_SDK/platform/drivers/inc/clock_manager.h",
+            "to": "platform/drivers/inc/clock_manager.h"
+        }
+    ],
+    "sign": "1e7aed9ee785ade2edee9f55a574ef990c36ef3616c2aade9223419d9ed0d169feb701b681c47194219fbe36ae8bd231767e59bdf0345ef2987d7995c1a9ece9e98db48469f5a7049102973f3eb3b10ca8107ad7f6bb249f66f6c032a95477941acc39732bc8d20b2c1f405b53b6994d33d0cc66913217e4b3fe67034501296d5a36d02b0885c9e5e0960da79471f38b7d8884c80333eba527d59a6624feeeb41151ffccc22c53b7d5f216870a2852acb2b3ac5a1e8d8fe9b4caa376ea810dda565a0a9b1dbb2ad52f5823f45ee237c3bf466602dc39eb037a3cc67aa04c561f88619f165b188855ff56502b9cde7030c4df94ee4bb94f59a91d1469c2625e18"
+}

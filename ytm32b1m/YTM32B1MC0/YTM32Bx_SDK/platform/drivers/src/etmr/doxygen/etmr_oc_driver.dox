@@ -1,0 +1,110 @@
+/*!
+    @defgroup etmr_oc_driver eTMR Output Compare Driver (eTMR_OC)
+    @ingroup etmr
+    @details
+    @brief eTMR Output Compare Peripheral Driver.
+
+    ## Hardware background ##
+    The eTMR of the YTM32B1L is based on a 16 bits counter and supports: input capture, output compare, PWM and some instances
+    include quadrature decoder.
+
+    ## How to use eTMR driver in your application ##
+    For all operation modes (without Quadrature Decoder mode) the user need to configure etmr_user_config_t. This structure will be used for initialization
+    (eTMR_DRV_Init). The next functions used are specific for each operation mode.
+
+    ### Output compare mode ###
+    For this mode the user needs to configure maximum counter value, number of channels used and output mode for each channel (toggle/clear/set on match).
+    This information is stored in etmr_oc_param_t structure type and are used in eTMR_DRV_InitOutputCompare function. Next step is to set a value for
+    comparison with the eTMR_DRV_UpdateOutputCompareChannel function.
+
+    ## Integration guideline ##
+
+    ### Compilation units ###
+
+    The following files need to be compiled in the project:
+    \verbatim
+    ${SDK_PATH}\platform\drivers\src\etmr\etmr_oc_driver.c
+    ${SDK_PATH}\platform\drivers\src\etmr\etmr_common.c
+    ${SDK_PATH}\platform\drivers\src\etmr\etmr_hw_access.c
+    \endverbatim
+
+    ### Include path ###
+
+    The following paths need to be added to the include path of the toolchain:
+    \verbatim
+    ${SDK_PATH}\platform\drivers\inc\
+    ${SDK_PATH}\platform\drivers\src\etmr\
+    \endverbatim
+
+    ### Compile symbols ###
+
+    No special symbols are required for this component
+
+    ### Dependencies ###
+
+    \ref clock_manager
+    \ref interrupt_manager
+
+   Example:
+   @code
+    /* The state structure of instance in the output compare mode */
+    etmr_state_t stateOutputCompare;
+    #define eTMR_OUTPUT_COMPARE_INSTANCE        1UL
+    /* Channels configuration structure for PWM output compare */
+    etmr_output_cmp_ch_param_t PWM_OutputCompareChannelConfig[2] =
+    {
+        {
+            0U,                         /* Channel id */
+            eTMR_TOGGLE_ON_MATCH,        /* Output mode */
+            10000U,                     /* Compared value */
+            false,                      /* External Trigger */
+        },
+        {
+            1U,                         /* Channel id */
+            eTMR_TOGGLE_ON_MATCH,        /* Output mode */
+            20000U,                     /* Compared value */
+            false,                      /* External Trigger */
+        }
+    };
+
+    /* Output compare configuration for PWM */
+    etmr_oc_param_t PWM_OutputCompareConfig =
+    {
+        2U,                             /* Number of channels */
+        false,                          /* Counter initial value source not from INIT register  */
+        0，                             /* Counter initial value from CNT register */
+        0xFFFF，                        /* Maximum count value in ticks */
+        PWM_OutputCompareChannelConfig  /* Channels configuration */
+    };
+    /* Timer mode configuration for PWM */
+    /* Global configuration of PWM */
+    etmr_user_config_t  PWM_InitConfig =
+    {
+        {
+            true,                       /* Software trigger state */
+            false,                      /* Hardware trigger 1 state */
+            false,                      /* Hardware trigger 2 state */
+            false,                      /* Hardware trigger 3 state */
+            true,                       /* Maximum loading point state */
+            true,                       /* Min loading point state */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for INVCTRL register */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for SWOCTRL register */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for OUTMASK register */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for INIT register */
+            false,                      /* Auto clear trigger state for hardware trigger */
+            eTMR_UPDATE_NOW,             /* select synchronization method */
+        },
+        eTMR_MODE_OUTPUT_COMPARE,        /* Mode of operation for eTMR */
+        eTMR_CLOCK_DIVID_BY_4,           /* eTMR clock pre-scaler */
+        eTMR_CLOCK_SOURCE_SYSTEMCLK,     /* eTMR clock source */
+        eTMR_BDM_MODE_11,                /* eTMR debug mode */
+        false,                          /* Interrupt state */
+        false                           /* Initialization trigger */
+    };
+    eTMR_DRV_Init(eTMR_OUTPUT_COMPARE_INSTANCE, &PWM_InitConfig, &stateOutputCompare);
+    eTMR_DRV_InitOutputCompare(eTMR_OUTPUT_COMPARE_INSTANCE, &PWM_OutputCompareConfig);
+    /* If you want to change compared value */
+    eTMR_DRV_UpdateOutputCompareChannel(eTMR_OUTPUT_COMPARE_INSTANCE, 0UL, 15000U );
+    @endcode
+
+*/

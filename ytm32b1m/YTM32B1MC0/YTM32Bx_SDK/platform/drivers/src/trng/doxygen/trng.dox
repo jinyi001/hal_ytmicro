@@ -1,0 +1,66 @@
+/*!
+@defgroup trng True Random Number Generator (TRNG)
+@brief The YTMicro SDK provides Peripheral Drivers for the True Random Number Generator module. @details The standalone true random number generator is a a hardware accelerator module that generates a 256-bit entropy as needed by an entropy-consuming module or by other post-processing functions. .
+
+## The TRNG supports features:
+
+- Generate a 256-bit entropy
+- Monobit limit test
+- Long run test
+- 1 ring OSC with clock checker
+- 3 interrupt source
+
+## Integration guideline
+
+The following files need to be compiled in the project:
+
+```sh
+${SDK_PATH}\platform\drivers\src\trng\trng_driver.c
+```
+
+## Include path
+
+The following paths need to be added to the include path of the toolchain:
+
+```sh
+${SDK_PATH}\platform\drivers\inc\
+```
+
+## Preprocessor symbols
+
+No special symbols are required for this component
+
+## Dependencies
+
+- \ref clock_manager
+
+## TRNG Driver Operation
+
+This is example code to configure the TRNG driver:
+
+```c
+#define UNITY_TRNG (0U)
+
+int main(void)
+{
+    uint32_t value[8] = {0};
+    
+    /* Initialize clocks */
+    ...
+
+    /* Initialize trng */
+    TRNG_DRV_Init(UNITY_TRNG,0x0A00);
+
+    /* Wait until TRNG generation is complete */
+    while(STATUS_BUSY == TRNG_DRV_GetStatus(UNITY_TRNG));
+
+    /* Gets a set of random numbers and stores trng in a value array*/
+    if(STATUS_SUCCESS == TRNG_DRV_GetStatus(UNITY_TRNG))
+    {
+        TRNG_DRV_Get_Ent(UNITY_TRNG,&value[0]);
+    }
+
+    return 0;
+}
+```
+*/

@@ -1,0 +1,31 @@
+{
+    "name": "adc",
+    "type": "driver",
+    "srcs": [
+        "App.vue"
+    ],
+    "mode": "raw",
+    "label": "ADC",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/adc_driver.h"
+    ],
+    "args": [
+        "ADC_DRV_ConfigConverter {{#each this.data}}({{this.inst}},&{{this.name}});{{/each}}"
+    ],
+    "forceEnable": false,
+    "generate": [
+        "adc_config.c",
+        "adc_config.h"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/adc_driver.h",
+            "to": "platform/drivers/inc/adc_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/adc",
+            "to": "platform/drivers/src/adc"
+        }
+    ],
+    "sign": "8043605adaede8d165a95f1e1ac15fd3887655e4a34e3d355ed729019311dc82a77cacbe5f7498a6893e6aa646b77fa38b084244aa941948c7e4537f5535a4d500af9758d980c7fcd7f8e30ec47a52884832eb3d253d83d42990a964ff898eec5c48df5870097d3fd4efdc36b65a98bb46b5e09b94980ee70e352237ed6c1c73c7e3eaa6576c15e4a89ce9b8f062083ee9470f98207713dc546262b689a40c4be4a8b10920bc6341c03f3046f3c58a37584644b4221461d3334edce6b7f1688ef2d081f4511b3792001e2d9305f1fd23e1ba939bded3eb454d2955ad371ad26c76ee09963d7cf98770b8c7408c81ba0ee486e3f834dabf9ebf193de1c2fea93a"
+}

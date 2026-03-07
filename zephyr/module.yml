@@ -1,0 +1,4 @@
+name: hal_ytmicro
+build:
+  cmake: zephyr
+  kconfig: zephyr/Kconfig

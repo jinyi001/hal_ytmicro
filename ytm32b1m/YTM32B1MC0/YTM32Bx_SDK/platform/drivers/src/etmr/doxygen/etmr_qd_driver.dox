@@ -1,0 +1,103 @@
+/*!
+    @defgroup etmr_qd_driver eTMR Quadrature Decoder Driver (eTMR_QD)
+    @ingroup etmr
+    @details
+    @brief eTMR Quadrature Decoder Peripheral Driver.
+
+    ## Hardware background ##
+    The eTMR of the YTM32B1L is based on a 16 bits counter and supports: input capture, output compare, PWM and some instances
+    include quadrature decoder.
+
+    ## How to use eTMR driver in your application ##
+    For all operation modes (without Quadrature Decoder mode) the user need to configure etmr_user_config_t. This structure will be used for initialization
+    (eTMR_DRV_Init). The next functions used are specific for each operation mode.
+
+    ### Quadrature decoder mode ###
+    For this mode the user needs to configure parameters like: maximum counter value, initial counter value, mode (Count and Direction Encoding mode),
+    and for both input phases polarity and filtering. All this information is included in etmr_quad_decode_config_t.
+    In this mode, the counter is clocked by the phase A and phase B. The current state of the decoder can be obtained using eTMR_DRV_QuadGetState.
+
+    #### Hardware limitation: ####
+    In count and direction mode if initial value of the PHASE_A is HIGH the counter will be incremented.
+
+    ## Integration guideline ##
+
+    ### Compilation units ###
+
+    The following files need to be compiled in the project:
+    \verbatim
+    ${SDK_PATH}\platform\drivers\src\etmr\etmr_qd_driver.c
+    ${SDK_PATH}\platform\drivers\src\etmr\etmr_common.c
+    ${SDK_PATH}\platform\drivers\src\etmr\etmr_hw_access.c
+    \endverbatim
+
+    ### Include path ###
+
+    The following paths need to be added to the include path of the toolchain:
+    \verbatim
+    ${SDK_PATH}\platform\drivers\inc\
+    ${SDK_PATH}\platform\drivers\src\etmr\
+    \endverbatim
+
+    ### Compile symbols ###
+
+    No special symbols are required for this component
+
+    ### Dependencies ###
+
+    \ref clock_manager
+    \ref interrupt_manager
+
+   Example:
+    @code
+    /* The state structure of instance in the quadrature mode */
+    etmr_state_t stateQuad;
+    #define eTMR_QUADRATURE_INSTANCE    1UL
+    etmr_quad_decoder_state_t quadra_state;
+    etmr_quad_decode_config_t quadrature_decoder_configuration =
+    {
+        eTMR_QUAD_COUNT_AND_DIR,         /* Quadrature decoder mode */
+        0U,                             /* Initial counter value */
+        32500U,                         /* Maximum counter value */
+        {
+            false,                      /* Filter state */
+            0U,                         /* Filter value */
+            eTMR_QUAD_PHASE_NORMAL       /* Phase polarity */
+        },
+        {
+            false,                      /* Filter state */
+            0U,                         /* Filter value */
+            eTMR_QUAD_PHASE_NORMAL       /* Phase polarity */
+        }
+    };
+    /* Timer mode configuration for Quadrature */
+    /* Global configuration of Quadrature */
+    etmr_user_config_t  Quadrature_InitConfig =
+    {
+        {
+            false,                      /* Software trigger state */
+            false,                      /* Hardware trigger 1 state */
+            false,                      /* Hardware trigger 2 state */
+            false,                      /* Hardware trigger 3 state */
+            false,                      /* Maximum loading point state */
+            false,                      /* Min loading point state */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for INVCTRL register */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for SWOCTRL register */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for OUTMASK register */
+            eTMR_SYSTEM_CLOCK,           /* Update mode for INIT register */
+            false,                      /* Auto clear trigger state for hardware trigger */
+            eTMR_UPDATE_NOW,             /* Select synchronization method */
+        },
+        eTMR_MODE_QUADRATURE_DECODER,    /* Mode of operation for eTMR */
+        eTMR_CLOCK_DIVID_BY_2,           /* eTMR clock pre-scaler */
+        eTMR_CLOCK_SOURCE_SYSTEMCLK,     /* eTMR clock source */
+        eTMR_BDM_MODE_11,                /* eTMR debug mode */
+        false,                          /* Interrupt state */
+        false                           /* Initialization trigger */
+    };
+    eTMR_DRV_Init(eTMR_QUADRATURE_INSTANCE, &Quadrature_InitConfig, &stateQuad);
+    eTMR_DRV_QuadDecodeStart(eTMR_QUADRATURE_INSTANCE, &quadrature_decoder_configuration);
+    quadra_state = eTMR_DRV_QuadGetState(eTMR_QUADRATURE_INSTANCE);
+    @endcode
+
+*/

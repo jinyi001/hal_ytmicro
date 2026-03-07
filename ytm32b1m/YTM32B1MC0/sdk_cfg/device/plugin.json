@@ -1,0 +1,336 @@
+{
+    "name": "device",
+    "type": "driver",
+    "mode": "raw",
+    "srcs": [
+        "App.vue",
+        "valid.js"
+    ],
+    "label": "Device",
+    "forceEnable": true,
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/common",
+            "to": "platform/devices/common"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/callbacks.h",
+            "to": "platform/devices/callbacks.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/devassert.h",
+            "to": "platform/devices/devassert.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/device_registers.h",
+            "to": "platform/devices/device_registers.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/floats.h",
+            "to": "platform/devices/floats.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/status.h",
+            "to": "platform/devices/status.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1MC0/include",
+            "to": "platform/devices/YTM32B1MC0/include",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1MC0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1MC0/YTM32B1MC0.svd",
+            "to": ".vscode/chip.svd",
+            "condition": "{{and (eq (getProjectInfo 'family') 'YTM32B1MC0') (or (eq (getProjectInfo 'toolchain') 'CMakeGCC') (eq (getProjectInfo 'toolchain') 'CMakeEWARM') (eq (getProjectInfo 'toolchain') 'CMakeGHS') (eq (getProjectInfo 'toolchain') 'CMakeKEIL'))}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1MC0/startup/system_YTM32B1MC0.c",
+            "to": "platform/devices/YTM32B1MC0/startup/system_YTM32B1MC0.c",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1MC0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1MC0/startup/system_YTM32B1MC0.h",
+            "to": "platform/devices/YTM32B1MC0/startup/system_YTM32B1MC0.h",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1MC0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1LE0/include",
+            "to": "platform/devices/YTM32B1LE0/include",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1LE0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1LE0/YTM32B1LE0.svd",
+            "to": ".vscode/chip.svd",
+            "condition": "{{and (eq (getProjectInfo 'family') 'YTM32B1LE0') (or (eq (getProjectInfo 'toolchain') 'CMakeGCC') (eq (getProjectInfo 'toolchain') 'CMakeEWARM') (eq (getProjectInfo 'toolchain') 'CMakeGHS') (eq (getProjectInfo 'toolchain') 'CMakeKEIL'))}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1LE0/startup/system_YTM32B1LE0.c",
+            "to": "platform/devices/YTM32B1LE0/startup/system_YTM32B1LE0.c",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1LE0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1LE0/startup/system_YTM32B1LE0.h",
+            "to": "platform/devices/YTM32B1LE0/startup/system_YTM32B1LE0.h",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1LE0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32Z1LS0/include",
+            "to": "platform/devices/YTM32Z1LS0/include",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32Z1LS0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32Z1LS0/YTM32Z1LS0.svd",
+            "to": ".vscode/chip.svd",
+            "condition": "{{and (eq (getProjectInfo 'family') 'YTM32Z1LS0') (or (eq (getProjectInfo 'toolchain') 'CMakeGCC') (eq (getProjectInfo 'toolchain') 'CMakeEWARM') (eq (getProjectInfo 'toolchain') 'CMakeGHS') (eq (getProjectInfo 'toolchain') 'CMakeKEIL'))}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32Z1LS0/startup/system_YTM32Z1LS0.c",
+            "to": "platform/devices/YTM32Z1LS0/startup/system_YTM32Z1LS0.c",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32Z1LS0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32Z1LS0/startup/system_YTM32Z1LS0.h",
+            "to": "platform/devices/YTM32Z1LS0/startup/system_YTM32Z1LS0.h",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32Z1LS0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1LE1/include",
+            "to": "platform/devices/YTM32B1LE1/include",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1LE1'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1LE1/YTM32B1LE1.svd",
+            "to": ".vscode/chip.svd",
+            "condition": "{{and (eq (getProjectInfo 'family') 'YTM32B1LE1') (or (eq (getProjectInfo 'toolchain') 'CMakeGCC') (eq (getProjectInfo 'toolchain') 'CMakeEWARM') (eq (getProjectInfo 'toolchain') 'CMakeGHS') (eq (getProjectInfo 'toolchain') 'CMakeKEIL'))}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1LE1/startup/system_YTM32B1LE1.c",
+            "to": "platform/devices/YTM32B1LE1/startup/system_YTM32B1LE1.c",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1LE1'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1LE1/startup/system_YTM32B1LE1.h",
+            "to": "platform/devices/YTM32B1LE1/startup/system_YTM32B1LE1.h",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1LE1'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1MD1/include",
+            "to": "platform/devices/YTM32B1MD1/include",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1MD1'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1MD1/YTM32B1MD1.svd",
+            "to": ".vscode/chip.svd",
+            "condition": "{{and (eq (getProjectInfo 'family') 'YTM32B1MD1') (or (eq (getProjectInfo 'toolchain') 'CMakeGCC') (eq (getProjectInfo 'toolchain') 'CMakeEWARM') (eq (getProjectInfo 'toolchain') 'CMakeGHS') (eq (getProjectInfo 'toolchain') 'CMakeKEIL'))}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1MD1/startup/system_YTM32B1MD1.c",
+            "to": "platform/devices/YTM32B1MD1/startup/system_YTM32B1MD1.c",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1MD1'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1MD1/startup/system_YTM32B1MD1.h",
+            "to": "platform/devices/YTM32B1MD1/startup/system_YTM32B1MD1.h",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1MD1'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1MD2/include",
+            "to": "platform/devices/YTM32B1MD2/include",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1MD2'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1MD2/YTM32B1MD2.svd",
+            "to": ".vscode/chip.svd",
+            "condition": "{{and (eq (getProjectInfo 'family') 'YTM32B1MD2') (or (eq (getProjectInfo 'toolchain') 'CMakeGCC') (eq (getProjectInfo 'toolchain') 'CMakeEWARM') (eq (getProjectInfo 'toolchain') 'CMakeGHS') (eq (getProjectInfo 'toolchain') 'CMakeKEIL'))}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1MD2/startup/system_YTM32B1MD2.c",
+            "to": "platform/devices/YTM32B1MD2/startup/system_YTM32B1MD2.c",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1MD2'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1MD2/startup/system_YTM32B1MD2.h",
+            "to": "platform/devices/YTM32B1MD2/startup/system_YTM32B1MD2.h",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1MD2'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1ME0/include",
+            "to": "platform/devices/YTM32B1ME0/include",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1ME0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1ME0/YTM32B1ME0.svd",
+            "to": ".vscode/chip.svd",
+            "condition": "{{and (eq (getProjectInfo 'family') 'YTM32B1ME0') (or (eq (getProjectInfo 'toolchain') 'CMakeGCC') (eq (getProjectInfo 'toolchain') 'CMakeEWARM') (eq (getProjectInfo 'toolchain') 'CMakeGHS') (eq (getProjectInfo 'toolchain') 'CMakeKEIL'))}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1ME0/startup/system_YTM32B1ME0.c",
+            "to": "platform/devices/YTM32B1ME0/startup/system_YTM32B1ME0.c",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1ME0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1ME0/startup/system_YTM32B1ME0.h",
+            "to": "platform/devices/YTM32B1ME0/startup/system_YTM32B1ME0.h",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1ME0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1ME1/include",
+            "to": "platform/devices/YTM32B1ME1/include",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1ME1'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1ME1/YTM32B1ME1.svd",
+            "to": ".vscode/chip.svd",
+            "condition": "{{and (eq (getProjectInfo 'family') 'YTM32B1ME1') (or (eq (getProjectInfo 'toolchain') 'CMakeGCC') (eq (getProjectInfo 'toolchain') 'CMakeEWARM') (eq (getProjectInfo 'toolchain') 'CMakeGHS') (eq (getProjectInfo 'toolchain') 'CMakeKEIL'))}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1ME1/startup/system_YTM32B1ME1.c",
+            "to": "platform/devices/YTM32B1ME1/startup/system_YTM32B1ME1.c",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1ME1'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1ME1/startup/system_YTM32B1ME1.h",
+            "to": "platform/devices/YTM32B1ME1/startup/system_YTM32B1ME1.h",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1ME1'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1HA0/include",
+            "to": "platform/devices/YTM32B1HA0/include",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1HA0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1HA0/YTM32B1HA0.svd",
+            "to": ".vscode/chip.svd",
+            "condition": "{{and (eq (getProjectInfo 'family') 'YTM32B1HA0') (or (eq (getProjectInfo 'toolchain') 'CMakeGCC') (eq (getProjectInfo 'toolchain') 'CMakeEWARM') (eq (getProjectInfo 'toolchain') 'CMakeGHS') (eq (getProjectInfo 'toolchain') 'CMakeKEIL'))}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1HA0/startup/system_YTM32B1HA0.c",
+            "to": "platform/devices/YTM32B1HA0/startup/system_YTM32B1HA0.c",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1HA0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1HA0/startup/system_YTM32B1HA0.h",
+            "to": "platform/devices/YTM32B1HA0/startup/system_YTM32B1HA0.h",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32B1HA0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1HA0/startup/secure_boot_YTM32B1HA0.c",
+            "to": "platform/devices/YTM32B1HA0/startup/secure_boot_YTM32B1HA0.c",
+            "condition": "{{and (eq (getProjectInfo 'family') 'YTM32B1HA0') (isFalsey this.data.useSecureBoot)}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32B1HA0/startup/secure_boot_YTM32B1HA0.h",
+            "to": "platform/devices/YTM32B1HA0/startup/secure_boot_YTM32B1HA0.h",
+            "condition": "{{and (eq (getProjectInfo 'family') 'YTM32B1HA0') (isFalsey this.data.useSecureBoot)}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32Z1MD0/include",
+            "to": "platform/devices/YTM32Z1MD0/include",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32Z1MD0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32Z1MD0/YTM32Z1MD0.svd",
+            "to": ".vscode/chip.svd",
+            "condition": "{{and (eq (getProjectInfo 'family') 'YTM32Z1MD0') (or (eq (getProjectInfo 'toolchain') 'CMakeGCC') (eq (getProjectInfo 'toolchain') 'CMakeEWARM') (eq (getProjectInfo 'toolchain') 'CMakeGHS') (eq (getProjectInfo 'toolchain') 'CMakeKEIL'))}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32Z1MD0/startup/system_YTM32Z1MD0.c",
+            "to": "platform/devices/YTM32Z1MD0/startup/system_YTM32Z1MD0.c",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32Z1MD0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32Z1MD0/startup/system_YTM32Z1MD0.h",
+            "to": "platform/devices/YTM32Z1MD0/startup/system_YTM32Z1MD0.h",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32Z1MD0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32Z1ME0/include",
+            "to": "platform/devices/YTM32Z1ME0/include",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32Z1ME0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32Z1ME0/YTM32Z1ME0.svd",
+            "to": ".vscode/chip.svd",
+            "condition": "{{and (eq (getProjectInfo 'family') 'YTM32Z1ME0') (or (eq (getProjectInfo 'toolchain') 'CMakeGCC') (eq (getProjectInfo 'toolchain') 'CMakeEWARM') (eq (getProjectInfo 'toolchain') 'CMakeGHS') (eq (getProjectInfo 'toolchain') 'CMakeKEIL'))}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32Z1ME0/startup/system_YTM32Z1ME0.c",
+            "to": "platform/devices/YTM32Z1ME0/startup/system_YTM32Z1ME0.c",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32Z1ME0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/devices/YTM32Z1ME0/startup/system_YTM32Z1ME0.h",
+            "to": "platform/devices/YTM32Z1ME0/startup/system_YTM32Z1ME0.h",
+            "condition": "{{eq (getProjectInfo 'family') 'YTM32Z1ME0'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/CMSIS/Core/Include",
+            "to": "CMSIS/Core/Include"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/rtos/osif/osif.h",
+            "to": "rtos/osif/osif.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/rtos/osif/osif_freertos.c",
+            "to": "rtos/osif/osif_freertos.c",
+            "condition": "{{isTruthy this.data.useFreeRtos}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/rtos/osif/osif_baremetal.c",
+            "to": "rtos/osif/osif_baremetal.c",
+            "condition": "{{isFalsey this.data.useFreeRtos}}"
+        }
+    ],
+    "generate": [
+        {
+            "from": "./generate/gcc/startup.S",
+            "to": "startup.S",
+            "condition": "{{or (eq (getProjectInfo 'toolchain') 'CMakeGCC') (eq (getProjectInfo 'toolchain') 'Eclipse')}}"
+        },
+        {
+            "from": "./generate/gcc/vector.S",
+            "to": "vector.S",
+            "condition": "{{or (eq (getProjectInfo 'toolchain') 'CMakeGCC') (eq (getProjectInfo 'toolchain') 'Eclipse')}}"
+        },
+        {
+            "from": "./generate/iar/startup.S",
+            "to": "startup.S",
+            "condition": "{{or (eq (getProjectInfo 'toolchain') 'CMakeEWARM') (eq (getProjectInfo 'toolchain') 'EWARM')}}"
+        },
+        {
+            "from": "./generate/iar/vector.S",
+            "to": "vector.S",
+            "condition": "{{or (eq (getProjectInfo 'toolchain') 'CMakeEWARM') (eq (getProjectInfo 'toolchain') 'EWARM')}}"
+        },
+        {
+            "from": "./generate/keil/startup.S",
+            "to": "startup.S",
+            "condition": "{{or (eq (getProjectInfo 'toolchain') 'CMakeKEIL') (eq (getProjectInfo 'toolchain') 'KEIL')}}"
+        },
+        {
+            "from": "./generate/keil/vector.S",
+            "to": "vector.S",
+            "condition": "{{or (eq (getProjectInfo 'toolchain') 'CMakeKEIL') (eq (getProjectInfo 'toolchain') 'KEIL')}}"
+        },
+        {
+            "from": "./generate/ghs/startup.s",
+            "to": "startup.s",
+            "condition": "{{or (eq (getProjectInfo 'toolchain') 'CMakeGHS')}}"
+        },
+        {
+            "from": "./generate/ghs/vector.s",
+            "to": "vector.s",
+            "condition": "{{or (eq (getProjectInfo 'toolchain') 'CMakeGHS')}}"
+        },
+        {
+            "from": "./generate/vector_table_copy.c",
+            "to": "vector_table_copy.c"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/release_notes.md",
+            "to": "release_notes.md"
+        }
+    ],
+    "sign": "47f3e521fd6794c0a26d7466452750caa61eee81ebf315c4d78ae09b3f48219c1b7b65f2d6332f06017960f68656474d40f4854957c73027f00a57e568c7fae8a35528a44e3f60f5380de4528db66d02ae48c95bc2b0b477e051dd53e6915d0276bb50c8a1bd7f63af45adfb9264658b8a5c964df33afa6aadecd66eb62fd84fd5d65bcb3098234b5574445cc9e53dfebc6db47dd06f254ef2dfa97b45ca57354823ee9d6a4e60f266fa20c7c087672da78920b7f6c9ac14596983961641fc3728ea82e99ed05320549ec98f5217afd5c36816070d3666e21e41c9a49774a4199aef7fa1e7322e9fc9a42f4150e1b06e1827d221febe4786b4309af05f2ae4ac"
+}

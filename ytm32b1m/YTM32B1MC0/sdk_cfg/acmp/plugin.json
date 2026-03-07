@@ -1,0 +1,33 @@
+{
+    "name": "acmp",
+    "type": "driver",
+    "srcs": [
+        "App.vue",
+        "valid.js"
+    ],
+    "mode": "raw",
+    "label": "ACMP",
+    "args": [
+        "ACMP_DRV_Init {{#each this.data}}(0,&{{this.name}});{{/each}}"
+    ],
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/acmp_driver.h"
+    ],
+    "forceEnable": false,
+    "generate": [
+        "acmp_config.c",
+        "acmp_config.h"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/acmp_driver.h",
+            "to": "platform/drivers/inc/acmp_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/acmp",
+            "to": "platform/drivers/src/acmp"
+        }
+    ],
+    "valid": "valid.js",
+    "sign": "9710d2fa01dcdfff3c3edac333db1a36e3d55fe28a769fe92f88dd6dd011e6b2f2bd0a36d9e5b608d9dda10596947fde4ecb3520f218ec06d654325ba23f27b97a445e206be141d3ccc45d13d33f8f3a0ecd6b158bd8e89dbf61bd622bf26d760fd7bd618a7c9865cbd755f6f860d530c61c96a8fe3101ac72e9153f81130e639b477dac9869d0005afba52b5f5a9fe11d0c720a233724880d931792e59e602f362ac03355ce0e52c59dc46856a2543ee35b80f55d566894de8ce64abf18349f05d0cb5a3d5f397cda104e13dafe6b2a30bb7355261dbbf30bc10a73e199672b589f338318165150b0c01c80fd4ac33ae022613a182282efc8755c0de778dd07"
+}

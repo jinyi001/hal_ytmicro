@@ -1,0 +1,96 @@
+{
+    "name": "ytlink",
+    "type": "driver",
+    "srcs": [
+        "App.vue",
+        "edit.vue",
+        "valid.ts",
+        "view.ts",
+        "mc03def.json",
+        "le05def.json",
+        "le04def.json",
+        "le15def.json",
+        "le14def.json",
+        "me05def.json",
+        "me14def.json",
+        "me15def.json",
+        "md14def.json",
+        "md23def.json",
+        "md24def.json",
+        "ha01def.json",
+        "md04def.json",
+        "z1me05def.json",
+        "mc03_mcal.json",
+        "me05_mcal.json",
+        "md14_mcal.json",
+        "ha01_mcal.json",
+        "md24_mcal.json"
+    ],
+    "mode": "raw",
+    "label": "YT-LINK",
+    "headHTML": "<script src='joint.min.js'></script>\r\n<script src='lodash.min.js'></script>",
+    "forceEnable": true,
+    "generate": [
+        {
+            "from": "./generate/gcc/gcc.ld",
+            "to": "yt_linker.ld",
+            "condition": "{{or (eq (getProjectInfo 'toolchain') 'CMakeGCC') (eq (getProjectInfo 'toolchain') 'Eclipse')}}"
+        },
+        {
+            "from": "./generate/iar/iar.icf",
+            "to": "yt_linker.icf",
+            "condition": "{{or (eq (getProjectInfo 'toolchain') 'CMakeEWARM') (eq (getProjectInfo 'toolchain') 'EWARM')}}"
+        },
+        {
+            "from": "./generate/keil/keil.scf",
+            "to": "yt_linker.scf",
+            "condition": "{{or (eq (getProjectInfo 'toolchain') 'CMakeKEIL') (eq (getProjectInfo 'toolchain') 'KEIL')}}"
+        },
+        {
+            "from": "./generate/ghs/ghs.ld",
+            "to": "yt_linker.ld",
+            "condition": "{{or (eq (getProjectInfo 'toolchain') 'CMakeGHS')}}"
+        },
+        {
+            "from": "./generate/gcc/RamInit0.S",
+            "to": "RamInit0.S",
+            "condition": "{{or (eq (getProjectInfo 'toolchain') 'CMakeGCC') (eq (getProjectInfo 'toolchain') 'Eclipse')}}"
+        },
+        {
+            "from": "./generate/iar/RamInit0.S",
+            "to": "RamInit0.S",
+            "condition": "{{or (eq (getProjectInfo 'toolchain') 'CMakeEWARM') (eq (getProjectInfo 'toolchain') 'EWARM')}}"
+        },
+        {
+            "from": "./generate/keil/RamInit0.S",
+            "to": "RamInit0.S",
+            "condition": "{{or (eq (getProjectInfo 'toolchain') 'CMakeKEIL') (eq (getProjectInfo 'toolchain') 'KEIL')}}"
+        },
+        {
+            "from": "./generate/ghs/RamInit0.s",
+            "to": "RamInit0.s",
+            "condition": "{{or (eq (getProjectInfo 'toolchain') 'CMakeGHS')}}"
+        },
+        {
+            "from": "./generate/RamInit1_SDK.c",
+            "to": "RamInit1.c",
+            "condition": "{{or (eq (getProjectInfo 'type') 'sdk')}}"
+        },
+        {
+            "from": "./generate/RamInit1_MCAL.c",
+            "to": "RamInit1.c",
+            "condition": "{{or (eq (getProjectInfo 'type') 'mcal')}}"
+        },
+        {
+            "from": "./generate/RamInit2_SDK.c",
+            "to": "RamInit2.c",
+            "condition": "{{or (eq (getProjectInfo 'type') 'sdk')}}"
+        },
+        {
+            "from": "./generate/RamInit2_MCAL.c",
+            "to": "RamInit2.c",
+            "condition": "{{or (eq (getProjectInfo 'type') 'mcal')}}"
+        }
+    ],
+    "sign": "9c0b7b7381bad0f0203606f83b08c33c079cbe38264f4aa6e6709da029abb197722a2b0c9594bfd706c91e60a65f131783ac577371805d613d61f36dc7734520e34ba36d0d0482c9cf8b33f543013886deff1047739826188c84928f5db80f9d74be1f6cb629e1d9eb770c369d4ffe474e2b553e32c1b81be0b176145125b2187d93f2b52a3b40bf44cb89a3a28062af14b37ef5588a4dde9f8509cb5dd77d8238588fda29444ffaf1de4fdd9105f6b2f8c93069c885e47a1e09db2902b3387ab26ba0cac9956a3442d3f3e1036f156ae770c66a0451dd5ee7e5af27cd5356f2248abdf666daa49af64285a44e1269c89b69450e2e83bfe3ba47bc59f8bbe905"
+}

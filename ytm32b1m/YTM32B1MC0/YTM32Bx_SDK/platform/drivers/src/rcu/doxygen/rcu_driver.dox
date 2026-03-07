@@ -1,0 +1,95 @@
+/*!
+
+   @defgroup rcu Reset Control Unit Driver (RCU)
+   @brief The YTMicro SDK provides the Peripheral Driver for the Reset Control Unit (RCU) module of YTMicro SDK devices.
+
+   ## Hardware background ##
+   Reset Control Unit implements the reset functions for the chip. The Reset Control Unit handles the
+   system reset control when it receives the reset sources.
+
+   Features of the RCU module include:
+    - 32-bit seconds counter with roll-over protection and 32-bit alarm
+    - Record the reset sources of most recent resets.
+    - Configurable filter for reset pin.
+    - Reset pin filter can work at both active and low power mode.
+
+## Functionality ##
+    ### Initialization ###
+   In order to be able to use the RCU in your application, the first thing to do is
+   initializing it with the desired configuration. This is done by calling the <b>RCU_DRV_Init</b>
+   function. One of the arguments passed to this function is the configuration which will be
+   used for the RCU instance, specified by the <b>rcu_config_t</b> structure.
+
+   The <b>rcu_config_t</b> structure allows you to configure the following:
+        -   Reset pin output
+        -   Enable reset pin fliter
+        -   Enable or disable reset pin fliter in deepsleep mode
+        -   fliter counter value
+
+    ### External Pin Reset ###
+    A reset is caused by an active-low level on external RESET_B pin. The RESET_B pin supports filter
+    function using SIRC clock with the control of RPFR registers.
+
+    ### POR and LVD ###
+    When MCU is power on, the POR and LVD reset assert. Once the operating voltage attains a usable level,
+    the FIRC and SIRC starts. After FIRC/SIRC start up, the system clocks are available, but the system reset
+    remains asserted until the external pin reset is released. Then the Flash controller(EFM) starts its
+    initialization. Once Flash initialization completes, ARM core starts to fetch code and operation.
+
+    ### High Voltage Detect Reset ###
+    If PCU_CTRL[HVDRE] bit is set and the supply of VDD/VDD25/VDD11 rise above the HVD trip voltage, and
+    HVD reset occurs.
+
+    ### Clock Monitor Reset ###
+    Clock monitor unit(CMU) is a sub module of System Clock Unit(SCU). When it is enabled, it continues to
+    monitor the clock sources. Once the monitored or checked clocks are out of proper frequency range or
+    lost, a reset occurs. If the monitored or checked clock is available but reference clock is lost, a reset
+    occurs.
+
+    ### Watchdog Reset ###
+    Watchdog timer monitor the operation of MCU by expecting periodic refresh from software. If the
+    periodic refreshing does not occur, the watchdog can generate interrupt or reset as the configuration of
+    WDG module.
+
+    ### Low Power Mode Entry Acknowledge Timeout Reset ###
+    The low power mode entry acknowledge timeout reset is generated if the MCU fails to enter low power
+    mode mode within 2^24 cycles of SIRC clock.
+
+    ### Software Reset ###
+    When the application needs to reset the MCU through software, it could set AIRCR[SYSRESETREQ] bit
+    field of ARM core to generate a system reset.
+
+    ### Core Lookup Reset ###
+    LOCKUP immediately shows a serious error with the kernel software. This is the result of the core being
+    locked due to an unrecoverable exception after the processor’s built-in system state protection
+    hardware is activated. LOCKUP causes a system reset if CIM_CTRL[LOCKUPEN] bit is set.
+
+    ### Debug Reset ###
+    Using CDBGRSTREQ of debug module could cause a system reset.
+
+## Integration guideline ##
+
+    ### Compilation units ###
+
+    The following files need to be compiled in the project:
+    \verbatim
+    ${SDK_PATH}\platform\drivers\src\rtc\rcu_driver.c
+    \endverbatim
+
+    ### Include path ###
+
+    The following paths need to be added to the include path of the toolchain:
+    \verbatim
+    ${SDK_PATH}\platform\drivers\inc\
+    ${SDK_PATH}\platform\drivers\src\rcu
+    \endverbatim
+
+    ### Compile symbols ###
+
+    No special symbols are required for this component
+
+    ### Dependencies ###
+
+    -# \ref clock_manager
+    -# \ref interrupt_manager
+*/

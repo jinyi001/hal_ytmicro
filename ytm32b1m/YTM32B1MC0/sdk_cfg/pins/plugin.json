@@ -1,0 +1,35 @@
+{
+    "name": "pins",
+    "type": "driver",
+    "mode": "raw",
+    "srcs": [
+        "App.vue",
+        "pin.ts",
+        "lqfp.ts",
+        "FeatureMap.js",
+        "DirSelect.vue"
+    ],
+    "args": [
+        "PINS_DRV_Init {{#each this.data.cfgs}}(NUM_OF_CONFIGURED_PINS{{@index}},g_pin_mux_{{this.name}});{{/each}}"
+    ],
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/pins_driver.h"
+    ],
+    "label": "Pinout Configuration",
+    "headHTML": "<script src='interact.min.js'></script>\r\n<script src='konva.min.js'></script>\r\n",
+    "generate": [
+        "pin_mux.c",
+        "pin_mux.h"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/pins",
+            "to": "platform/drivers/src/pins"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/pins_driver.h",
+            "to": "platform/drivers/inc/pins_driver.h"
+        }
+    ],
+    "sign": "3a51b0c336a9ae26079434eb0630289844e86690cf91978e065f4c6dd348755232ca3e8c0f5cfc08c4cd949c50a34864e2863c2a5ccca2d5fef0b1ffc8440f1ac0c1e051fc9ef58c4123648f41d2129ef756d4a1bafaa6ab7a90bfd7780d3ef63fe0252b8db62ea1916b72250f49b1450450f8676bf697ba17911fe67a3fcee3577f961985624a14a016b03da2696341c6b5a94f5af267e6b656ac445bd5d8d056af591c619b3abcadab8f30c767fd7843ab6da9f99e5173df47aa974939aa26c3057a1e3dbbb1771837942b5b8f2712579abd764bbea9cf9366c682928aa7ac45c5e27834fd7ff040c9652a2480a87ccfdf5f06eec55f9b565e3326a22124cf"
+}

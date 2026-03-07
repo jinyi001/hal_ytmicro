@@ -1,0 +1,59 @@
+# Crc Example Code
+
+## Project Name: Crc_Demo
+
+
+---
+
+
+## Function description
+
+The application is a demonstration of the use of the CRC on the YTM32B1MC0
+- **Crc_Demo**: 
+  - crc16_test
+  - crc32_test
+
+---
+
+
+## HW requirement
++ **EVB**: YTM32B1MC0-EVB-Q64
++ **Debugger**: J-LINK v9.2 or later with YUNTU YTM32B1MC0 patch(support package) installed.
+
+---
+
+## SW requirement
+
++ **Config & Code Generation Tool**
+  + **SDK**:       Yuntu Config Tool(YCT) v2.6.3 or later version
++ **Compiler Toolchain**
+  + **GCC***     : GNU GCC v10.3 or later version
+  + **Keil/MDK***: ARM Keil/MDK v5.35 or later version
+  + **IAR***     : IAR v8.4 or later version
+  + **VS Code**  : Microsoft Visual Studio Code IDE v1.76 or later version(C/C++ support, GNU toolchain, CMake v3.25, ninja, Cortex-Debug extensions installation required)
++ **Debugger driver**
+    + **J-LINK***              : SEGGER JLINK v6.96 or later version, YUNTU YTM32B1MC0 patch(support package) installation required.
+    + **Ozone Debugger tool**  : SEGGER Ozone v3.28 or later version.
+
+    ***Note***: * **YTM32B1MC0** patch install required which can be obtained via **YCT** or contact ***YUNTU sales/FAE team***.
+
+---
+
+## Setup
+
++ ***Step1***: Open the project.yct with the YCT tool, config the toolchain per your required(by default, the VS code + GCC are used)
++ ***Step2***: Generate the codes, you can change the configurations if needed(to adapt to your own HW design), if so, please ensure all the modifications are OK with no any errors exist before generating the code.
++ ***Step3***: Open the generated project with VS code/IAR/Keil IDE per your selected.
++ ***Step4***: Compile the project, power on the EVB and download it to the EVB via the available debugger, such as a J-LINK debugger probe.
++ ***Step5***: At last, enjoy the demo example.
+  
+---
+
+1. Config alt value of PTC_9 Pin with Uart1_TX as TX pin and PTC_8 with Uart1_RX as RX pin.
+2. Enable and config Uart1_CLK and CRC_CLK.
+3. Enable and config Uart and Utility Print module.
+4. Enable and config CRC.
+5. Set CRC input data for encrypting.
+6. Check output result if correct.
+  
+---
