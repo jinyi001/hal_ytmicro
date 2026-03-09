@@ -43,6 +43,8 @@ list(FILTER YTM32_DRIVER_SOURCES EXCLUDE REGEX ".*/fee/.*")
 list(FILTER YTM32_DRIVER_SOURCES EXCLUDE REGEX ".*/sent/.*")
 # Exclude rtc since it contains missing definitions for this MCU variant
 list(FILTER YTM32_DRIVER_SOURCES EXCLUDE REGEX ".*/rtc/.*")
+# Exclude interrupt_manager.c since Zephyr provides native interrupt management
+list(FILTER YTM32_DRIVER_SOURCES EXCLUDE REGEX ".*/interrupt_manager\\.c$")
 zephyr_library_sources(${YTM32_DRIVER_SOURCES})
 
 # Include baremetal OSIF by default if needed by the HAL (Zephyr apps can override or provide osif_zephyr.c later)
