@@ -1,0 +1,31 @@
+{
+    "name": "flash",
+    "type": "driver",
+    "srcs": [
+        "App.vue"
+    ],
+    "mode": "raw",
+    "label": "Flash",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/flash_driver.h"
+    ],
+    "forceEnable": false,
+    "generate": [
+        "flash_config.h",
+        "flash_config.c"
+    ],
+    "args": [
+        "FLASH_DRV_Init {{#each this.data.config}}(0,&{{this.name}},&{{this.name}}_State);{{/each}}"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/flash_driver.h",
+            "to": "platform/drivers/inc/flash_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/flash",
+            "to": "platform/drivers/src/flash"
+        }
+    ],
+    "sign": "8dd3e9877821e79952a6a2cf0694507ad4123e2fc431596e8286d20131baa51e9110598974611ae863c9ba824ff4a84948424dfbf1927ff28fa0ae50ac012612066d628faaddecb1bc10dd34101a6acb57d362268098609156445e76cfa834ff86e2d030c11ab4271b4648fd0252e73ac0db455bc5190d21c3df5ae49955aafc2c42329dae9c837393a04c3c3b5682d4fbf30b1d4f49e3919ec216618ed22bf0e5c1bc6a07c34aef9abc066e7807f6e03c90597fa8b2ed5c5de859b0aa5b9dc3ee61648295dc1d074377bda452636559e770c1e09ac1bad03bb31f3bd90d00418251b9f7a0c41b006c661cc81ffdc76354b79cec927b6a058bfc77c5a62192f9"
+}

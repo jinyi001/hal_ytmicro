@@ -1,0 +1,165 @@
+/*!
+ * @defgroup ptu_driver PTU Driver
+ * @ingroup ptu
+ * @brief Programmable Delay Block Peripheral Driver.
+ *
+ * ## Overview ##
+ * 
+ * This section describes the programming interface of the PTU Peripheral driver. The PTU peripheral driver configures the PTU (Programmable Delay Block). It handles the triggers for ADC 
+ * and pulse out to the CMP and the PTU counter.
+ * 
+ * The PTU contains a counter whose output is compared to several different digital values. If the PTU is enabled, then a trigger input event will reset the counter and make it start to count. 
+ * A trigger input event is defined as a rising edge being detected on a selected trigger input source, or if software trigger is selected and a software trigger is issued.
+ * Each PTU channel is associated with 1 ADC block, and each PTU channel contains 8 pre-triggers. A pre-trigger has a delay associated and is mapped to an ADC channel; 
+ * when the PTU counter is equal to the delay value configured for a pre-trigger, the pre-trigger is activated and selects the ADC channel that starts the conversion.
+ * Inside a PTU channel, the pre-triggers can be configured to work as chains, meaning that a pre-trigger is enabled automatically when the ADC conversion selected by the previous pre-trigger, completes it's execution.
+ * The pre-trigger delays and back-to-back operation must be configured, in such a way that at most one pre-trigger per PTU channel is activated at any given point - otherwise a PTU sequence error occurs.
+ * This feature is called back-to-back mode, and needs to be configured individually for each pre-trigger using PTU_DRV_ConfigAdcPreTrigger(). On some devices (depending on availability), 
+ * chains can be configured between different PTU channels or PTU instances - this can be configured using interchannelBackToBackEnable or instanceBackToBackEnable.
+ * 
+ * ## PTU Initialization ##
+ * 
+ * For initializing the PTU counter, input triggers or general pre-trigger settings (instance or interchannel back-to-back modes) call <b>PTU_DRV_Init()</b>
+ * Note that all pre-triggers share the same counter.  * 
+ * The basic timing/counting step is set when initializing the main PTU counter:
+ * The basic timing/counting step = F_BusClkHz / ptu_timer_config_t.clkPreDiv / ptu_timer_config_t.clkPreMultFactor
+ * 
+ * The F_BusClkHz is the frequency of bus clock in Hertz. The "clkPreDiv" and "clkPreMultFactor" are in the ptu_timer_config_t structure. All pre-triggering delayes use this frequency.
+ * 
+ * ## Integration guideline ##
+ *
+ * ### Compilation units ###
+ *
+ * The following files need to be compiled in the project:
+ * \verbatim
+ * ${SDK_PATH}\platform\drivers\src\ptu\ptu_driver.c
+ * ${SDK_PATH}\platform\drivers\src\ptu\ptu_hw_access.c
+ * \endverbatim
+ *
+ * ### Include path ###
+ *
+ * The following paths need to be added to the include path of the toolchain:
+ * \verbatim
+ * ${SDK_PATH}\platform\drivers\inc\
+ * ${SDK_PATH}\platform\drivers\src\ptu\
+ * \endverbatim
+ *
+ * ### Compile symbols ###
+ *
+ * No special symbols are required for this component
+ *
+ * ### Dependencies ###
+ * 
+ * \ref clock_manager
+ * \ref interrupt_manager
+ * 
+ * ## PTU Call diagram ##
+ * 
+ * Three kinds of typical use cases are designed for the PTU module.
+ * 
+ * - Normal Timer/Counter - the basic use-case. The Timer/Counter starts after the PTU is initialized, when the input trigger (hardware or software) is asserted. When the counter reaches the compare value (set via modulus register),
+ * an interrupt or DMA transfer occur if enabled. In continuous mode, when the counter reaches the modulus compare value, it resets to zero and starts counting again.
+ * - Triggering for ADC module. Depending on the number of ADC channels that need to be used, each pre-trigger must be configured using PTU_DRV_ConfigAdcPreTrigger(). The PTU counter starts counting whenn the input trigger (hardware or software) is asserted. 
+ * If the pre-trigger is enabled in normal mode (back-to-back disabled), it will be activated (thus starting the corresponding ADC channel conversion) when the PTU counter is equal with the configured pre-trigger delay. 
+ * If the pre-trigger is enabled in back-to-back mode, it will trigger the corresponding ADC channel conversion, when the ADC channel corresponding to the previous pre-trigger in the chain, completes the conversion (ADC COCO flag set).
+ * - Generate pulse outputs of configurable width. The Pulse-Out is set to high/low when the PTU counter reaches the values set in POyDLY[DLY1/2], configured via PTU_DRV_SetCmpPulseOutDelayForHigh() or PTU_DRV_SetCmpPulseOutDelayForLow.
+ * The Pulse-Out signal is connected to TMU, which can route it to any other peripheral (e.g. can be used as a sample window for any CMP module).
+ * 
+ * These are the examples to initialize and configure the PTU driver for typical use cases.
+ * 
+ * <b>Normal Timer/Counter:</b>
+ *
+ ~~~~~{.c}
+ * #define PTU_INSTANCE    0UL 
+ *
+ * static volatile uint32_t gptuIntCounter = 0U;
+ * static volatile uint32_t gptuInstance = 0U;
+ * static void PTU_ISR_Counter(void);
+ * void PTU_TEST_NormalTimer(uint32_t instance)
+ * {
+ *     ptu_timer_config_t ptuTimerConfig;
+ *     ptuTimerConfig.loadValueMode            = PTU_LOAD_VAL_IMMEDIATELY;
+ *     ptuTimerConfig.seqErrIntEnable          = false;
+ *     ptuTimerConfig.clkPreDiv                = PTU_CLK_PREDIV_BY_8;
+ *     ptuTimerConfig.clkPreMultFactor         = PTU_CLK_PREMULT_FACT_AS_40;
+ *     ptuTimerConfig.triggerInput             = PTU_SOFTWARE_TRIGGER;
+ *     ptuTimerConfig.continuousModeEnable     = true;
+ *     ptuTimerConfig.dmaEnable                = false;
+ *     ptuTimerConfig.intEnable                = true;
+ *     ptuTimerConfig.instanceBackToBackEnable     = false;
+ *     ptuTimerConfig.interchannelBackToBackEnable = false;
+ *     PTU_DRV_Init(instance, &ptuTimerConfig);
+ *     PTU_DRV_SetTimerModulusValue(instance, 0xFFFU);
+ *     PTU_DRV_SetValueForTimerInterrupt(instance, 0xFFU);
+ *     PTU_DRV_LoadValuesCmd(instance);
+ *     gptuIntCounter = 0U;
+ *     gptuInstance = instance;
+ *     PTU_DRV_SoftTriggerCmd(instance);
+ *     while (gptuIntCounter < 20U) {}
+ *     PRINTF("PTU Timer's delay interrupt generated.\r\n");
+ *     PTU_DRV_Deinit(instance);
+ *     PRINTF("OK.\r\n");
+ * }
+ *
+ * void PTU_IRQHandler()
+ * {
+ *     PTU_DRV_ClearTimerIntFlag(PTU_INSTANCE);
+ *     if (gptuIntCounter >= 0xFFFFU)
+ *     {
+ *         gptuIntCounter = 0U;
+ *     }
+ *     else
+ *     {
+ *         gptuIntCounter++;
+ *     }
+ * }
+ * 
+ * #if PTU_INSTANCE < 1
+ *     void PTU0_IRQHandler(void)
+ *     {   
+ *         PTU_IRQHandler();
+ *     }
+ * #elif PTU_INSTANCE < 2
+ *     void PTU1_IRQHandler(void)
+ *     {   
+ *         PTU_IRQHandler();
+ *     }
+ * #endif
+ * 
+ ~~~~~
+ * <b>Trigger for ADC module:</b>
+ ~~~~~{.c}
+ * void PTU_TEST_AdcPreTrigger(uint32_t instance)
+ * {
+ *     ptu_timer_config_t ptuTimerConfig;
+ *     ptu_adc_pretrigger_config_t ptuAdcPreTriggerConfig;
+ *     ptuTimerConfig.loadValueMode            = PTU_LOAD_VAL_IMMEDIATELY;
+ *     ptuTimerConfig.seqErrIntEnable          = false;
+ *     ptuTimerConfig.clkPreDiv                = PTU_CLK_PREDIV_BY_8;
+ *     ptuTimerConfig.clkPreMultFactor         = PTU_CLK_PREMULT_FACT_AS_40;
+ *     ptuTimerConfig.triggerInput             = PTU_SOFTWARE_TRIGGER;
+ *     ptuTimerConfig.continuousModeEnable     = false;
+ *     ptuTimerConfig.dmaEnable                = false;
+ *     ptuTimerConfig.intEnable                = false;
+ *     ptuTimerConfig.instanceBackToBackEnable     = false;
+ *     ptuTimerConfig.interchannelBackToBackEnable = false;
+ *     PTU_DRV_Init(instance, &ptuTimerConfig);
+ *
+ *     ptuAdcPreTriggerConfig.adcPreTriggerIdx              = 0U;
+ *     ptuAdcPreTriggerConfig.preTriggerEnable              = true;
+ *     ptuAdcPreTriggerConfig.preTriggerOutputEnable        = true;
+ *     ptuAdcPreTriggerConfig.preTriggerBackToBackEnable    = false;
+ *     PTU_DRV_ConfigAdcPreTrigger(instance, 0U, &ptuAdcPreTriggerConfig);
+ *
+ *     PTU_DRV_SetTimerModulusValue(instance, 0xFFFU);
+ *     PTU_DRV_SetAdcPreTriggerDelayValue(instance, 0U, 0U, 0xFFU);
+ *     PTU_DRV_LoadValuesCmd(instance);
+ *     PTU_DRV_SoftTriggerCmd(instance);
+ *     while (1U != PTU_DRV_GetAdcPreTriggerFlags(instance, 0U, 1U)) {}
+ *     PTU_DRV_ClearAdcPreTriggerFlags(instance, 0U, 1U);
+ *     PRINTF("PTU ADC PreTrigger generated.\r\n");
+ *     PTU_DRV_Deinit(instance);
+ *     PRINTF("OK.\r\n");
+ * }
+ ~~~~~
+ */

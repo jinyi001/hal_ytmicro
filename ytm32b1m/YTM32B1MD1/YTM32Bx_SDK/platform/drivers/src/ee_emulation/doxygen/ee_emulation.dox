@@ -1,0 +1,110 @@
+/*!
+@defgroup ee_emulation EEPROM (Flash Emulation EEPROM)
+@brief EEPROM Module provides the general EEPROM APIs
+@details
+
+EEPROM (electrically erasable programmable read only memory), which can be byte or word programmed
+and erased, is often used in automotive electronic control units (ECUs). This flexibility for
+program and erase operations makes it suitable for data storage of application variables that
+must be maintained when power is removed and need to be updated individually during run-time.
+For the devices without EEPROM memory, the sector-erasable Flash memory can be used to emulate
+the EEPROM through EEPROM emulation software.
+The EEPROM emulation driver implements the fix-length data record scheme.
+Several sectors shall be involved in emulation with a round robin scheduling scheme. The EEPROM
+functionalities to be emulated include initializing, de-initializing, reading, writing records.
+
+## Emulated EEPROM Driver
+
+The Emulation Driver provides the following features:
+1. User configurable emulated EEPROM size.
+2. Larger life for the flash memory used for EEPROM emulation.
+3. Unique feature of Cache Table which makes data retrieval fast.
+4. If any operation fails during EEPROM emulation, the driver will try to repeat that operation
+    until successfully for several times (which is defined by user). If that operation still fails,
+     the driver will make the related sector to DEAD to eliminate it from round robin sequence
+     and continue other tasks without stopping driver.
+5. Concurrency support via callback.
+
+## Integration guideline ##
+ 
+### Compilation units ###
+
+The following files need to be compiled in the project:
+\verbatim
+${SDK_PATH}\platform\drivers\src\ee_emulation\ee_high_level.c
+${SDK_PATH}\platform\drivers\src\ee_emulation\ee_middle_level.c
+${SDK_PATH}\platform\drivers\src\ee_emulation\ee_low_level.c
+\endverbatim
+
+### Include path ###
+
+The following paths need to be added to the include path of the toolchain:
+\verbatim
+${SDK_PATH}\platform\drivers\inc\
+${SDK_PATH}\platform\drivers\src\ee_emulation\
+\endverbatim
+
+### Compile symbols ###
+
+|  Micro Define     | Typical Value| Description|
+|:-----------------|:---------|:---------|
+|EE_EEPROM_SIZE    |-|The total raw data user wants to emulate in byte. |
+|EE_DATA_VALUE_SIZE |-|The length of raw data for each record in byte.|
+|EE_EXTRA_READY_SECTORS|1|Number of extra alternative sectors used for DEAD sector. This is maximum DEAD sector allowed within this driver. |
+|EE_SYS_GLOBAL_IRQ_DISABLE|true|If auto disable global interrupt enabled, for chips have real data flash, set this micro to false|
+|EE_EXTRA_ACTIVE_SECTORS|1|User can allocate more sectors as active than required by using this macro. The required active sector number, which is minimum active sectors for emulation, is calculated based on EE_EEPROM_SIZE and EE_DATA_VALUE_SIZE values. |
+|EE_CALLBACK_ENABLE|false|Enable call back function support, if enabled, make sure callback function is in RAM.|
+|EE_CACHE_TABLE_MAX_ENTRY|1|Record counts cached in RAM, used to speed up record search|
+|EE_REERASE_NUM|    3      |The number of times to do re-erase operation if this operation fails. |
+|EE_REPROGRAM_NUM|    3      |The number of times to do re-program operation if this operation fails. |
+
+### Dependencies ###
+
+## Example code ##
+
+When data flash region is already erased, user could un-comment <tt>Eed_DeinitEeprom<tt> API.
+
+~~~~~{.c}
+//
+    #include "ee_emulation.h"
+
+    status_t eeprom_demo()
+    {
+        status_t status = STATUS_SUCCESS;
+        uint8_t  data[EE_DATA_VALUE_SIZE];
+        uint8_t  rdata[EE_DATA_VALUE_SIZE];
+        uint32_t i;
+        eeprom_config_t eepromConfig;
+        for (i = 0; i < EE_DATA_VALUE_SIZE; i++) {
+            /* Setup data */
+            data[i] = i;
+        }
+        /* Init eeprom config */
+        for (i = 0; i < EE_ALLOCATED_SECTORS; i++)
+        {
+            /* allocate eeprom sector */
+            /* Here we simply use continuous memory space */
+            eepromConfig.startSecAddr[i] = EE_START_ADDRESS + i * EE_SECTOR_SIZE;
+        }
+        /* Only if EEPROM sectors are not erased */
+        status = Eed_DeinitEeprom(&eepromConfig);
+        status |= Eed_InitEeprom(&eepromConfig);
+        /* Write data to address 0 */
+        status |= Eed_WriteEeprom(&eepromConfig, 0, data);
+        /* Read data from address 0 */
+        status |= Eed_ReadEeprom(&eepromConfig, 0, rdata);
+        if (status == STATUS_SUCCESS) {
+            /* Compare data */
+            for (i = 0; i < EE_DATA_VALUE_SIZE; i++) {
+                if (data[i] != rdata[i]) {
+                    status = STATUS_ERROR;
+                    break;
+                }
+            }
+        }
+        return status;
+    }
+~~~~~
+
+
+@}*/

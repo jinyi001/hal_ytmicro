@@ -1,0 +1,91 @@
+#! armclang -E --target=arm-arm-none-eabi -mcpu=cortex-m33 -xc
+/*
+** ###################################################################
+**     Processor:           YTM32B1MD1 with 64 KB SRAM
+**     Compiler:            ARM Compiler
+**
+**     Abstract:
+**         Linker file for the ARM Compiler
+**
+**     Copyright 2020-2022 Yuntu Microelectronics Co., Ltd.
+**     All rights reserved.
+**
+**     SPDX-License-Identifier: BSD-3-Clause
+**
+**     https://www.ytmicro.com
+**
+** ###################################################################
+*/
+
+
+#define m_interrupts_start             0x00000000
+#define m_interrupts_size              0x00000400
+
+#define __ram_vector_table_size__      m_interrupts_size
+
+#define m_text_start                   0x00000400
+#define m_text_end                     0x0007ffff
+#define m_text_size                    m_text_end - m_text_start + 1
+
+#define m_interrupts_ram_start         0x1fff8000
+#define m_interrupts_ram_size          __ram_vector_table_size__
+
+#define m_data_start                   0x1fff8400
+#define m_data_end                     0x1fffbfff
+#define m_data_size                    m_data_end - m_data_start + 1
+
+#define m_data_2_start                 0x20004000
+#define m_data_2_end                   0x20007fff
+#define m_data_2_size                  m_data_2_end - m_data_2_start + 1
+
+#define m_retention_start              0x1fffc000
+#define m_retention_end                0x20003fff
+#define m_retention_size               m_retention_end - m_retention_start + 1
+
+/* Sizes */
+#if (defined(__stack_size__))
+  #define Stack_Size                   __stack_size__
+#else
+  #define Stack_Size                   0x0400
+#endif
+
+#if (defined(__heap_size__))
+  #define Heap_Size                    __heap_size__
+#else
+  #define Heap_Size                    0x0400
+#endif
+
+LR_m_text m_interrupts_start m_text_size
+{ ; load region size_region
+  VECTOR_ROM m_interrupts_start m_interrupts_size {
+    YTM32B1MD1_startup_armc_retention.o (RESET +First)
+  }
+  
+  VECTOR_RAM m_interrupts_ram_start m_interrupts_ram_size {
+    .ANY (RESET)
+  }
+  
+  ER_m_text m_text_start FIXED m_text_size  { ; load address = execution address
+    *(InRoot$$Sections)
+    .ANY (+RO)
+  }
+
+  RW_m_data m_data_start m_data_size { ; RW data
+    .ANY (.code_ram)
+    .ANY (+RW)
+  }
+
+  RW_m_retention m_retention_start UNINIT m_retention_size {
+      * (.bss.retention_ram)
+  }
+
+  RW_m_data_2 m_data_2_start m_data_2_size-Stack_Size-Heap_Size {
+    .ANY (+ZI)
+  }
+
+  ARM_LIB_HEAP ((ImageLimit(RW_m_data_2) == m_data_2_start) ? m_data_2_start : +0) EMPTY Heap_Size { ; Heap region growing up
+  }
+
+  ARM_LIB_STACK m_data_2_start+m_data_2_size EMPTY -Stack_Size { ; Stack region growing down
+  }
+}

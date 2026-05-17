@@ -1,0 +1,101 @@
+/*!
+@defgroup fee Asynchronous Flash Emulation EEPROM (Fee)
+@brief 
+@details
+The Flash EEPROM Emulation (FEE) module is designed to emulate the behavior of an 
+Electrically Erasable Programmable Read-Only Memory (EEPROM) using the Flash memory 
+present in the microcontroller.
+
+## Fee Driver
+The feature of Fee:
+     - The user data is configured in blocks, and the block data length can be configured
+       as requirement.
+     - The data can be erased and write in block, and read special byte in a block.
+
+Some platforms may be designed to have only PFLASH or both PFLASH and DFLASH.
+
+ For chips support DFLASH, it is recommended to use DFLASH for implementing Fee.  
+
+ For chips don't support DFLASH, if Fee function is indispensable, it needs to use 
+ a separate PFLASH block to implement FEE. The Fee can't be saved in the same block 
+ with code. After implementing FEE, you may need to sacrifice OTA functionality.
+
+The driver includes general APIs to handle specific operations on Fee module.
+The user can use those APIs directly in the application.
+
+### Important note when use Fee module: ###
+- When configure the Fee, the total size(include the block data size, head size and 
+  cluster reserved size) of blocks in a cluster must be less than the cluster size.
+
+- When configure the Fls module for Fee, the configuration item <tt>FlsJobEndNotification</tt> 
+  need to be configured ad <tt>Fee_JobEndNotification</tt>, the configuration item
+  <tt>FlsJobErrorNotification</tt> need to be configured as <tt>Fee_JobErrorNotification</tt>.
+
+- The Fls driver must be initialized before Fee initialized and used, the <tt>FLS_MainFunction</tt>
+  needs to be called synchronously with <tt>Fee_MainFunction</tt>. The Fls and Fee can be initialized 
+  as following.
+
+ @code
+    /*Fls init*/
+    Fls_Init(&Fls_Config);
+
+    /*Fee init*/
+    Fee_Init(NULL_PTR);
+    do
+    {
+    Fls_MainFunction();
+    Fee_MainFunction();
+    }while(MEMIF_IDLE!=Fee_GetStatus());
+ @endcode
+
+- We also can call <tt>Fee_Init</tt> during the MCU initialization, and call the 
+<tt>Fee_MainFunction</tt> in periodic task as following. In this way ,the initialization 
+of Fee actually done in a periodic task, and the Fee can't be operate(write,read,erase,
+compare...) before the initialization completed. 
+
+ @code
+    /*MCU Init*/
+    Fee_Init(NULL_PTR);
+
+    /*the periodic task*/
+    while(1)
+    {
+    Fls_MainFunction();
+    Fee_MainFunction();
+    } 
+ @endcode
+
+- The <tt>Fee_MainFunction</tt> need be called periodically or repeatedly called after an 
+  asynchronous operation functions.
+
+- We can call <tt>Fee_GetStatus</tt> to check the Fee driver status. We need insure the Fee
+  is IDLE when call an asynchronous operation functions of Fee.
+
+## Integration guideline ##
+ 
+### Compilation units ###
+
+The following files need to be compiled in the project:
+\verbatim
+${SDK_PATH}\platform\drivers\src\Fee\Fee.c
+${SDK_PATH}\platform\drivers\src\Fee\fls_async_driver.c
+${SDK_PATH}\platform\drivers\src\Fee\fls_hw_access.c
+\endverbatim
+
+### Include path ###
+
+The following paths need to be added to the include path of the toolchain:
+\verbatim
+${SDK_PATH}\platform\drivers\inc\
+\endverbatim
+
+### Compile symbols ###
+
+No special symbols are required for this component
+
+### Dependencies ###
+
+\ref clock_manager
+
+
+@}*/

@@ -1,0 +1,34 @@
+{
+    "name": "fee",
+    "type": "driver",
+    "srcs": [
+        "App.vue",
+        "Common.vue",
+        "Cluster.vue",
+        "Block.vue"
+    ],
+    "mode": "raw",
+    "label": "FEE",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/fee.h"
+    ],
+    "forceEnable": false,
+    "generate": [
+        "fee_config.c",
+        "fee_config.h"
+    ],
+    "args": [
+        "Fee_Init (&{{this.data.flashConfig.name}});"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/fee.h",
+            "to": "platform/drivers/inc/fee.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/fee",
+            "to": "platform/drivers/src/fee"
+        }
+    ],
+    "sign": "8ad300e0fe18278f144f8595b84895732c4fbc7a246d47a29090cf2c5bd55283ce4810a24b40043eebb23e163a48a94cde6c54e73e3ecb85ab75f29f03e07eeda762f18012aa2ae93f9195aca32a519e3155c2f4f58e9010bbbfa05a75f770deb42cf5e45afbc8906af3eac2d1fce0c070319deb4bb310bf05d681c61a790f4f4bcea971833e7d7e4aa3fc39146930369f38ae5d7d2504737a62ab851d5fb78b7a6aefc2c98bcaced0b99f7f2388eb1eb1a44003962d238d332a09d0ab4aa1e94910cc21e2f5561598da76d7579503d074822c53649b6bbe4b33533b1c1d243714f08bdc7d4dc0d301813c6c2946903030916d6cf20ebc842eaf4ba089788d08"
+}

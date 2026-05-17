@@ -1,0 +1,33 @@
+{
+    "name": "wkup",
+    "type": "driver",
+    "srcs": [
+        "App.vue"
+    ],
+    "mode": "raw",
+    "label": "WKUP",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/wku_driver.h"
+    ],
+    "forceEnable": false,
+    "generate": [
+        "wku_config.c",
+        "wku_config.h"
+    ],
+    "args": [
+        "WKU_DRV_InitPinWakeup {{#each this.data}}(0,WKP_PIN_CH_NUM{{@index}},{{this.pinsName}});{{/each}}",
+        "WKU_DRV_InitReset {{#each this.data}}(0,&{{this.resetName}});{{/each}}",
+        "WKU_DRV_EnableModuleWakeup {{#each this.data}}(0,{{this.moduleId}});{{/each}}"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/wku_driver.h",
+            "to": "platform/drivers/inc/wku_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/wku",
+            "to": "platform/drivers/src/wku"
+        }
+    ],
+    "sign": "3cc5f46da51adce7d00dcbcfab04e51a92343dec4bbabd79aa69b0a682b3ba6f7b9777285c4f185c01082634340c01f0f4d69d758262368c6438fba000263978e97bf84d5b4a85352858c538b528e03463d2306d80adb8eeedfec83608b23555862b18dab42a26096eab0ed5d06f737191cf75db894c237852670bb9c10dcf05e19d7f3a09ab602896c9aaa99618a3539d7c0dba29e41e3e633de74efa5629b95657bac024b0cee45b5a4ea791089416433a6fcd3ae6da17f7c87a7ed66dacb6f573c3ac2b358b62a93cbb56004f64d193b6137f3daf07974c136d2507aab354dbba53cd277074c9adf7f27748fae9dac5160a7e5159a39520c56e1850796fb8"
+}

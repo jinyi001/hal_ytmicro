@@ -1,0 +1,49 @@
+{
+    "name": "linflexd_uart",
+    "type": "driver",
+    "mode": "raw",
+    "srcs": [
+        "App.vue"
+    ],
+    "depend": [
+        "dma"
+    ],
+    "label": "Linflexd Uart",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/linflexd_uart_driver.h"
+    ],
+    "generate": [
+        "linflexd_uart_config.c",
+        "linflexd_uart_config.h"
+    ],
+    "args": [
+        "LINFlexD_UART_DRV_Init {{#each this.data}}(0,&{{this.name}}_State,&{{this.name}});{{/each}}"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/linflexd/linflexd_uart_driver.c",
+            "to": "platform/drivers/src/linflexd/linflexd_uart_driver.c"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/linflexd/linflexd_uart_irq.c",
+            "to": "platform/drivers/src/linflexd/linflexd_uart_irq.c"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/linflexd/linflexd_uart_irq.h",
+            "to": "platform/drivers/src/linflexd/linflexd_uart_irq.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/linflexd/linflexd_hw_access.h",
+            "to": "platform/drivers/src/linflexd/linflexd_hw_access.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/linflexd_uart_driver.h",
+            "to": "platform/drivers/inc/linflexd_uart_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/linflexd_lin_driver.h",
+            "to": "platform/drivers/inc/linflexd_lin_driver.h"
+        }
+    ],
+    "sign": "8777fca8bde905797baafdf4c8685634fd8049e294dbd1ad3eb3b6c742e2d28bb9f044be42911b03daa0f1870dfefde2c54b4eeb81d444015083b5fe698d5ba67a9fdaae6e477d49f7f8093746d83b8c77903df71351da4d754878815c6beb343b925df9aa8349a23e1a956bf062b334bface27b72b8aa2766f654b03e9f6b6b6a469c631de4b9ad4b466f26ed3f60644abca064552abda5d309d1d959667b0644a04cd018ebd3ac389bcf3a0b6b8be4202f63a1d3a82a439834bf1caa8341dc4af8d44c28f3bbfa37271c9cea67b8c52a34807f3eaec8b8801a97c651b02f1446e493b458bcfbcdf23ce99db453e12d5ce0ec32eeed05429e9611366b3a2511"
+}

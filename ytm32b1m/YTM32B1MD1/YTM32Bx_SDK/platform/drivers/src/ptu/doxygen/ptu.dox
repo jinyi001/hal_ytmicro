@@ -1,0 +1,8 @@
+/*!
+@defgroup ptu Programmable Delay Block (PTU)
+@details 
+The YTMicro SDK provides a peripheral driver for the Programmable Delay Block (PTU) module.
+
+The PTU is a configurable counter that can generate events (triggers) that can be used by the ADC to start conversions
+or routed through TMU to other modules in the device.
+ */

@@ -1,0 +1,31 @@
+{
+    "name": "emu",
+    "type": "driver",
+    "srcs": [
+        "App.vue"
+    ],
+    "mode": "raw",
+    "label": "EMU",
+    "includes": [
+        "./../../../YTM32Bx_SDK/platform/drivers/inc/emu_driver.h"
+    ],
+    "forceEnable": false,
+    "generate": [
+        "emu_config.c",
+        "emu_config.h"
+    ],
+    "args": [
+        "EMU_DRV_Init {{#each this.data}}(0,&{{this.name}},0);{{/each}}"
+    ],
+    "move": [
+        {
+            "from": "./../../../YTM32Bx_SDK/platform/drivers/inc/emu_driver.h",
+            "to": "platform/drivers/inc/emu_driver.h"
+        },
+        {
+            "from": "./../../../YTM32Bx_SDK/platform/drivers/src/emu",
+            "to": "platform/drivers/src/emu"
+        }
+    ],
+    "sign": "bbcea8a2e7871c513132a5caa641145f399fd1623ebcce799fd48438464541d4d9d4b812b834528656d2bf93282b6276629baa2ee9994ed7dcba3c5107150b2dca3e0e6e2ecd7a2715e79787974cca61b40985fb060ce3472c2e53d78b24af6e7a764cde6c7c8058a8fbbae6c9fd9b1343e8c7230a512b0fe0cce79838a6524532e504e32db78d860f32085e0ef68212288582ed18c327320fef7736a10fb0a0313c26da76c8e5cef519d0ea08d3dac2a8e540cf94fb2ebb5982f972c041a70f1da15bd43ba7a01b9df8fbcd0f77f8350931ba05d734670ab0cb7b7f9418d1f4b72751b236a4dcdbf356786297c6ceec38eca957fc5f9f94a79c53b58e072958"
+}

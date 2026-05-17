@@ -1,0 +1,49 @@
+{
+    "name": "linflexd_lin",
+    "type": "driver",
+    "mode": "raw",
+    "srcs": [
+        "App.vue"
+    ],
+    "depend": [
+        "dma"
+    ],
+    "label": "Linflexd Lin",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/linflexd_lin_driver.h"
+    ],
+    "generate": [
+        "linflexd_lin_config.c",
+        "linflexd_lin_config.h"
+    ],
+    "args": [
+        "LINFlexD_DRV_Init {{#each this.data}}(0,&{{this.name}},&{{this.name}}_State);{{/each}}"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/linflexd/linflexd_lin_driver.c",
+            "to": "platform/drivers/src/linflexd/linflexd_lin_driver.c"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/linflexd/linflexd_lin_irq.c",
+            "to": "platform/drivers/src/linflexd/linflexd_lin_irq.c"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/linflexd/linflexd_lin_irq.h",
+            "to": "platform/drivers/src/linflexd/linflexd_lin_irq.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/linflexd/linflexd_hw_access.h",
+            "to": "platform/drivers/src/linflexd/linflexd_hw_access.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/linflexd_lin_driver.h",
+            "to": "platform/drivers/inc/linflexd_lin_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/linflexd_uart_driver.h",
+            "to": "platform/drivers/inc/linflexd_uart_driver.h"
+        }
+    ],
+    "sign": "054bff0e18084250336ea89d801d360b4256b5d209979046225ca8ef01883cbe4cfaaee14ef7a09abcfdf0eadd21021bbc78fc0f34dbf83dcf8da82bcecfdd41ae84ae97a43d751d7329ae44e46302dad81eccb78b0b890ef96959251da0fee8d5abdc026593fdb76f156b558294951014dc40451c378b5c97e407830e44806fa85fb5d990d7d638d74e151f6b5faee36a120947160ab0f0d832ba4354b8840bee32c83e04a2680e1fc906ef34faa0aa59fb0f90c69b29dd2bd2f883a7684cd24d978280021b8a8c7df8119675f219dfe39d389af59941c06640eab91292de7efba591a60062bb0477e308efea56fdc25f0ad9d9dd0e7b68c1abf04479cb8f7e"
+}

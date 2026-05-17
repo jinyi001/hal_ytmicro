@@ -1,0 +1,3269 @@
+{
+  "project": {
+    "clangd": {
+      "enable": false,
+      "path": ""
+    },
+    "cmakeGcc": {
+      "optimization": "-O1",
+      "funcSection": true,
+      "dataSection": true,
+      "compOthers": "",
+      "removeSection": true,
+      "linkOthers": "",
+      "charSigned": false,
+      "bitunsigned": false,
+      "oninline": false,
+      "floatABI": "",
+      "library": "-specs=nosys.specs",
+      "debuglevel": "-g",
+      "gcov": false,
+      "debugformat": "",
+      "nocommon": false,
+      "ffreestanding": false,
+      "fnobuiltin": false,
+      "singleprecisionconstant": false,
+      "flto": false,
+      "fnomoveloopinvariants": false,
+      "printremoveSection": false,
+      "noStartup": true,
+      "suppress": {
+        "variable": true,
+        "parameter": true,
+        "function": true,
+        "setVariable": true,
+        "result": true,
+        "uninitialized": true,
+        "compare": true,
+        "aliasing": true,
+        "pragmas": true,
+        "format": true
+      }
+    },
+    "debug": {
+      "enable": false,
+      "servertype": "jlink",
+      "interface": "swd",
+      "runToEntryPoint": "main",
+      "gdbPath": "C:\\Program Files (x86)\\SEGGER\\JLink\\JLinkGDBServerCL.exe",
+      "svdPath": "${workspaceFolder}/.vscode/chip.svd"
+    },
+    "family": "YTM32B1MD1",
+    "flexLink": true,
+    "generate": {
+      "folder": "board",
+      "keepUserCode": true,
+      "initBoard": true,
+      "initBoardFuncName": "Board_Init",
+      "enableVariants": false,
+      "variantName": "",
+      "variantList": []
+    },
+    "git": {
+      "enable": false,
+      "path": ".cache,build,.vscode"
+    },
+    "heapSize": "200",
+    "ideDeviceName": "YTM32B1MD14",
+    "initList": [
+      {
+        "funcName": "CLOCK_SYS_Init  ",
+        "value": "CLOCK_SYS_Init(g_clockManConfigsArr,CLOCK_MANAGER_CONFIG_CNT,g_clockManCallbacksArr,CLOCK_MANAGER_CALLBACK_CNT);",
+        "id": "4d7a1cf8-151e-4989-a65c-bf139bf056db",
+        "errorHandler": false,
+        "successLabel": "0"
+      },
+      {
+        "funcName": "CLOCK_SYS_UpdateConfiguration",
+        "value": "CLOCK_SYS_UpdateConfiguration(CLOCK_MANAGER_ACTIVE_INDEX,CLOCK_MANAGER_POLICY_AGREEMENT);",
+        "id": "c2b53205-fa99-483c-974e-489f02c3f54a",
+        "errorHandler": true,
+        "successLabel": "STATUS_SUCCESS"
+      },
+      {
+        "funcName": "PINS_DRV_Init   ",
+        "value": "PINS_DRV_Init(NUM_OF_CONFIGURED_PINS0,g_pin_mux_InitConfigArr0);",
+        "id": "431aa151-7459-4791-b50e-aa323908ec43",
+        "errorHandler": false,
+        "successLabel": "0"
+      },
+      {
+        "funcName": "DMA_DRV_Init    ",
+        "value": "DMA_DRV_Init(&dmaState,&dmaController_InitConfig,dmaChnState,dmaChnConfigArray,NUM_OF_CONFIGURED_DMA_CHANNEL);",
+        "id": "bf05629f-84ad-4038-b03f-1211a035107c",
+        "errorHandler": false,
+        "successLabel": "0"
+      },
+      {
+        "funcName": "UTILITY_PRINT_Init",
+        "value": "UTILITY_PRINT_Init();",
+        "id": "87eb8d1a-bd99-45a1-b227-1ad02aca5fee",
+        "errorHandler": false,
+        "successLabel": "0"
+      },
+      {
+        "funcName": "SENT_DRV_Init   ",
+        "value": "SENT_DRV_Init(0,&sentUserConfig,&sentState);",
+        "id": "222117e3-7b99-4389-b66e-a6125cc81def",
+        "errorHandler": false,
+        "successLabel": "0"
+      }
+    ],
+    "linkfile": "",
+    "links": [],
+    "name": "Sent_Dma_Demo",
+    "partNumber": "YTM32B1MD14G0MLLT",
+    "sdkVersion": "1_4_1",
+    "sections": [],
+    "stackSize": "400",
+    "targetToolOpt": {
+      "KEIL": {
+        "ytlink": {
+          "linkflags": [
+            "--no_startup",
+            "--keep=*(.isr_vector)"
+          ]
+        }
+      },
+      "CMakeKEIL": {
+        "ytlink": {
+          "linkflags": [
+            "--no_startup",
+            "--keep=*(.isr_vector)"
+          ]
+        }
+      }
+    },
+    "toolOpt": {
+      "addData": {
+        "cdefines": [],
+        "asmdefines": [],
+        "cincludes": [],
+        "aincludes": [],
+        "cflags": [],
+        "aflags": [],
+        "linkflags": [],
+        "asmincludes": [],
+        "asmflags": [],
+        "linkfalgs": []
+      },
+      "deleteData": {
+        "cdefines": [
+          "USING_OS_FREERTOS"
+        ],
+        "asmdefines": [],
+        "cincludes": [],
+        "aincludes": [],
+        "cflags": [],
+        "aflags": [],
+        "linkflags": [],
+        "asmincludes": [],
+        "asmflags": [],
+        "linkfalgs": []
+      }
+    },
+    "toolchain": "CMakeGCC",
+    "toolchainPath": "",
+    "toolchainVer": "",
+    "type": "sdk",
+    "useYtLink": true
+  },
+  "data": {
+    "clock": {
+      "enable": {},
+      "data": {
+        "activeInst": 0,
+        "version": "1",
+        "clockArray": [
+          {
+            "name": "clock_config0",
+            "data": {
+              "firc": {
+                "enable": true,
+                "dsEnable": false,
+                "freq": {
+                  "value": 96,
+                  "unit": "MHz",
+                  "raw": 96000000
+                }
+              },
+              "fxosc": {
+                "enable": true,
+                "dsEnable": false,
+                "freq": {
+                  "value": 24,
+                  "unit": "MHz",
+                  "raw": 24000000
+                },
+                "gain": 5,
+                "mode": 0
+              },
+              "sirc": {
+                "enable": true,
+                "dsEnable": true,
+                "stbEnable": true,
+                "pdEnable": true,
+                "freq": {
+                  "value": 12,
+                  "unit": "MHz",
+                  "raw": 12000000
+                }
+              },
+              "sxosc": {
+                "enable": false,
+                "dsEnable": false,
+                "pdEnable": false,
+                "stbEnable": false,
+                "freq": {
+                  "value": 32768,
+                  "unit": "Hz",
+                  "raw": 32768
+                },
+                "gain": 0,
+                "mode": 0
+              },
+              "pll": {
+                "enable": true,
+                "refdivV": 1,
+                "fbdivV": 10,
+                "ref": 1,
+                "freq": {
+                  "value": 120,
+                  "unit": "MHz",
+                  "raw": 120000000
+                },
+                "dsEnable": false
+              },
+              "cmu0": {
+                "reset": true,
+                "ref": 0,
+                "enable": true,
+                "compareHigh": 50,
+                "compareLow": 30
+              },
+              "cmu1": {
+                "reset": true,
+                "ref": 0,
+                "enable": true,
+                "compareHigh": 120,
+                "compareLow": 72
+              },
+              "cmu2": {
+                "reset": true,
+                "ref": 0,
+                "enable": true,
+                "compareHigh": 150,
+                "compareLow": 90
+              },
+              "cmu3": {
+                "reset": true,
+                "enable": true,
+                "ref": 0,
+                "compareHigh": 30,
+                "compareLow": 18
+              },
+              "clkOut": {
+                "enable": false,
+                "div": 1,
+                "ref": 0
+              },
+              "coreClock": {
+                "div": 0,
+                "ref": 1,
+                "freq": {
+                  "value": 120,
+                  "unit": "MHz",
+                  "raw": 120000000
+                },
+                "flash": 3
+              },
+              "fastClock": {
+                "div": 0,
+                "freq": {
+                  "value": 120,
+                  "unit": "MHz",
+                  "raw": 120000000
+                }
+              },
+              "slowClock": {
+                "div": 2,
+                "freq": {
+                  "value": 40,
+                  "unit": "MHz",
+                  "raw": 40000000
+                }
+              },
+              "periClocks": [
+                {
+                  "name": "DMA_CLK",
+                  "gate": true,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": true,
+                  "div": 0,
+                  "busClock": [
+                    "CORE_CLK"
+                  ]
+                },
+                {
+                  "name": "TRACE_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "div": 0,
+                  "busClock": [
+                    "FAST_BUS_CLK"
+                  ],
+                  "periClock": [
+                    "CLK_SRC_DISABLED",
+                    "CLK_SRC_FIRC",
+                    "CLK_SRC_SIRC",
+                    "CLK_SRC_FXOSC",
+                    "CLK_SRC_PLL"
+                  ]
+                },
+                {
+                  "name": "EFM_CLK",
+                  "gate": true,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "div": 0,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ]
+                },
+                {
+                  "name": "GPIO_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "div": 0,
+                  "busClock": [
+                    "CORE_CLK"
+                  ],
+                  "periClock": [
+                    "CLK_SRC_DISABLED",
+                    "CLK_SRC_FIRC",
+                    "CLK_SRC_SIRC",
+                    "CLK_SRC_FXOSC",
+                    "CLK_SRC_PLL"
+                  ]
+                },
+                {
+                  "name": "PCTRLA_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "div": 0,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ]
+                },
+                {
+                  "name": "PCTRLB_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "div": 0,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ]
+                },
+                {
+                  "name": "PCTRLC_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "PCTRLD_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "PCTRLE_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "LINFlexD0_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "periClock": [
+                    "CLK_SRC_DISABLED",
+                    "CLK_SRC_FIRC",
+                    "CLK_SRC_SIRC",
+                    "CLK_SRC_FXOSC",
+                    "CLK_SRC_PLL"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "LINFlexD1_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "periClock": [
+                    "CLK_SRC_DISABLED",
+                    "CLK_SRC_FIRC",
+                    "CLK_SRC_SIRC",
+                    "CLK_SRC_FXOSC",
+                    "CLK_SRC_PLL"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "LINFlexD2_CLK",
+                  "gate": true,
+                  "busSrc": 0,
+                  "periSrc": 3,
+                  "userCtrl": true,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "periClock": [
+                    "CLK_SRC_DISABLED",
+                    "CLK_SRC_FIRC",
+                    "CLK_SRC_SIRC",
+                    "CLK_SRC_FXOSC",
+                    "CLK_SRC_PLL"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "SENT0_CLK",
+                  "gate": true,
+                  "busSrc": 0,
+                  "periSrc": 3,
+                  "userCtrl": true,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "periClock": [
+                    "CLK_SRC_DISABLED",
+                    "CLK_SRC_FIRC",
+                    "CLK_SRC_SIRC",
+                    "CLK_SRC_FXOSC",
+                    "CLK_SRC_PLL"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "I2C0_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "periClock": [
+                    "CLK_SRC_DISABLED",
+                    "CLK_SRC_FIRC",
+                    "CLK_SRC_SIRC",
+                    "CLK_SRC_FXOSC",
+                    "CLK_SRC_PLL"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "I2C1_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "periClock": [
+                    "CLK_SRC_DISABLED",
+                    "CLK_SRC_FIRC",
+                    "CLK_SRC_SIRC",
+                    "CLK_SRC_FXOSC",
+                    "CLK_SRC_PLL"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "SPI0_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "periClock": [
+                    "CLK_SRC_DISABLED",
+                    "CLK_SRC_FIRC",
+                    "CLK_SRC_SIRC",
+                    "CLK_SRC_FXOSC",
+                    "CLK_SRC_PLL"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "SPI1_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "periClock": [
+                    "CLK_SRC_DISABLED",
+                    "CLK_SRC_FIRC",
+                    "CLK_SRC_SIRC",
+                    "CLK_SRC_FXOSC",
+                    "CLK_SRC_PLL"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "SPI2_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "periClock": [
+                    "CLK_SRC_DISABLED",
+                    "CLK_SRC_FIRC",
+                    "CLK_SRC_SIRC",
+                    "CLK_SRC_FXOSC",
+                    "CLK_SRC_PLL"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "SPI3_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "periClock": [
+                    "CLK_SRC_DISABLED",
+                    "CLK_SRC_FIRC",
+                    "CLK_SRC_SIRC",
+                    "CLK_SRC_FXOSC",
+                    "CLK_SRC_PLL"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "FlexCAN0_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "FAST_BUS_CLK",
+                    "FXOSC_CLK"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "FlexCAN1_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "FAST_BUS_CLK",
+                    "FXOSC_CLK"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "FlexCAN2_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "FAST_BUS_CLK",
+                    "FXOSC_CLK"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "ADC0_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "FAST_BUS_CLK"
+                  ],
+                  "periClock": [
+                    "CLK_SRC_DISABLED",
+                    "CLK_SRC_FIRC",
+                    "CLK_SRC_SIRC",
+                    "CLK_SRC_FXOSC",
+                    "CLK_SRC_PLL"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "ACMP0_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "periClock": [
+                    "CLK_SRC_DISABLED",
+                    "CLK_SRC_FIRC",
+                    "CLK_SRC_SIRC",
+                    "CLK_SRC_FXOSC",
+                    "CLK_SRC_PLL"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "PTU0_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "FAST_BUS_CLK"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "TMU_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "eTMR0_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "FAST_BUS_CLK",
+                    "TCLK0",
+                    "TCLK1",
+                    "TCLK2"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "eTMR1_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "FAST_BUS_CLK",
+                    "TCLK0",
+                    "TCLK1",
+                    "TCLK2"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "eTMR2_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "FAST_BUS_CLK",
+                    "TCLK0",
+                    "TCLK1",
+                    "TCLK2"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "eTMR3_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "FAST_BUS_CLK",
+                    "TCLK0",
+                    "TCLK1",
+                    "TCLK2"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "TMR0_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "pTMR0_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "lpTMR0_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "periClock": [
+                    "CLK_SRC_DISABLED",
+                    "CLK_SRC_FIRC",
+                    "CLK_SRC_SIRC",
+                    "CLK_SRC_FXOSC",
+                    "CLK_SRC_PLL"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "RTC_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK",
+                    "RTC_CLK_OSCIN",
+                    "RTC_CLK_CLKIN"
+                  ],
+                  "periClock": [
+                    "CLK_SRC_DISABLED",
+                    "CLK_SRC_FIRC",
+                    "CLK_SRC_SIRC",
+                    "CLK_SRC_FXOSC",
+                    "CLK_SRC_PLL"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "WKU_CLK",
+                  "gate": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "div": 0
+                },
+                {
+                  "name": "CRC_CLK",
+                  "gate": false,
+                  "busClock": [
+                    "CORE_CLK"
+                  ],
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "div": 0
+                },
+                {
+                  "name": "TRNG_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "HCU_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "WDG0_CLK",
+                  "gate": true,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK",
+                    "SIRC_CLK",
+                    "SXOSC_CLK"
+                  ],
+                  "periClock": [
+                    "CLK_SRC_DISABLED",
+                    "CLK_SRC_FIRC",
+                    "CLK_SRC_SIRC",
+                    "CLK_SRC_FXOSC",
+                    "CLK_SRC_PLL"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "EWDG0_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "EMU0_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "CORE_CLK"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "CIM_CLK",
+                  "gate": false,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "SCU_CLK",
+                  "gate": true,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "PCU_CLK",
+                  "gate": true,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK"
+                  ],
+                  "div": 0
+                },
+                {
+                  "name": "RCU_CLK",
+                  "gate": true,
+                  "busSrc": 0,
+                  "periSrc": 0,
+                  "userCtrl": false,
+                  "busClock": [
+                    "SLOW_BUS_CLK",
+                    "SIRC_CLK"
+                  ],
+                  "div": 0
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "updateTime": 1706164942295,
+      "lock": false
+    },
+    "device": {
+      "enable": {},
+      "data": {
+        "pn": "YTM32B1MD14G0MLLT",
+        "sdkVer": "dev",
+        "useFreeRtos": false,
+        "useSecureBoot": false,
+        "stack_top": "STACK_end",
+        "vector_ram": "IVT_RAM_start",
+        "vector_flash_region": ".isr_vector",
+        "vector_flash": "IVT_start",
+        "vector_flash_end": "IVT_end",
+        "vectors": [
+          "NMI_Handler",
+          "HardFault_Handler",
+          "MemManage_Handler",
+          "BusFault_Handler",
+          "UsageFault_Handler",
+          "Reserved",
+          "Reserved",
+          "Reserved",
+          "Reserved",
+          "SVC_Handler",
+          "DebugMon_Handler",
+          "Reserved",
+          "PendSV_Handler",
+          "SysTick_Handler",
+          "DMA0_IRQHandler",
+          "DMA1_IRQHandler",
+          "DMA2_IRQHandler",
+          "DMA3_IRQHandler",
+          "DMA4_IRQHandler",
+          "DMA5_IRQHandler",
+          "DMA6_IRQHandler",
+          "DMA7_IRQHandler",
+          "DMA8_IRQHandler",
+          "DMA9_IRQHandler",
+          "DMA10_IRQHandler",
+          "DMA11_IRQHandler",
+          "DMA12_IRQHandler",
+          "DMA13_IRQHandler",
+          "DMA14_IRQHandler",
+          "DMA15_IRQHandler",
+          "DMA_Error_IRQHandler",
+          "FPU_IRQHandler",
+          "EFM_IRQHandler",
+          "EFM_Error_IRQHandler",
+          "PCU_IRQHandler",
+          "EFM_Ecc_IRQHandler",
+          "WDG0_IRQHandler",
+          "Reserved5_IRQHandler",
+          "I2C0_Master_IRQHandler",
+          "I2C0_Slave_IRQHandler",
+          "SPI0_IRQHandler",
+          "SPI1_IRQHandler",
+          "SPI2_IRQHandler",
+          "I2C1_Master_IRQHandler",
+          "Reserved6_IRQHandler",
+          "LINFlexD0_IRQHandler",
+          "Reserved7_IRQHandler",
+          "LINFlexD1_IRQHandler",
+          "Reserved8_IRQHandler",
+          "LINFlexD2_IRQHandler",
+          "Reserved9_IRQHandler",
+          "Reserved10_IRQHandler",
+          "Reserved11_IRQHandler",
+          "ADC0_IRQHandler",
+          "Reserved12_IRQHandler",
+          "ACMP0_IRQHandler",
+          "Reserved13_IRQHandler",
+          "Reserved14_IRQHandler",
+          "EMU0_SB_IRQHandler",
+          "EMU0_DB_IRQHandler",
+          "RTC_IRQHandler",
+          "RTC_Seconds_IRQHandler",
+          "pTMR0_Ch0_IRQHandler",
+          "pTMR0_Ch1_IRQHandler",
+          "pTMR0_Ch2_IRQHandler",
+          "pTMR0_Ch3_IRQHandler",
+          "PTU0_IRQHandler",
+          "Reserved15_IRQHandler",
+          "Reserved16_IRQHandler",
+          "Reserved17_IRQHandler",
+          "Reserved18_IRQHandler",
+          "SCU_IRQHandler",
+          "lpTMR0_IRQHandler",
+          "GPIOA_IRQHandler",
+          "GPIOB_IRQHandler",
+          "GPIOC_IRQHandler",
+          "GPIOD_IRQHandler",
+          "GPIOE_IRQHandler",
+          "Reserved19_IRQHandler",
+          "Reserved20_IRQHandler",
+          "Reserved21_IRQHandler",
+          "Reserved22_IRQHandler",
+          "Reserved23_IRQHandler",
+          "Reserved24_IRQHandler",
+          "Reserved25_IRQHandler",
+          "Reserved26_IRQHandler",
+          "Reserved27_IRQHandler",
+          "Reserved28_IRQHandler",
+          "Reserved29_IRQHandler",
+          "Reserved30_IRQHandler",
+          "Reserved31_IRQHandler",
+          "Reserved32_IRQHandler",
+          "CAN0_ORed_IRQHandler",
+          "CAN0_Error_IRQHandler",
+          "CAN0_Wake_Up_IRQHandler",
+          "CAN0_ORed_0_15_MB_IRQHandler",
+          "CAN0_ORed_16_31_MB_IRQHandler",
+          "CAN0_ORed_32_47_MB_IRQHandler",
+          "CAN0_ORed_48_63_MB_IRQHandler",
+          "CAN1_ORed_IRQHandler",
+          "CAN1_Error_IRQHandler",
+          "CAN1_Wake_Up_IRQHandler",
+          "CAN1_ORed_0_15_MB_IRQHandler",
+          "CAN1_ORed_16_31_MB_IRQHandler",
+          "Reserved33_IRQHandler",
+          "Reserved34_IRQHandler",
+          "CAN2_ORed_IRQHandler",
+          "CAN2_Error_IRQHandler",
+          "CAN2_Wake_Up_IRQHandler",
+          "CAN2_ORed_0_15_MB_IRQHandler",
+          "CAN2_ORed_16_31_MB_IRQHandler",
+          "Reserved35_IRQHandler",
+          "Reserved36_IRQHandler",
+          "eTMR0_Ch0_Ch1_IRQHandler",
+          "eTMR0_Ch2_Ch3_IRQHandler",
+          "eTMR0_Ch4_Ch5_IRQHandler",
+          "eTMR0_Ch6_Ch7_IRQHandler",
+          "eTMR0_Fault_IRQHandler",
+          "eTMR0_Ovf_IRQHandler",
+          "eTMR1_Ch0_Ch1_IRQHandler",
+          "eTMR1_Ch2_Ch3_IRQHandler",
+          "eTMR1_Ch4_Ch5_IRQHandler",
+          "eTMR1_Ch6_Ch7_IRQHandler",
+          "eTMR1_Fault_IRQHandler",
+          "eTMR1_Ovf_IRQHandler",
+          "eTMR2_Ch0_Ch1_IRQHandler",
+          "eTMR2_Ch2_Ch3_IRQHandler",
+          "eTMR2_Ch4_Ch5_IRQHandler",
+          "eTMR2_Ch6_Ch7_IRQHandler",
+          "eTMR2_Fault_IRQHandler",
+          "eTMR2_Ovf_IRQHandler",
+          "eTMR3_Ch0_Ch1_IRQHandler",
+          "eTMR3_Ch2_Ch3_IRQHandler",
+          "eTMR3_Ch4_Ch5_IRQHandler",
+          "eTMR3_Ch6_Ch7_IRQHandler",
+          "eTMR3_Fault_IRQHandler",
+          "eTMR3_Ovf_IRQHandler",
+          "Reserved37_IRQHandler",
+          "Reserved38_IRQHandler",
+          "Reserved39_IRQHandler",
+          "Reserved40_IRQHandler",
+          "Reserved41_IRQHandler",
+          "Reserved42_IRQHandler",
+          "Reserved43_IRQHandler",
+          "Reserved44_IRQHandler",
+          "Reserved45_IRQHandler",
+          "Reserved46_IRQHandler",
+          "Reserved47_IRQHandler",
+          "Reserved48_IRQHandler",
+          "Reserved49_IRQHandler",
+          "Reserved50_IRQHandler",
+          "Reserved51_IRQHandler",
+          "Reserved52_IRQHandler",
+          "Reserved53_IRQHandler",
+          "Reserved54_IRQHandler",
+          "Reserved55_IRQHandler",
+          "Reserved56_IRQHandler",
+          "Reserved57_IRQHandler",
+          "Reserved58_IRQHandler",
+          "Reserved59_IRQHandler",
+          "Reserved60_IRQHandler",
+          "Reserved61_IRQHandler",
+          "Reserved62_IRQHandler",
+          "Reserved63_IRQHandler",
+          "Reserved64_IRQHandler",
+          "Reserved65_IRQHandler",
+          "Reserved66_IRQHandler",
+          "Reserved67_IRQHandler",
+          "Reserved68_IRQHandler",
+          "Reserved69_IRQHandler",
+          "TRNG_IRQHandler",
+          "HCU_IRQHandler",
+          "Reserved70_IRQHandler",
+          "TMR0_Ch0_IRQHandler",
+          "TMR0_Ch1_IRQHandler",
+          "TMR0_Ch2_IRQHandler",
+          "TMR0_Ch3_IRQHandler",
+          "Reserved71_IRQHandler",
+          "Reserved72_IRQHandler",
+          "Reserved73_IRQHandler",
+          "Reserved74_IRQHandler",
+          "Reserved75_IRQHandler",
+          "SPI3_IRQHandler",
+          "Reserved76_IRQHandler",
+          "Reserved77_IRQHandler",
+          "Reserved78_IRQHandler",
+          "Reserved79_IRQHandler",
+          "Reserved80_IRQHandler",
+          "Reserved81_IRQHandler",
+          "Reserved82_IRQHandler",
+          "Reserved83_IRQHandler",
+          "Reserved84_IRQHandler",
+          "Reserved85_IRQHandler",
+          "Reserved86_IRQHandler",
+          "SENT0_IRQHandler",
+          "Reserved87_IRQHandler",
+          "Reserved88_IRQHandler",
+          "Reserved89_IRQHandler",
+          "Reserved90_IRQHandler",
+          "Reserved91_IRQHandler",
+          "Reserved92_IRQHandler",
+          "Reserved93_IRQHandler",
+          "Reserved94_IRQHandler",
+          "Reserved95_IRQHandler",
+          "WKU_IRQHandler",
+          "ALIGN_0_IRQHandler"
+        ],
+        "linkfile": ""
+      },
+      "updateTime": 1709799904512,
+      "lock": false
+    },
+    "dma": {
+      "enable": {},
+      "data": {
+        "userConfig": {
+          "haltOnError": false,
+          "errataDma": false
+        },
+        "chs": [
+          {
+            "name": "dma_config0",
+            "readonly": true,
+            "virtChnConfig": 0,
+            "source": "DMA_REQ_SENT0_FAST",
+            "callback": "NULL",
+            "callbackParam": "NULL"
+          },
+          {
+            "name": "dma_config1",
+            "readonly": true,
+            "virtChnConfig": 1,
+            "source": "DMA_REQ_SENT0_SLOW",
+            "callback": "NULL",
+            "callbackParam": "NULL"
+          }
+        ],
+        "transEnable": false,
+        "trans": [
+          {
+            "name": "dma_transfer_config0",
+            "srcAddr": 0,
+            "destAddr": 0,
+            "srcOffset": 0,
+            "destOffset": 0,
+            "srcTransferSize": "DMA_TRANSFER_SIZE_1B",
+            "destTransferSize": "DMA_TRANSFER_SIZE_1B",
+            "srcModulo": "DMA_MODULO_OFF",
+            "destModulo": "DMA_MODULO_OFF",
+            "loopTransferConfig": {
+              "triggerLoopIterationCount": 1,
+              "srcOffsetEnable": false,
+              "dstOffsetEnable": false,
+              "triggerLoopOffset": 0,
+              "transferLoopChnLinkEnable": false,
+              "transferLoopChnLinkNumber": 0,
+              "triggerLoopChnLinkEnable": false,
+              "triggerLoopChnLinkNumber": 0
+            },
+            "transferLoopByteCount": 0,
+            "srcLastAddrAdjust": 0,
+            "destLastAddrAdjust": 0,
+            "interruptEnable": false
+          }
+        ]
+      },
+      "updateTime": 1706169399781,
+      "lock": false
+    },
+    "interrupt": {
+      "enable": {},
+      "data": [
+        {
+          "name": "NMI_IRQn",
+          "num": -14,
+          "enable": false,
+          "priority": -2,
+          "callback": "NMI_IRQHandler"
+        },
+        {
+          "name": "HardFault_IRQn",
+          "num": -13,
+          "enable": false,
+          "priority": -1,
+          "callback": "HardFault_IRQHandler"
+        },
+        {
+          "name": "MemManage_IRQn",
+          "num": -12,
+          "enable": false,
+          "priority": 0,
+          "callback": "MemManage_IRQHandler"
+        },
+        {
+          "name": "BusFault_IRQn",
+          "num": -11,
+          "enable": false,
+          "priority": 0,
+          "callback": "BusFault_IRQHandler"
+        },
+        {
+          "name": "UsageFault_IRQn",
+          "num": -10,
+          "enable": false,
+          "priority": 0,
+          "callback": "UsageFault_IRQHandler"
+        },
+        {
+          "name": "SVC_IRQn",
+          "num": -5,
+          "enable": false,
+          "priority": 0,
+          "callback": "SVC_IRQHandler"
+        },
+        {
+          "name": "DebugMon_IRQn",
+          "num": -4,
+          "enable": false,
+          "priority": 0,
+          "callback": "DebugMon_IRQHandler"
+        },
+        {
+          "name": "PendSV_IRQn",
+          "num": -2,
+          "enable": false,
+          "priority": 0,
+          "callback": "PendSV_IRQHandler"
+        },
+        {
+          "name": "SysTick_IRQn",
+          "num": -1,
+          "enable": false,
+          "priority": 0,
+          "callback": "SysTick_IRQHandler"
+        },
+        {
+          "name": "DMA0_IRQn",
+          "num": 0,
+          "enable": false,
+          "priority": 0,
+          "callback": "DMA0_IRQHandler"
+        },
+        {
+          "name": "DMA1_IRQn",
+          "num": 1,
+          "enable": false,
+          "priority": 0,
+          "callback": "DMA1_IRQHandler"
+        },
+        {
+          "name": "DMA2_IRQn",
+          "num": 2,
+          "enable": false,
+          "priority": 0,
+          "callback": "DMA2_IRQHandler"
+        },
+        {
+          "name": "DMA3_IRQn",
+          "num": 3,
+          "enable": false,
+          "priority": 0,
+          "callback": "DMA3_IRQHandler"
+        },
+        {
+          "name": "DMA4_IRQn",
+          "num": 4,
+          "enable": false,
+          "priority": 0,
+          "callback": "DMA4_IRQHandler"
+        },
+        {
+          "name": "DMA5_IRQn",
+          "num": 5,
+          "enable": false,
+          "priority": 0,
+          "callback": "DMA5_IRQHandler"
+        },
+        {
+          "name": "DMA6_IRQn",
+          "num": 6,
+          "enable": false,
+          "priority": 0,
+          "callback": "DMA6_IRQHandler"
+        },
+        {
+          "name": "DMA7_IRQn",
+          "num": 7,
+          "enable": false,
+          "priority": 0,
+          "callback": "DMA7_IRQHandler"
+        },
+        {
+          "name": "DMA8_IRQn",
+          "num": 8,
+          "enable": false,
+          "priority": 0,
+          "callback": "DMA8_IRQHandler"
+        },
+        {
+          "name": "DMA9_IRQn",
+          "num": 9,
+          "enable": false,
+          "priority": 0,
+          "callback": "DMA9_IRQHandler"
+        },
+        {
+          "name": "DMA10_IRQn",
+          "num": 10,
+          "enable": false,
+          "priority": 0,
+          "callback": "DMA10_IRQHandler"
+        },
+        {
+          "name": "DMA11_IRQn",
+          "num": 11,
+          "enable": false,
+          "priority": 0,
+          "callback": "DMA11_IRQHandler"
+        },
+        {
+          "name": "DMA12_IRQn",
+          "num": 12,
+          "enable": false,
+          "priority": 0,
+          "callback": "DMA12_IRQHandler"
+        },
+        {
+          "name": "DMA13_IRQn",
+          "num": 13,
+          "enable": false,
+          "priority": 0,
+          "callback": "DMA13_IRQHandler"
+        },
+        {
+          "name": "DMA14_IRQn",
+          "num": 14,
+          "enable": false,
+          "priority": 0,
+          "callback": "DMA14_IRQHandler"
+        },
+        {
+          "name": "DMA15_IRQn",
+          "num": 15,
+          "enable": false,
+          "priority": 0,
+          "callback": "DMA15_IRQHandler"
+        },
+        {
+          "name": "DMA_Error_IRQn",
+          "num": 16,
+          "enable": false,
+          "priority": 0,
+          "callback": "DMA_Error_IRQHandler"
+        },
+        {
+          "name": "FPU_IRQn",
+          "num": 17,
+          "enable": false,
+          "priority": 0,
+          "callback": "FPU_IRQHandler"
+        },
+        {
+          "name": "EFM_IRQn",
+          "num": 18,
+          "enable": false,
+          "priority": 0,
+          "callback": "EFM_IRQHandler"
+        },
+        {
+          "name": "EFM_Error_IRQn",
+          "num": 19,
+          "enable": false,
+          "priority": 0,
+          "callback": "EFM_Error_IRQHandler"
+        },
+        {
+          "name": "PCU_IRQn",
+          "num": 20,
+          "enable": false,
+          "priority": 0,
+          "callback": "PCU_IRQHandler"
+        },
+        {
+          "name": "EFM_Ecc_IRQn",
+          "num": 21,
+          "enable": false,
+          "priority": 0,
+          "callback": "EFM_Ecc_IRQHandler"
+        },
+        {
+          "name": "WDG0_IRQn",
+          "num": 22,
+          "enable": false,
+          "priority": 0,
+          "callback": "WDG0_IRQHandler"
+        },
+        {
+          "name": "Reserved5_IRQn",
+          "num": 23,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved5_IRQHandler"
+        },
+        {
+          "name": "I2C0_Master_IRQn",
+          "num": 24,
+          "enable": false,
+          "priority": 0,
+          "callback": "I2C0_Master_IRQHandler"
+        },
+        {
+          "name": "I2C0_Slave_IRQn",
+          "num": 25,
+          "enable": false,
+          "priority": 0,
+          "callback": "I2C0_Slave_IRQHandler"
+        },
+        {
+          "name": "SPI0_IRQn",
+          "num": 26,
+          "enable": false,
+          "priority": 0,
+          "callback": "SPI0_IRQHandler"
+        },
+        {
+          "name": "SPI1_IRQn",
+          "num": 27,
+          "enable": false,
+          "priority": 0,
+          "callback": "SPI1_IRQHandler"
+        },
+        {
+          "name": "SPI2_IRQn",
+          "num": 28,
+          "enable": false,
+          "priority": 0,
+          "callback": "SPI2_IRQHandler"
+        },
+        {
+          "name": "I2C1_Master_IRQn",
+          "num": 29,
+          "enable": false,
+          "priority": 0,
+          "callback": "I2C1_Master_IRQHandler"
+        },
+        {
+          "name": "Reserved6_IRQn",
+          "num": 30,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved6_IRQHandler"
+        },
+        {
+          "name": "LINFlexD0_IRQn",
+          "num": 31,
+          "enable": false,
+          "priority": 0,
+          "callback": "LINFlexD0_IRQHandler"
+        },
+        {
+          "name": "Reserved7_IRQn",
+          "num": 32,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved7_IRQHandler"
+        },
+        {
+          "name": "LINFlexD1_IRQn",
+          "num": 33,
+          "enable": false,
+          "priority": 0,
+          "callback": "LINFlexD1_IRQHandler"
+        },
+        {
+          "name": "Reserved8_IRQn",
+          "num": 34,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved8_IRQHandler"
+        },
+        {
+          "name": "LINFlexD2_IRQn",
+          "num": 35,
+          "enable": false,
+          "priority": 0,
+          "callback": "LINFlexD2_IRQHandler"
+        },
+        {
+          "name": "Reserved9_IRQn",
+          "num": 36,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved9_IRQHandler"
+        },
+        {
+          "name": "Reserved10_IRQn",
+          "num": 37,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved10_IRQHandler"
+        },
+        {
+          "name": "Reserved11_IRQn",
+          "num": 38,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved11_IRQHandler"
+        },
+        {
+          "name": "ADC0_IRQn",
+          "num": 39,
+          "enable": false,
+          "priority": 0,
+          "callback": "ADC0_IRQHandler"
+        },
+        {
+          "name": "Reserved12_IRQn",
+          "num": 40,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved12_IRQHandler"
+        },
+        {
+          "name": "ACMP0_IRQn",
+          "num": 41,
+          "enable": false,
+          "priority": 0,
+          "callback": "ACMP0_IRQHandler"
+        },
+        {
+          "name": "Reserved13_IRQn",
+          "num": 42,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved13_IRQHandler"
+        },
+        {
+          "name": "Reserved14_IRQn",
+          "num": 43,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved14_IRQHandler"
+        },
+        {
+          "name": "EMU0_SB_IRQn",
+          "num": 44,
+          "enable": false,
+          "priority": 0,
+          "callback": "EMU0_SB_IRQHandler"
+        },
+        {
+          "name": "EMU0_DB_IRQn",
+          "num": 45,
+          "enable": false,
+          "priority": 0,
+          "callback": "EMU0_DB_IRQHandler"
+        },
+        {
+          "name": "RTC_IRQn",
+          "num": 46,
+          "enable": false,
+          "priority": 0,
+          "callback": "RTC_IRQHandler"
+        },
+        {
+          "name": "RTC_Seconds_IRQn",
+          "num": 47,
+          "enable": false,
+          "priority": 0,
+          "callback": "RTC_Seconds_IRQHandler"
+        },
+        {
+          "name": "pTMR0_Ch0_IRQn",
+          "num": 48,
+          "enable": false,
+          "priority": 0,
+          "callback": "pTMR0_Ch0_IRQHandler"
+        },
+        {
+          "name": "pTMR0_Ch1_IRQn",
+          "num": 49,
+          "enable": false,
+          "priority": 0,
+          "callback": "pTMR0_Ch1_IRQHandler"
+        },
+        {
+          "name": "pTMR0_Ch2_IRQn",
+          "num": 50,
+          "enable": false,
+          "priority": 0,
+          "callback": "pTMR0_Ch2_IRQHandler"
+        },
+        {
+          "name": "pTMR0_Ch3_IRQn",
+          "num": 51,
+          "enable": false,
+          "priority": 0,
+          "callback": "pTMR0_Ch3_IRQHandler"
+        },
+        {
+          "name": "PTU0_IRQn",
+          "num": 52,
+          "enable": false,
+          "priority": 0,
+          "callback": "PTU0_IRQHandler"
+        },
+        {
+          "name": "Reserved15_IRQn",
+          "num": 53,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved15_IRQHandler"
+        },
+        {
+          "name": "Reserved16_IRQn",
+          "num": 54,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved16_IRQHandler"
+        },
+        {
+          "name": "Reserved17_IRQn",
+          "num": 55,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved17_IRQHandler"
+        },
+        {
+          "name": "Reserved18_IRQn",
+          "num": 56,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved18_IRQHandler"
+        },
+        {
+          "name": "SCU_IRQn",
+          "num": 57,
+          "enable": false,
+          "priority": 0,
+          "callback": "SCU_IRQHandler"
+        },
+        {
+          "name": "lpTMR0_IRQn",
+          "num": 58,
+          "enable": false,
+          "priority": 0,
+          "callback": "lpTMR0_IRQHandler"
+        },
+        {
+          "name": "GPIOA_IRQn",
+          "num": 59,
+          "enable": false,
+          "priority": 0,
+          "callback": "GPIOA_IRQHandler"
+        },
+        {
+          "name": "GPIOB_IRQn",
+          "num": 60,
+          "enable": false,
+          "priority": 0,
+          "callback": "GPIOB_IRQHandler"
+        },
+        {
+          "name": "GPIOC_IRQn",
+          "num": 61,
+          "enable": false,
+          "priority": 0,
+          "callback": "GPIOC_IRQHandler"
+        },
+        {
+          "name": "GPIOD_IRQn",
+          "num": 62,
+          "enable": false,
+          "priority": 0,
+          "callback": "GPIOD_IRQHandler"
+        },
+        {
+          "name": "GPIOE_IRQn",
+          "num": 63,
+          "enable": false,
+          "priority": 0,
+          "callback": "GPIOE_IRQHandler"
+        },
+        {
+          "name": "Reserved19_IRQn",
+          "num": 64,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved19_IRQHandler"
+        },
+        {
+          "name": "Reserved20_IRQn",
+          "num": 65,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved20_IRQHandler"
+        },
+        {
+          "name": "Reserved21_IRQn",
+          "num": 66,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved21_IRQHandler"
+        },
+        {
+          "name": "Reserved22_IRQn",
+          "num": 67,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved22_IRQHandler"
+        },
+        {
+          "name": "Reserved23_IRQn",
+          "num": 68,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved23_IRQHandler"
+        },
+        {
+          "name": "Reserved24_IRQn",
+          "num": 69,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved24_IRQHandler"
+        },
+        {
+          "name": "Reserved25_IRQn",
+          "num": 70,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved25_IRQHandler"
+        },
+        {
+          "name": "Reserved26_IRQn",
+          "num": 71,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved26_IRQHandler"
+        },
+        {
+          "name": "Reserved27_IRQn",
+          "num": 72,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved27_IRQHandler"
+        },
+        {
+          "name": "Reserved28_IRQn",
+          "num": 73,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved28_IRQHandler"
+        },
+        {
+          "name": "Reserved29_IRQn",
+          "num": 74,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved29_IRQHandler"
+        },
+        {
+          "name": "Reserved30_IRQn",
+          "num": 75,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved30_IRQHandler"
+        },
+        {
+          "name": "Reserved31_IRQn",
+          "num": 76,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved31_IRQHandler"
+        },
+        {
+          "name": "Reserved32_IRQn",
+          "num": 77,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved32_IRQHandler"
+        },
+        {
+          "name": "CAN0_ORed_IRQn",
+          "num": 78,
+          "enable": false,
+          "priority": 0,
+          "callback": "CAN0_ORed_IRQHandler"
+        },
+        {
+          "name": "CAN0_Error_IRQn",
+          "num": 79,
+          "enable": false,
+          "priority": 0,
+          "callback": "CAN0_Error_IRQHandler"
+        },
+        {
+          "name": "CAN0_Wake_Up_IRQn",
+          "num": 80,
+          "enable": false,
+          "priority": 0,
+          "callback": "CAN0_Wake_Up_IRQHandler"
+        },
+        {
+          "name": "CAN0_ORed_0_15_MB_IRQn",
+          "num": 81,
+          "enable": false,
+          "priority": 0,
+          "callback": "CAN0_ORed_0_15_MB_IRQHandler"
+        },
+        {
+          "name": "CAN0_ORed_16_31_MB_IRQn",
+          "num": 82,
+          "enable": false,
+          "priority": 0,
+          "callback": "CAN0_ORed_16_31_MB_IRQHandler"
+        },
+        {
+          "name": "CAN0_ORed_32_47_MB_IRQn",
+          "num": 83,
+          "enable": false,
+          "priority": 0,
+          "callback": "CAN0_ORed_32_47_MB_IRQHandler"
+        },
+        {
+          "name": "CAN0_ORed_48_63_MB_IRQn",
+          "num": 84,
+          "enable": false,
+          "priority": 0,
+          "callback": "CAN0_ORed_48_63_MB_IRQHandler"
+        },
+        {
+          "name": "CAN1_ORed_IRQn",
+          "num": 85,
+          "enable": false,
+          "priority": 0,
+          "callback": "CAN1_ORed_IRQHandler"
+        },
+        {
+          "name": "CAN1_Error_IRQn",
+          "num": 86,
+          "enable": false,
+          "priority": 0,
+          "callback": "CAN1_Error_IRQHandler"
+        },
+        {
+          "name": "CAN1_Wake_Up_IRQn",
+          "num": 87,
+          "enable": false,
+          "priority": 0,
+          "callback": "CAN1_Wake_Up_IRQHandler"
+        },
+        {
+          "name": "CAN1_ORed_0_15_MB_IRQn",
+          "num": 88,
+          "enable": false,
+          "priority": 0,
+          "callback": "CAN1_ORed_0_15_MB_IRQHandler"
+        },
+        {
+          "name": "CAN1_ORed_16_31_MB_IRQn",
+          "num": 89,
+          "enable": false,
+          "priority": 0,
+          "callback": "CAN1_ORed_16_31_MB_IRQHandler"
+        },
+        {
+          "name": "Reserved33_IRQn",
+          "num": 90,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved33_IRQHandler"
+        },
+        {
+          "name": "Reserved34_IRQn",
+          "num": 91,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved34_IRQHandler"
+        },
+        {
+          "name": "CAN2_ORed_IRQn",
+          "num": 92,
+          "enable": false,
+          "priority": 0,
+          "callback": "CAN2_ORed_IRQHandler"
+        },
+        {
+          "name": "CAN2_Error_IRQn",
+          "num": 93,
+          "enable": false,
+          "priority": 0,
+          "callback": "CAN2_Error_IRQHandler"
+        },
+        {
+          "name": "CAN2_Wake_Up_IRQn",
+          "num": 94,
+          "enable": false,
+          "priority": 0,
+          "callback": "CAN2_Wake_Up_IRQHandler"
+        },
+        {
+          "name": "CAN2_ORed_0_15_MB_IRQn",
+          "num": 95,
+          "enable": false,
+          "priority": 0,
+          "callback": "CAN2_ORed_0_15_MB_IRQHandler"
+        },
+        {
+          "name": "CAN2_ORed_16_31_MB_IRQn",
+          "num": 96,
+          "enable": false,
+          "priority": 0,
+          "callback": "CAN2_ORed_16_31_MB_IRQHandler"
+        },
+        {
+          "name": "Reserved35_IRQn",
+          "num": 97,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved35_IRQHandler"
+        },
+        {
+          "name": "Reserved36_IRQn",
+          "num": 98,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved36_IRQHandler"
+        },
+        {
+          "name": "eTMR0_Ch0_Ch1_IRQn",
+          "num": 99,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR0_Ch0_Ch1_IRQHandler"
+        },
+        {
+          "name": "eTMR0_Ch2_Ch3_IRQn",
+          "num": 100,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR0_Ch2_Ch3_IRQHandler"
+        },
+        {
+          "name": "eTMR0_Ch4_Ch5_IRQn",
+          "num": 101,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR0_Ch4_Ch5_IRQHandler"
+        },
+        {
+          "name": "eTMR0_Ch6_Ch7_IRQn",
+          "num": 102,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR0_Ch6_Ch7_IRQHandler"
+        },
+        {
+          "name": "eTMR0_Fault_IRQn",
+          "num": 103,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR0_Fault_IRQHandler"
+        },
+        {
+          "name": "eTMR0_Ovf_IRQn",
+          "num": 104,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR0_Ovf_IRQHandler"
+        },
+        {
+          "name": "eTMR1_Ch0_Ch1_IRQn",
+          "num": 105,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR1_Ch0_Ch1_IRQHandler"
+        },
+        {
+          "name": "eTMR1_Ch2_Ch3_IRQn",
+          "num": 106,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR1_Ch2_Ch3_IRQHandler"
+        },
+        {
+          "name": "eTMR1_Ch4_Ch5_IRQn",
+          "num": 107,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR1_Ch4_Ch5_IRQHandler"
+        },
+        {
+          "name": "eTMR1_Ch6_Ch7_IRQn",
+          "num": 108,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR1_Ch6_Ch7_IRQHandler"
+        },
+        {
+          "name": "eTMR1_Fault_IRQn",
+          "num": 109,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR1_Fault_IRQHandler"
+        },
+        {
+          "name": "eTMR1_Ovf_IRQn",
+          "num": 110,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR1_Ovf_IRQHandler"
+        },
+        {
+          "name": "eTMR2_Ch0_Ch1_IRQn",
+          "num": 111,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR2_Ch0_Ch1_IRQHandler"
+        },
+        {
+          "name": "eTMR2_Ch2_Ch3_IRQn",
+          "num": 112,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR2_Ch2_Ch3_IRQHandler"
+        },
+        {
+          "name": "eTMR2_Ch4_Ch5_IRQn",
+          "num": 113,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR2_Ch4_Ch5_IRQHandler"
+        },
+        {
+          "name": "eTMR2_Ch6_Ch7_IRQn",
+          "num": 114,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR2_Ch6_Ch7_IRQHandler"
+        },
+        {
+          "name": "eTMR2_Fault_IRQn",
+          "num": 115,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR2_Fault_IRQHandler"
+        },
+        {
+          "name": "eTMR2_Ovf_IRQn",
+          "num": 116,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR2_Ovf_IRQHandler"
+        },
+        {
+          "name": "eTMR3_Ch0_Ch1_IRQn",
+          "num": 117,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR3_Ch0_Ch1_IRQHandler"
+        },
+        {
+          "name": "eTMR3_Ch2_Ch3_IRQn",
+          "num": 118,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR3_Ch2_Ch3_IRQHandler"
+        },
+        {
+          "name": "eTMR3_Ch4_Ch5_IRQn",
+          "num": 119,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR3_Ch4_Ch5_IRQHandler"
+        },
+        {
+          "name": "eTMR3_Ch6_Ch7_IRQn",
+          "num": 120,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR3_Ch6_Ch7_IRQHandler"
+        },
+        {
+          "name": "eTMR3_Fault_IRQn",
+          "num": 121,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR3_Fault_IRQHandler"
+        },
+        {
+          "name": "eTMR3_Ovf_IRQn",
+          "num": 122,
+          "enable": false,
+          "priority": 0,
+          "callback": "eTMR3_Ovf_IRQHandler"
+        },
+        {
+          "name": "Reserved37_IRQn",
+          "num": 123,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved37_IRQHandler"
+        },
+        {
+          "name": "Reserved38_IRQn",
+          "num": 124,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved38_IRQHandler"
+        },
+        {
+          "name": "Reserved39_IRQn",
+          "num": 125,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved39_IRQHandler"
+        },
+        {
+          "name": "Reserved40_IRQn",
+          "num": 126,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved40_IRQHandler"
+        },
+        {
+          "name": "Reserved41_IRQn",
+          "num": 127,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved41_IRQHandler"
+        },
+        {
+          "name": "Reserved42_IRQn",
+          "num": 128,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved42_IRQHandler"
+        },
+        {
+          "name": "Reserved43_IRQn",
+          "num": 129,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved43_IRQHandler"
+        },
+        {
+          "name": "Reserved44_IRQn",
+          "num": 130,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved44_IRQHandler"
+        },
+        {
+          "name": "Reserved45_IRQn",
+          "num": 131,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved45_IRQHandler"
+        },
+        {
+          "name": "Reserved46_IRQn",
+          "num": 132,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved46_IRQHandler"
+        },
+        {
+          "name": "Reserved47_IRQn",
+          "num": 133,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved47_IRQHandler"
+        },
+        {
+          "name": "Reserved48_IRQn",
+          "num": 134,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved48_IRQHandler"
+        },
+        {
+          "name": "Reserved49_IRQn",
+          "num": 135,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved49_IRQHandler"
+        },
+        {
+          "name": "Reserved50_IRQn",
+          "num": 136,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved50_IRQHandler"
+        },
+        {
+          "name": "Reserved51_IRQn",
+          "num": 137,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved51_IRQHandler"
+        },
+        {
+          "name": "Reserved52_IRQn",
+          "num": 138,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved52_IRQHandler"
+        },
+        {
+          "name": "Reserved53_IRQn",
+          "num": 139,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved53_IRQHandler"
+        },
+        {
+          "name": "Reserved54_IRQn",
+          "num": 140,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved54_IRQHandler"
+        },
+        {
+          "name": "Reserved55_IRQn",
+          "num": 141,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved55_IRQHandler"
+        },
+        {
+          "name": "Reserved56_IRQn",
+          "num": 142,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved56_IRQHandler"
+        },
+        {
+          "name": "Reserved57_IRQn",
+          "num": 143,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved57_IRQHandler"
+        },
+        {
+          "name": "Reserved58_IRQn",
+          "num": 144,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved58_IRQHandler"
+        },
+        {
+          "name": "Reserved59_IRQn",
+          "num": 145,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved59_IRQHandler"
+        },
+        {
+          "name": "Reserved60_IRQn",
+          "num": 146,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved60_IRQHandler"
+        },
+        {
+          "name": "Reserved61_IRQn",
+          "num": 147,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved61_IRQHandler"
+        },
+        {
+          "name": "Reserved62_IRQn",
+          "num": 148,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved62_IRQHandler"
+        },
+        {
+          "name": "Reserved63_IRQn",
+          "num": 149,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved63_IRQHandler"
+        },
+        {
+          "name": "Reserved64_IRQn",
+          "num": 150,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved64_IRQHandler"
+        },
+        {
+          "name": "Reserved65_IRQn",
+          "num": 151,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved65_IRQHandler"
+        },
+        {
+          "name": "Reserved66_IRQn",
+          "num": 152,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved66_IRQHandler"
+        },
+        {
+          "name": "Reserved67_IRQn",
+          "num": 153,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved67_IRQHandler"
+        },
+        {
+          "name": "Reserved68_IRQn",
+          "num": 154,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved68_IRQHandler"
+        },
+        {
+          "name": "Reserved69_IRQn",
+          "num": 155,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved69_IRQHandler"
+        },
+        {
+          "name": "TRNG_IRQn",
+          "num": 156,
+          "enable": false,
+          "priority": 0,
+          "callback": "TRNG_IRQHandler"
+        },
+        {
+          "name": "HCU_IRQn",
+          "num": 157,
+          "enable": false,
+          "priority": 0,
+          "callback": "HCU_IRQHandler"
+        },
+        {
+          "name": "Reserved70_IRQn",
+          "num": 158,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved70_IRQHandler"
+        },
+        {
+          "name": "TMR0_Ch0_IRQn",
+          "num": 159,
+          "enable": false,
+          "priority": 0,
+          "callback": "TMR0_Ch0_IRQHandler"
+        },
+        {
+          "name": "TMR0_Ch1_IRQn",
+          "num": 160,
+          "enable": false,
+          "priority": 0,
+          "callback": "TMR0_Ch1_IRQHandler"
+        },
+        {
+          "name": "TMR0_Ch2_IRQn",
+          "num": 161,
+          "enable": false,
+          "priority": 0,
+          "callback": "TMR0_Ch2_IRQHandler"
+        },
+        {
+          "name": "TMR0_Ch3_IRQn",
+          "num": 162,
+          "enable": false,
+          "priority": 0,
+          "callback": "TMR0_Ch3_IRQHandler"
+        },
+        {
+          "name": "Reserved71_IRQn",
+          "num": 163,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved71_IRQHandler"
+        },
+        {
+          "name": "Reserved72_IRQn",
+          "num": 164,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved72_IRQHandler"
+        },
+        {
+          "name": "Reserved73_IRQn",
+          "num": 165,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved73_IRQHandler"
+        },
+        {
+          "name": "Reserved74_IRQn",
+          "num": 166,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved74_IRQHandler"
+        },
+        {
+          "name": "Reserved75_IRQn",
+          "num": 167,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved75_IRQHandler"
+        },
+        {
+          "name": "SPI3_IRQn",
+          "num": 168,
+          "enable": false,
+          "priority": 0,
+          "callback": "SPI3_IRQHandler"
+        },
+        {
+          "name": "Reserved76_IRQn",
+          "num": 169,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved76_IRQHandler"
+        },
+        {
+          "name": "Reserved77_IRQn",
+          "num": 170,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved77_IRQHandler"
+        },
+        {
+          "name": "Reserved78_IRQn",
+          "num": 171,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved78_IRQHandler"
+        },
+        {
+          "name": "Reserved79_IRQn",
+          "num": 172,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved79_IRQHandler"
+        },
+        {
+          "name": "Reserved80_IRQn",
+          "num": 173,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved80_IRQHandler"
+        },
+        {
+          "name": "Reserved81_IRQn",
+          "num": 174,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved81_IRQHandler"
+        },
+        {
+          "name": "Reserved82_IRQn",
+          "num": 175,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved82_IRQHandler"
+        },
+        {
+          "name": "Reserved83_IRQn",
+          "num": 176,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved83_IRQHandler"
+        },
+        {
+          "name": "Reserved84_IRQn",
+          "num": 177,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved84_IRQHandler"
+        },
+        {
+          "name": "Reserved85_IRQn",
+          "num": 178,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved85_IRQHandler"
+        },
+        {
+          "name": "Reserved86_IRQn",
+          "num": 179,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved86_IRQHandler"
+        },
+        {
+          "name": "SENT0_IRQn",
+          "num": 180,
+          "enable": false,
+          "priority": 0,
+          "callback": "SENT0_IRQHandler"
+        },
+        {
+          "name": "Reserved87_IRQn",
+          "num": 181,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved87_IRQHandler"
+        },
+        {
+          "name": "Reserved88_IRQn",
+          "num": 182,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved88_IRQHandler"
+        },
+        {
+          "name": "Reserved89_IRQn",
+          "num": 183,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved89_IRQHandler"
+        },
+        {
+          "name": "Reserved90_IRQn",
+          "num": 184,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved90_IRQHandler"
+        },
+        {
+          "name": "Reserved91_IRQn",
+          "num": 185,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved91_IRQHandler"
+        },
+        {
+          "name": "Reserved92_IRQn",
+          "num": 186,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved92_IRQHandler"
+        },
+        {
+          "name": "Reserved93_IRQn",
+          "num": 187,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved93_IRQHandler"
+        },
+        {
+          "name": "Reserved94_IRQn",
+          "num": 188,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved94_IRQHandler"
+        },
+        {
+          "name": "Reserved95_IRQn",
+          "num": 189,
+          "enable": false,
+          "priority": 0,
+          "callback": "Reserved95_IRQHandler"
+        },
+        {
+          "name": "WKU_IRQn",
+          "num": 190,
+          "enable": false,
+          "priority": 0,
+          "callback": "WKU_IRQHandler"
+        },
+        {
+          "name": "ALIGN_0_IRQn",
+          "num": 191,
+          "enable": false,
+          "priority": 0,
+          "callback": "ALIGN_0_IRQHandler"
+        }
+      ],
+      "updateTime": 1706147227267,
+      "lock": false
+    },
+    "linflexd_uart": {
+      "enable": {},
+      "data": [
+        {
+          "name": "linflexd_uart_config0",
+          "readonly": true,
+          "baudrate": 115200,
+          "parityCheck": false,
+          "parityType": "LINFlexD_UART_PARITY_EVEN",
+          "stopBitsCount": "LINFlexD_UART_ONE_STOP_BIT",
+          "wordLength": "LINFlexD_UART_8_BITS",
+          "txTransferType": "LINFlexD_UART_USING_INTERRUPTS",
+          "rxTransferType": "LINFlexD_UART_USING_INTERRUPTS",
+          "txDMAChannel": 0,
+          "rxDMAChannel": 0
+        }
+      ],
+      "updateTime": 1706164948488,
+      "lock": false
+    },
+    "pins": {
+      "enable": {},
+      "data": {
+        "ver": "1_3_3",
+        "desc": "multi pins cfg",
+        "cfgs": [
+          {
+            "name": "InitConfigArr0",
+            "pins": [
+              {
+                "base": "PCTRLE",
+                "gpioBase": "GPIOE",
+                "num": "19",
+                "label": "PTE_12",
+                "feature": "LINFlexD2_TX",
+                "alt": "PCTRL_MUX_ALT3",
+                "intCfg": "PCTRL_DMA_INT_DISABLED",
+                "direction": "",
+                "pullEnable": 0,
+                "pullSelect": "",
+                "filter": false,
+                "passiveFilter": false,
+                "strength": "PCTRL_LOW_DRIVE_STRENGTH",
+                "intFlag": false,
+                "init": 0,
+                "userLabel": "",
+                "rateSelect": "PCTRL_FAST_SLEW_RATE"
+              },
+              {
+                "base": "PCTRLA",
+                "gpioBase": "GPIOA",
+                "num": "73",
+                "label": "PTA_2",
+                "feature": "SENT_RX_IN1",
+                "alt": "PCTRL_MUX_ALT5",
+                "intCfg": "PCTRL_DMA_INT_DISABLED",
+                "direction": "",
+                "pullEnable": 0,
+                "pullSelect": "",
+                "filter": false,
+                "passiveFilter": false,
+                "strength": "PCTRL_LOW_DRIVE_STRENGTH",
+                "intFlag": false,
+                "init": 0,
+                "userLabel": "",
+                "rateSelect": "PCTRL_FAST_SLEW_RATE"
+              },
+              {
+                "base": "PCTRLA",
+                "gpioBase": "GPIOA",
+                "num": "72",
+                "label": "PTA_3",
+                "feature": "SENT_RX_IN0",
+                "alt": "PCTRL_MUX_ALT5",
+                "intCfg": "PCTRL_DMA_INT_DISABLED",
+                "direction": "",
+                "pullEnable": 0,
+                "pullSelect": "",
+                "filter": false,
+                "passiveFilter": false,
+                "strength": "PCTRL_LOW_DRIVE_STRENGTH",
+                "intFlag": false,
+                "init": 0,
+                "userLabel": "",
+                "rateSelect": "PCTRL_FAST_SLEW_RATE"
+              },
+              {
+                "base": "PCTRLD",
+                "gpioBase": "GPIOD",
+                "num": "20",
+                "label": "PTD_17",
+                "feature": "LINFlexD2_RX",
+                "alt": "PCTRL_MUX_ALT3",
+                "intCfg": "PCTRL_DMA_INT_DISABLED",
+                "direction": "",
+                "pullEnable": 0,
+                "pullSelect": "",
+                "filter": false,
+                "passiveFilter": false,
+                "strength": "PCTRL_LOW_DRIVE_STRENGTH",
+                "intFlag": false,
+                "init": 0,
+                "userLabel": "",
+                "rateSelect": "PCTRL_FAST_SLEW_RATE"
+              }
+            ]
+          }
+        ],
+        "curIdx": "0",
+        "updateTime": 1706164904509,
+        "lock": false
+      }
+    },
+    "sent": {
+      "enable": {},
+      "data": {
+        "readonly": true,
+        "fastMsgDmaPtr": "fastMessageBuffer",
+        "slowMsgDmaPtr": "slowMessageBuffer",
+        "callbackFunction": "sentNotification",
+        "callbackParam": "NULL",
+        "fastDmaChannel": 0,
+        "slowDmaChannel": "1",
+        "fastDmaFifoEnable": false,
+        "fastDmaFifoSize": "1",
+        "numOfConfigs": 2,
+        "channelConfig": [
+          {
+            "name": "sent_channel_config0",
+            "channelId": 0,
+            "tickDuration": "3",
+            "inputFilter": "SENT_INPUT_FILTER_4",
+            "fastMsgNibbles": 6,
+            "fastMsgDmaEnable": true,
+            "fastMsgCrcIncludeStatus": false,
+            "fastMsgCrcCheckDisable": false,
+            "fastMsgCrcType": "SENT_CRC_RECOMMENDED",
+            "slowMsgDmaEnable": true,
+            "slowMsgCrcType": "SENT_CRC_RECOMMENDED",
+            "idleCount": "SENT_BUS_IDLE_DISABLED",
+            "calibVar": "SENT_CALIB_VAR_20_PERCENT",
+            "diagPulse": "SENT_PULSE_CHECK_BOTH",
+            "pausePulse": "SENT_PAUSE_PULSE_ENABLED",
+            "successiveCal": "SENT_SUCC_CAL_CHK_LOW_LATENCY"
+          },
+          {
+            "name": "sent_channel_config1",
+            "channelId": "1",
+            "tickDuration": 3,
+            "inputFilter": "SENT_INPUT_FILTER_4",
+            "fastMsgNibbles": 6,
+            "fastMsgDmaEnable": true,
+            "fastMsgCrcIncludeStatus": false,
+            "fastMsgCrcCheckDisable": false,
+            "fastMsgCrcType": "SENT_CRC_RECOMMENDED",
+            "slowMsgDmaEnable": true,
+            "slowMsgCrcType": "SENT_CRC_RECOMMENDED",
+            "idleCount": "SENT_BUS_IDLE_DISABLED",
+            "calibVar": "SENT_CALIB_VAR_20_PERCENT",
+            "diagPulse": "SENT_PULSE_CHECK_BOTH",
+            "pausePulse": "SENT_PAUSE_PULSE_ENABLED",
+            "successiveCal": "SENT_SUCC_CAL_CHK_LOW_LATENCY"
+          }
+        ]
+      },
+      "updateTime": 1706169453169,
+      "lock": false
+    },
+    "utility_print": {
+      "enable": {},
+      "data": {
+        "mode": "full_printf",
+        "rtt": false,
+        "initUart": true,
+        "initUartInst": 2,
+        "initUartName": "linflexd_uart_config0"
+      },
+      "updateTime": 1706164955490,
+      "lock": false
+    },
+    "ytlink": {
+      "enable": {},
+      "data": [
+        {
+          "name": "P_FLASH",
+          "level": 0,
+          "isFlash": true,
+          "id": "9ffa6a74-339d-44c8-ae55-7afd70fcecd7",
+          "size": "0x80000",
+          "startAddress": 0,
+          "flags": "100.00%",
+          "children": [
+            {
+              "name": "IVT",
+              "level": 1,
+              "id": "2315c9ba-7031-4f64-a7ef-e6879fd98618",
+              "size": "1024",
+              "order": 0,
+              "startAddress": "0x0",
+              "isFlash": true,
+              "boundary": "UPPER",
+              "x": 200,
+              "y": -310,
+              "children": [
+                {
+                  "name": "IVT",
+                  "level": 2,
+                  "id": "6baab512-6f23-40fc-ace2-3895338576d4",
+                  "size": "",
+                  "order": 0,
+                  "startAddress": 0,
+                  "isFlash": true,
+                  "x": 500,
+                  "y": -270,
+                  "children": [
+                    {
+                      "name": "IVT",
+                      "level": 3,
+                      "id": "0627beab-7123-40c5-a18d-b9bcf8e1296d",
+                      "size": "1024",
+                      "order": 0,
+                      "startAddress": 0,
+                      "isFlash": true,
+                      "x": 790,
+                      "y": -270,
+                      "children": [
+                        {
+                          "name": "isr_vector",
+                          "level": 4,
+                          "id": "10a3d117-4a5c-428f-8462-c10daca96e93",
+                          "size": "",
+                          "order": 0,
+                          "startAddress": 0,
+                          "isFlash": true,
+                          "flags": "KEEP",
+                          "x": 1130,
+                          "y": -270
+                        }
+                      ],
+                      "align": 4,
+                      "groupSize": "1024"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "TEXT",
+              "level": 1,
+              "id": "5dacd8b2-a943-4507-a9df-17ddcbbd07d5",
+              "size": "0x7FC00",
+              "order": 2,
+              "startAddress": "0x400",
+              "isFlash": true,
+              "boundary": "UPPER",
+              "x": 200,
+              "y": -230,
+              "children": [
+                {
+                  "name": "COPY",
+                  "level": 2,
+                  "id": "a27335d8-5cf1-4761-8494-6dad793d4095",
+                  "size": "",
+                  "order": 2,
+                  "startAddress": 0,
+                  "isFlash": true,
+                  "x": 500,
+                  "y": 160,
+                  "children": [
+                    {
+                      "name": "CODE_FLASH",
+                      "level": 3,
+                      "id": "4c03ad2b-89c2-410f-a6d5-1ac63e348b28",
+                      "size": "",
+                      "order": 0,
+                      "startAddress": 0,
+                      "flags": "NULL",
+                      "isFlash": true,
+                      "x": 780,
+                      "y": 160,
+                      "align": 4,
+                      "endAlign": 4
+                    },
+                    {
+                      "name": "DATA_FLASH",
+                      "level": 3,
+                      "id": "0670194a-8864-4c69-bab9-c9abf3e2cdcb",
+                      "size": "",
+                      "order": 1,
+                      "startAddress": 0,
+                      "flags": "NULL",
+                      "isFlash": true,
+                      "x": 950,
+                      "y": 230,
+                      "endAlign": 4,
+                      "align": 4
+                    }
+                  ]
+                },
+                {
+                  "name": "TEXT",
+                  "level": 2,
+                  "id": "7b2b296e-e4ab-4ac2-a7c2-d4ef382a74a8",
+                  "size": "",
+                  "order": 0,
+                  "startAddress": 0,
+                  "isFlash": true,
+                  "x": 500,
+                  "y": -60,
+                  "children": [
+                    {
+                      "name": "TEXT",
+                      "level": 3,
+                      "id": "79ac2245-96a6-45c2-bcde-7c487fdad01c",
+                      "size": "",
+                      "order": 0,
+                      "startAddress": 0,
+                      "flags": "NULL",
+                      "isFlash": true,
+                      "x": 790,
+                      "y": -60,
+                      "children": [
+                        {
+                          "name": "text",
+                          "level": 4,
+                          "id": "732b76e1-9154-44bd-82dc-dfce0db96064",
+                          "size": "",
+                          "order": 0,
+                          "startAddress": 0,
+                          "flags": "NULL",
+                          "isFlash": true,
+                          "x": 1130,
+                          "y": -70,
+                          "wildcard": true
+                        },
+                        {
+                          "name": "rodata",
+                          "level": 4,
+                          "id": "aa3d2cd7-5f0e-46fa-9861-ee1ee470efa4",
+                          "size": "",
+                          "order": 0,
+                          "startAddress": 0,
+                          "flags": "NULL",
+                          "isFlash": true,
+                          "x": 1130,
+                          "y": -130,
+                          "binFile": "",
+                          "wildcard": true
+                        }
+                      ],
+                      "endAlign": 4
+                    }
+                  ]
+                },
+                {
+                  "name": "ARM",
+                  "level": 2,
+                  "id": "70d2211e-2e86-40d9-8441-f391dc248280",
+                  "size": "",
+                  "order": 1,
+                  "startAddress": "",
+                  "flags": "",
+                  "isFlash": true,
+                  "x": 500,
+                  "y": 40,
+                  "children": [
+                    {
+                      "name": "ARM",
+                      "level": 3,
+                      "id": "d3a2d077-bba9-4bdf-b6e2-735d90480621",
+                      "size": "",
+                      "order": 0,
+                      "startAddress": "",
+                      "flags": "",
+                      "isFlash": true,
+                      "x": 790,
+                      "y": 40,
+                      "children": [
+                        {
+                          "name": "ARM.exidx",
+                          "level": 4,
+                          "id": "71c48f4c-5d57-408d-98a8-acf8835d4f5c",
+                          "size": "",
+                          "order": 0,
+                          "startAddress": "",
+                          "flags": "NULL",
+                          "isFlash": true,
+                          "wildcard": true,
+                          "x": 1130,
+                          "y": 40
+                        }
+                      ],
+                      "endAlign": 4
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "x": -180,
+          "y": -260
+        },
+        {
+          "name": "RAM",
+          "level": 0,
+          "isFlash": false,
+          "id": "71eff99e-ec18-4495-b4d3-8748da44c927",
+          "size": "0x10000",
+          "startAddress": "0x1FFF8000",
+          "y": 530,
+          "flags": "100.00%",
+          "x": -180,
+          "children": [
+            {
+              "name": "RAM",
+              "level": 1,
+              "id": "041e1a12-a38d-474a-8611-3c5fe39ad680",
+              "size": "0xF800",
+              "order": 1,
+              "startAddress": "0x1fff8400",
+              "isFlash": false,
+              "boundary": "UPPER",
+              "x": 200,
+              "y": 520,
+              "children": [
+                {
+                  "name": "BSS",
+                  "level": 2,
+                  "id": "8512e2b3-ab47-456f-9c32-b532eb942f24",
+                  "size": "",
+                  "order": 1,
+                  "startAddress": 0,
+                  "isFlash": false,
+                  "clear": true,
+                  "x": 510,
+                  "y": 440,
+                  "children": [
+                    {
+                      "name": "BSS",
+                      "level": 3,
+                      "id": "c9976186-8bd7-4212-b091-574a82d6befd",
+                      "size": "",
+                      "order": 0,
+                      "startAddress": 0,
+                      "flags": "NOLOAD",
+                      "isFlash": false,
+                      "x": 780,
+                      "y": 440,
+                      "clear": true,
+                      "children": [
+                        {
+                          "name": "bss",
+                          "level": 4,
+                          "id": "6f24916e-dd23-4673-9c01-734802c0155a",
+                          "size": "",
+                          "order": 0,
+                          "startAddress": 0,
+                          "flags": "NULL",
+                          "isFlash": false,
+                          "x": 1110,
+                          "y": 440,
+                          "wildcard": true
+                        }
+                      ],
+                      "endAlign": 4
+                    }
+                  ]
+                },
+                {
+                  "name": "DATA",
+                  "level": 2,
+                  "id": "fb79c358-1b80-4539-9e23-8d08877dcdd0",
+                  "size": "",
+                  "order": 0,
+                  "startAddress": 0,
+                  "isFlash": false,
+                  "x": 510,
+                  "y": 550,
+                  "children": [
+                    {
+                      "name": "CODE_RAM",
+                      "level": 3,
+                      "id": "ecd50e6e-163f-4c04-a0fc-18a14c4c86f7",
+                      "size": "",
+                      "order": 0,
+                      "startAddress": 0,
+                      "flags": "NULL",
+                      "isFlash": false,
+                      "x": 780,
+                      "y": 540,
+                      "copyFrom": "4c03ad2b-89c2-410f-a6d5-1ac63e348b28",
+                      "children": [
+                        {
+                          "name": "code_ram",
+                          "level": 4,
+                          "id": "f767db5f-c8bb-4683-b572-e39617dccb6c",
+                          "size": "",
+                          "order": 0,
+                          "startAddress": 0,
+                          "flags": "NULL",
+                          "isFlash": false,
+                          "x": 1110,
+                          "y": 540
+                        }
+                      ],
+                      "align": 4,
+                      "endAlign": 4
+                    },
+                    {
+                      "name": "DATA_RAM",
+                      "level": 3,
+                      "id": "de9985d9-e89a-4e88-8da6-2c6128c635ec",
+                      "size": "",
+                      "order": 1,
+                      "startAddress": 0,
+                      "flags": "NULL",
+                      "isFlash": false,
+                      "x": 780,
+                      "y": 630,
+                      "copyFrom": "0670194a-8864-4c69-bab9-c9abf3e2cdcb",
+                      "children": [
+                        {
+                          "name": "data",
+                          "level": 4,
+                          "id": "c5361333-f443-40b9-8566-ac8d8ef209e2",
+                          "size": "",
+                          "order": 0,
+                          "startAddress": 0,
+                          "flags": "NULL",
+                          "isFlash": false,
+                          "x": 1110,
+                          "y": 630,
+                          "wildcard": true
+                        }
+                      ],
+                      "endAlign": 4,
+                      "align": 4
+                    }
+                  ]
+                }
+              ],
+              "init": "NORMAL"
+            },
+            {
+              "name": "STACK",
+              "level": 1,
+              "id": "1c0909ef-5ee3-4499-b278-40e777069370",
+              "size": "0x400",
+              "order": 0,
+              "startAddress": "0x20007c00",
+              "isFlash": false,
+              "boundary": "LOWER",
+              "x": 200,
+              "y": 700,
+              "children": [
+                {
+                  "name": "STACK",
+                  "level": 2,
+                  "id": "0d1dd0ef-0478-4096-880a-db88f3301f88",
+                  "size": "",
+                  "order": 0,
+                  "startAddress": 0,
+                  "isFlash": false,
+                  "x": 510,
+                  "y": 740,
+                  "children": [
+                    {
+                      "name": "STACK",
+                      "level": 3,
+                      "id": "08b94bc2-7906-47c6-b1f0-f9afcecff0f4",
+                      "size": "",
+                      "order": 0,
+                      "startAddress": 0,
+                      "flags": "NULL",
+                      "isFlash": false,
+                      "x": 780,
+                      "y": 740,
+                      "groupSize": "1024",
+                      "align": 8
+                    }
+                  ]
+                }
+              ],
+              "init": "NORMAL"
+            },
+            {
+              "name": "IVT_RAM",
+              "level": 1,
+              "id": "91022760-091d-4db2-9815-f7feb273710d",
+              "size": "0x400",
+              "order": 0,
+              "startAddress": "0x1fff8000",
+              "isFlash": false,
+              "init": "NORMAL",
+              "boundary": "UPPER",
+              "x": 200,
+              "y": 390,
+              "children": [
+                {
+                  "name": "IVT_RAM",
+                  "level": 2,
+                  "id": "9755c110-d819-47e1-a09d-abb77c1f76da",
+                  "size": "",
+                  "order": 0,
+                  "startAddress": 0,
+                  "isFlash": false,
+                  "x": 500,
+                  "y": 320,
+                  "children": [
+                    {
+                      "name": "IVT_RAM",
+                      "level": 3,
+                      "id": "8d153954-ea4e-4071-898e-2531bdfc2fa2",
+                      "size": "",
+                      "order": 0,
+                      "startAddress": 0,
+                      "flags": "NULL",
+                      "isFlash": false,
+                      "groupSize": "0X400",
+                      "align": 1024,
+                      "x": 780,
+                      "y": 320
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "updateTime": 1709799904750,
+      "lock": false
+    }
+  }
+}

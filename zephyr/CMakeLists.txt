@@ -2,13 +2,21 @@ zephyr_library()
 
 if(CONFIG_SOC_FAMILY_YTMICRO_YTM32)
 
-set(YTM32_SDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../ytm32b1m/YTM32B1MC0/YTM32Bx_SDK)
+if(CONFIG_SOC_YTM32B1MC0)
+  set(YTM32_CHIP YTM32B1MC0)
+elseif(CONFIG_SOC_YTM32B1MD1)
+  set(YTM32_CHIP YTM32B1MD1)
+else()
+  message(FATAL_ERROR "Unsupported YTM32B1M SoC")
+endif()
+
+set(YTM32_SDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../ytm32b1m/${YTM32_CHIP}/YTM32Bx_SDK)
 
 zephyr_include_directories(
   ${YTM32_SDK_DIR}/platform/devices
   ${YTM32_SDK_DIR}/platform/devices/common
-  ${YTM32_SDK_DIR}/platform/devices/YTM32B1MC0/include
-  ${YTM32_SDK_DIR}/platform/devices/YTM32B1MC0/startup
+  ${YTM32_SDK_DIR}/platform/devices/${YTM32_CHIP}/include
+  ${YTM32_SDK_DIR}/platform/devices/${YTM32_CHIP}/startup
   ${YTM32_SDK_DIR}/platform/drivers/inc
   ${YTM32_SDK_DIR}/rtos/osif
 )
@@ -30,7 +38,7 @@ endforeach()
 
 zephyr_library_sources(
   ${YTM32_SDK_DIR}/platform/devices/startup.c
-  ${YTM32_SDK_DIR}/platform/devices/YTM32B1MC0/startup/system_YTM32B1MC0.c
+  ${YTM32_SDK_DIR}/platform/devices/${YTM32_CHIP}/startup/system_${YTM32_CHIP}.c
 )
 
 # Glob all driver sources so they can be called by Zephyr drivers

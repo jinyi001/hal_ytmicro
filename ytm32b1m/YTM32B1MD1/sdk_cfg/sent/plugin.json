@@ -1,0 +1,33 @@
+{
+    "name": "sent",
+    "type": "driver",
+    "srcs": [
+        "App.vue"
+    ],
+    "mode": "raw",
+    "label": "SENT",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/sent_driver.h"
+    ],
+    "generate": [
+        "sent_config.c",
+        "sent_config.h"
+    ],
+    "args": [
+        "SENT_DRV_Init (0,&sentUserConfig,&sentState);"
+    ],
+    "depend": [
+        "dma"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/sent_driver.h",
+            "to": "platform/drivers/inc/sent_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/sent",
+            "to": "platform/drivers/src/sent"
+        }
+    ],
+    "sign": "6db730a13ee5f46e2e4ac06b644a6f84b3e4796b19c26456440f3d89ee2415e52ad4f19a8795816eb91f70c77e6e2950fc7999ee2d8e59e97119eb3494fc33c02a7553afd4c6d6d8b565e1074c20338dd21e34def1be47684193e4010dee8befaa1cf2e06b9e9b6e4af8d14f10d683a0bcd133ad78565ae73733b502c827bf5ee7b443d59ab02b6d26fc478ec8dac94144d921fc76c82ecdc45231f8a77269fb27533f2c97c155283d561524bebce2399d0dce7c3dad4c9305b12b1ee24da22f9e0c25a5c212ef835b88d02b47ff6a8e6a3e8bc9d2e88de96202483aa186fe10b81ca3b46dbe935a462809e5c6bf3e38a7d5ffd62357150bc24ded4b51677757"
+}

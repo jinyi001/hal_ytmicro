@@ -1,0 +1,31 @@
+{
+    "name": "tmr",
+    "type": "driver",
+    "srcs": [
+        "App.vue"
+    ],
+    "mode": "raw",
+    "label": "TMR",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/tmr_driver.h"
+    ],
+    "forceEnable": false,
+    "generate": [
+        "tmr_config.c",
+        "tmr_config.h"
+    ],
+    "args": [
+        "TMR_DRV_Init (0,&{{this.data.name}});"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/tmr_driver.h",
+            "to": "platform/drivers/inc/tmr_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/tmr",
+            "to": "platform/drivers/src/tmr"
+        }
+    ],
+    "sign": "8f2a858f8f9ff1b5cd534265f2a954d1a5ae9a33d0ff6e97b61e73ec8c8093d4b4c61ec19d364e8ccb5c9a21ec32e8bfed8aa96427ba239fa02f430abd2191513a9f80cc6eb1525568ac84c5ad1811edcf12f1e4630c8f67ff9e54915259ca36f985aecafc98ef30ff79488bbca883c40a4a1f7946a276eb269e0d86b3b383e9bb11e624d1afeffe01d702061209f3c3ebd7b445e4610ba9689fed3d2ef8f36c6d5a2781240f3b476953130d89467b7ed13d3017ad401d52caf6e5a73a2de4896ebf0ec1f9984ee240dedda59f11c566ceff331dff5feac76a51b899b63810bcf8ebbe8d5e49ba48a88a53b924ea6afc5e9564b2aea105b793b0b29af05c67aa"
+}

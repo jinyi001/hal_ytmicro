@@ -1,0 +1,14 @@
+/*!
+ @defgroup ewdg External Watchdog Monitor (EWDG)
+ @brief The YTMicro SDK provides the Peripheral Drivers for the External Watchdog Monitor (EWDG) module.
+
+ For safety, a redundant watchdog system, External Watchdog Monitor (EWDG), is
+ designed to monitor external circuits, as well as the MCU software flow. This provides a
+ back-up mechanism to the internal watchdog that resets the MCU's CPU and peripherals.
+
+ The EWDG differs from the internal watchdog in that it does not reset the MCU's CPU
+ and peripherals. The EWDG if allowed to time-out, provides an independent ``EWDG_out``
+ pin that when asserted resets or places an external circuit into a safe mode. The CPU
+ resets the EWDG counter that is logically ANDed with an external digital input pin. This
+ pin allows an external circuit to influence the reset_out signal.
+*/

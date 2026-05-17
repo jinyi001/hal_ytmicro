@@ -1,0 +1,34 @@
+{
+    "name": "hcu",
+    "type": "driver",
+    "srcs": [
+        "App.vue"
+    ],
+    "mode": "raw",
+    "label": "HCU",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/hcu_v1/hcu_driver.h"
+    ],
+    "depend": [
+        "dma"
+    ],
+    "forceEnable": false,
+    "generate": [
+        "hcu_config.c",
+        "hcu_config.h"
+    ],
+    "args": [
+        "HCU_DRV_Init {{#each this.data}}(&{{this.name}},&{{this.name}}_State);{{/each}}"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/hcu_v1/hcu_driver.h",
+            "to": "platform/drivers/inc/hcu_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/hcu_v1",
+            "to": "platform/drivers/src/hcu"
+        }
+    ],
+    "sign": "1d5f0d8512ca4412ac764b40d880e814113e534a149fcb9b4883a7ffe9118de9c59bad49e44eb3f8e8ef40363b193723947bb4fc5796cd61a77253d7a17fb61348c0045b251d4b7bb353e61b9130b0dda15c1a2bfbe1ca9de1247365f73b3b153f6a0ac1d7f3ac6a7e3a87752df55a0736624f9fc0b660e117b0e27390503e70e28c48f7b46313408f7318d25453f5dda0d9a7cafde52f425566c8cc2a70ee21edd17f7077cbdd65a74553ad292835ff78331918b71153ead5d502f4324bcf142690d1d1a02fddb6210506e91c7c204f724665027468d78f30bd9c136b555df3c8e1c9ea2fc6b8077255e39e27a9c1c8ad6985b8de458e4573d09520404c2e9d"
+}

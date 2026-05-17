@@ -1,0 +1,31 @@
+{
+    "name": "rtc",
+    "type": "driver",
+    "srcs": [
+        "App.vue"
+    ],
+    "mode": "raw",
+    "label": "RTC",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/rtc_driver.h"
+    ],
+    "generate": [
+        "rtc_config.c",
+        "rtc_config.h"
+    ],
+    "depend": [],
+    "args": [
+        "RTC_DRV_Init {{#each this.data}}(0,&{{this.name}});{{/each}}"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/rtc_driver.h",
+            "to": "platform/drivers/inc/rtc_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/rtc",
+            "to": "platform/drivers/src/rtc"
+        }
+    ],
+    "sign": "58212684c13161484d4277b548758c7e1bab62a1073edb2bd50100997fea4e2fb1636ce3eadff85a574a4d5fe535a76399056c053b86a1fbff49686d211f0b9b471bbf8b357d58a4c41b5f63ef015cb508a21bcd3379b0da624410d14a05355c2e31f80cb2399a91d64a93c4aa5d6d514f03f7f36010c8722fcc0fc33cf1c83754bbb266a6c54514176a8e4a4aa0d280f779b9e6d2b1a10ee2933ee1d94d2d86bcefdfe62d5545049b12d8ca9285cb39379363c39122feae2f8e544d4837200afcc75239d55f9620762515b4afb3f96fd55fc580854bbb313d2fb86b34b2786a15fec033a13bb6dee466368917f46600e05f1bbec7f30639726e5280e8c23bb4"
+}

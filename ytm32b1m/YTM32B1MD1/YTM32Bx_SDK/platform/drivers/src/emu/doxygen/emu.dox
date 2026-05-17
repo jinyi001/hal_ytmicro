@@ -1,0 +1,92 @@
+/*!
+@defgroup emu ECC Management Unit (EMU)
+@brief The YTMicro SDK provides error injection and error report Drivers for the ECC Management Unit module. @details The ECC Management Unit (EMU) supports single-bit inversion on read data when accessing SRAM,and reporting error information,and correcting the error bit.
+
+## The EMU supports features:
+
+- Only in supervisor mode.
+- Using only 32-bit (word) access.
+- Support two main functions: Error Injection and Error Report.
+- Support two channels:SRAM_L(channel 0) and SRAM_U(channel 1). The Support two channels have 32-bits read data and 7-bits ecc check-bit.
+
+## Integration guideline
+
+The following files need to be compiled in the project:
+
+```sh
+${SDK_PATH}\platform\drivers\src\emu\emu_driver.c
+${SDK_PATH}\platform\drivers\src\emu\emu_hw_driver.c
+```
+
+## Include path
+
+The following paths need to be added to the include path of the toolchain:
+
+```sh
+${SDK_PATH}\platform\drivers\inc\
+${SDK_PATH}\platform\drivers\src\emu\
+```
+
+## Preprocessor symbols
+
+No special symbols are required for this component
+
+## Dependencies
+
+- \ref clock_manager
+
+## EMU Driver Guide
+In order to be able to use the error injection in your application, the first thing to do is initializing EMU with user configuration input.
+
+## EMU Driver Operation
+
+### Error injection feature ###
+
+This is example code to configure the EMU driver:
+
+```c
+#define EMU_INSTANCE_ID    (0U)
+
+/* Configuration for error injection feature */
+emu_config_t EmuInitConfig0 = {
+    .channel = 0,
+    .injectErrAddr = 0x1FFF0000,
+    .injectErrSetInfo = 
+    {
+        .injectBitsType = EMU_INJECT_BITS_TYPE_DATA,
+        .dataBit = EMU_DATABIT_7,
+    },
+    .interruptEnable = false,
+};
+
+/* Main */
+int main(void)
+{
+    uint32_t reportErrAddr = 0;
+    uint32_t value = 0;
+
+    /* Initialize clocks*/
+
+    /*  */
+    *(volatile uint32_t *)(EmuInitConfig0.injectErrAddr) = 0xBEEF;
+
+    /* Initialize EMU module for channel0*/
+    EMU_DRV_Init(EMU_INSTANCE_ID,&EmuInitConfig0,1);
+    value = *(volatile uint32_t *)(EmuInitConfig0.injectErrAddr); //read memory
+
+    if(value == 0xBEEF)
+    {
+        /* Injection error has been corrected! */
+    }
+    else
+    {
+        /* Injection error has not been corrected! */
+    }
+
+    /* Get error report address. */
+    reportErrAddr = EMU_DRV_GetErrReportAddr(EMU_INSTANCE_ID,EmuInitConfig0.channel);
+
+    return 0;
+}
+```
+*/

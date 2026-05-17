@@ -1,0 +1,34 @@
+{
+    "name": "interrupt",
+    "type": "driver",
+    "srcs": [
+        "App.vue"
+    ],
+    "mode": "raw",
+    "label": "IntCtrl",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/interrupt_manager.h"
+    ],
+    "forceEnable": true,
+    "extApi": [
+        {
+            "funcName": "INT_SYS_ConfigInit",
+            "name": "void INT_SYS_ConfigInit(void);"
+        }
+    ],
+    "generate": [
+        "interrupt_config.c",
+        "interrupt_config.h"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/interrupt_manager.h",
+            "to": "platform/drivers/inc/interrupt_manager.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/interrupt",
+            "to": "platform/drivers/src/interrupt"
+        }
+    ],
+    "sign": "692503c2cc22913a5f645c38a0a7b88e9ffb1c3c184e794118b54798a3844f30ab77ac54c8c05b65acab38c670c69ab08e02012703fddb3ec32de67b483515592a6a11830c25346dce89eaa1e704ad7813c8eba080fca6bfec326c4183e6425f795f3a278ac96211eec7141cd94a3a12fa785b26b2fee8caa63de8655e84f1f6a5889d18931a54393f0ea67c5c2e6bf59c6a3c398778a14b3989cf88d92d9c97ab302428551b385c2a4786fb24966cddb76884de6e0578b276fdd3c22d0dbf4b21e9905c534f8b097425122a065c874affb699229afd820c67a94730ae13b11f3bb39a8352a07389d4c0ad002df029a58c3bf01ea98bc5edcda13becf8aab845"
+}

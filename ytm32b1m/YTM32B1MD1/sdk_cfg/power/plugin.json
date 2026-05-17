@@ -1,0 +1,81 @@
+{
+    "name": "power",
+    "type": "driver",
+    "srcs": [
+        "App.vue"
+    ],
+    "mode": "raw",
+    "label": "POWER",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/power_manager.h"
+    ],
+    "forceEnable": false,
+    "generate": [
+        "power_config.c",
+        "power_config.h"
+    ],
+    "args": [
+        "POWER_SYS_Init (&powerConfigsArr,POWER_MANAGER_CONFIG_CNT,&powerStaticCallbacksConfigsArr,POWER_MANAGER_CALLBACK_CNT);"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/power_manager.h",
+            "to": "platform/drivers/inc/power_manager.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/power/power_manager.c",
+            "to": "platform/drivers/src/power/power_manager.c"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/power/YTM32B1Lx/power_manager_YTM32B1Lx.c",
+            "to": "platform/drivers/src/power/YTM32B1Lx/power_manager_YTM32B1Lx.c",
+            "condition": "{{eq (truncate (getProjectInfo 'partNumber') 9) 'YTM32Z1LS'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/power/YTM32B1Lx/power_manager_YTM32B1Lx.h",
+            "to": "platform/drivers/src/power/YTM32B1Lx/power_manager_YTM32B1Lx.h",
+            "condition": "{{eq (truncate (getProjectInfo 'partNumber') 9) 'YTM32Z1LS'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/power/YTM32B1Lx/power_manager_YTM32B1Lx.c",
+            "to": "platform/drivers/src/power/YTM32B1Lx/power_manager_YTM32B1Lx.c",
+            "condition": "{{eq (truncate (getProjectInfo 'partNumber') 8) 'YTM32B1L'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/power/YTM32B1Lx/power_manager_YTM32B1Lx.h",
+            "to": "platform/drivers/src/power/YTM32B1Lx/power_manager_YTM32B1Lx.h",
+            "condition": "{{eq (truncate (getProjectInfo 'partNumber') 8) 'YTM32B1L'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/power/YTM32B1Mx/power_manager_YTM32B1Mx.c",
+            "to": "platform/drivers/src/power/YTM32B1Mx/power_manager_YTM32B1Mx.c",
+            "condition": "{{eq (truncate (getProjectInfo 'partNumber') 8) 'YTM32B1M'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/power/YTM32B1Mx/power_manager_YTM32B1Mx.h",
+            "to": "platform/drivers/src/power/YTM32B1Mx/power_manager_YTM32B1Mx.h",
+            "condition": "{{eq (truncate (getProjectInfo 'partNumber') 8) 'YTM32B1M'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/power/YTM32B1Hx/power_manager_YTM32B1Hx.c",
+            "to": "platform/drivers/src/power/YTM32B1Hx/power_manager_YTM32B1Hx.c",
+            "condition": "{{eq (truncate (getProjectInfo 'partNumber') 8) 'YTM32B1H'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/power/YTM32B1Hx/power_manager_YTM32B1Hx.h",
+            "to": "platform/drivers/src/power/YTM32B1Hx/power_manager_YTM32B1Hx.h",
+            "condition": "{{eq (truncate (getProjectInfo 'partNumber') 8) 'YTM32B1H'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/power/YTM32Z1x/power_manager_YTM32Z1x.c",
+            "to": "platform/drivers/src/power/YTM32Z1x/power_manager_YTM32Z1x.c",
+            "condition": "{{eq (truncate (getProjectInfo 'partNumber') 8) 'YTM32Z1M'}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/power/YTM32Z1x/power_manager_YTM32Z1x.h",
+            "to": "platform/drivers/src/power/YTM32Z1x/power_manager_YTM32Z1x.h",
+            "condition": "{{eq (truncate (getProjectInfo 'partNumber') 8) 'YTM32Z1M'}}"
+        }
+    ],
+    "sign": "396e340374602350d74c04b47d0be138292e61c856d4b079b4eb08df0378846f30208999c9650c8f1153e96d9cc21b3e556e1decbf5a50b14db4654b84c3b13d0a40082560d6260a43034005091e2639a661c90114ec1f05a7612f42f0a170f34b09be89cabc2e7d8ec4ea02f0bfe260ebfc1b4ee4927ff9aaf9ae521b3cb2ca14f102fe24b996140f106c5e94233e2d114baa7b92e28f0fd3607da1e1160a5ca9f3effe7fa090f53c02c9915dc25b4d32732366d6f05b2893c34578c5066bff4ce37e1edcb1b9a8955a7edbe4fde0cfb70a60436c2cdfa8330b3426b71e04806e2a4bd7f421c565c5437a14479c7a5cc14ca520aa03a92591322adce99afb95"
+}

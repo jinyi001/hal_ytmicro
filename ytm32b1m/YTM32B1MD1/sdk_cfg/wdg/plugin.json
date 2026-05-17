@@ -1,0 +1,30 @@
+{
+    "name": "wdg",
+    "type": "driver",
+    "mode": "raw",
+    "srcs": [
+        "App.vue"
+    ],
+    "label": "WDG",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/wdg_driver.h"
+    ],
+    "generate": [
+        "wdg_config.c",
+        "wdg_config.h"
+    ],
+    "args": [
+        "WDG_DRV_Init {{#each this.data}}(0,&{{this.name}});{{/each}}"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/wdg",
+            "to": "platform/drivers/src/wdg"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/wdg_driver.h",
+            "to": "platform/drivers/inc/wdg_driver.h"
+        }
+    ],
+    "sign": "5da9be137db5bdf08b62d1165c9e8b8240d26521533357ae442947c8c34388de53b0f3edd7e0de6d406f124fd9ad7d1b1e0de8295e18e01af6eec43723f0165657f763dbaf950cf366667ebb021d820733e9d56be20d739eb668fa2327a1ea4d673474059a131ec65166c2174552d3f857c19933c995680f6d24bcf92baad8bdaa811710f0400495aee203eaf0243361067204fcbbc95c87653eece1358534a95cbae634865cda3d550870d696ab6116ec7cbcbca137afaccf32134afc9b244c6ad1b52634a779287eddd842a5b3bd2ef094d21acd889238ccc37f251a525091251f9db5a84f06a0c94661713a9c4afa55c6ee0955875ca9aa99278445491aa4"
+}

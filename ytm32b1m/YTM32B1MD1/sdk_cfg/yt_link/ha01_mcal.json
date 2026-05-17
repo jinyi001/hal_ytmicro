@@ -1,0 +1,968 @@
+[
+  {
+    "name": "ITCM",
+    "level": 0,
+    "isFlash": false,
+    "id": "e8be57ed-cb5d-473e-b380-947fb7357afd",
+    "size": "0x8000",
+    "startAddress": 0,
+    "y": -540,
+    "flags": "100.00%",
+    "x": -180,
+    "children": [
+      {
+        "name": "IVT_RAM",
+        "level": 1,
+        "id": "7ef0f83a-2cd5-492f-86d4-f570c6af2743",
+        "size": "0x400",
+        "order": 0,
+        "startAddress": "0x0",
+        "flags": "",
+        "isFlash": false,
+        "boundary": "UPPER",
+        "x": 200,
+        "y": -540,
+        "children": [
+          {
+            "name": "IVT_RAM",
+            "level": 2,
+            "id": "1cb9aad3-9620-471d-ae07-5fe95ba35623",
+            "size": "",
+            "order": 0,
+            "startAddress": "",
+            "flags": "",
+            "isFlash": false,
+            "x": 490,
+            "y": -540,
+            "children": [
+              {
+                "name": "IVT_RAM",
+                "level": 3,
+                "id": "c8898fc8-c860-4906-a99e-031d7b95a077",
+                "size": "",
+                "order": 0,
+                "startAddress": "",
+                "flags": "NULL",
+                "isFlash": false,
+                "x": 780,
+                "y": -540,
+                "align": 1024,
+                "groupSize": "0x400"
+              }
+            ]
+          }
+        ],
+        "init": "NORMAL"
+      },
+      {
+        "name": "CODE_RAM",
+        "level": 1,
+        "id": "06c346f4-71ee-49ed-b997-a61d597d2401",
+        "size": "0x7C00",
+        "order": 1,
+        "startAddress": "0x400",
+        "flags": "",
+        "align": 4,
+        "isFlash": false,
+        "boundary": "LOWER",
+        "x": 200,
+        "y": -470,
+        "children": [
+          {
+            "name": "CODE_RAM",
+            "level": 2,
+            "id": "fbfec7af-5603-427d-b584-ffe1d83004a8",
+            "size": "",
+            "order": 0,
+            "startAddress": "",
+            "flags": "",
+            "isFlash": false,
+            "x": 490,
+            "y": -470,
+            "children": [
+              {
+                "name": "CODE_RAM",
+                "level": 3,
+                "id": "48389d80-06d4-48bd-a6d2-8bbad89c4921",
+                "size": "",
+                "order": 0,
+                "startAddress": "",
+                "flags": "NULL",
+                "isFlash": false,
+                "x": 780,
+                "y": -470,
+                "copyFrom": "4c03ad2b-89c2-410f-a6d5-1ac63e348b28",
+                "children": [
+                  {
+                    "name": "ramcode",
+                    "align": 4,
+                    "level": 4,
+                    "id": "1efbda90-274d-4114-939f-0229c8c1f7f0",
+                    "size": "",
+                    "order": 0,
+                    "startAddress": "",
+                    "flags": "NULL",
+                    "isFlash": false,
+                    "x": 1070,
+                    "y": -470
+                  }
+                ],
+                "align": 4,
+                "endAlign": 4
+              }
+            ]
+          }
+        ],
+        "init": "NORMAL"
+      }
+    ]
+  },
+  {
+    "name": "P_FLASH",
+    "level": 0,
+    "isFlash": true,
+    "id": "9ffa6a74-339d-44c8-ae55-7afd70fcecd7",
+    "size": "0x200000",
+    "startAddress": "0x02000000",
+    "flags": "100.00%",
+    "children": [
+      {
+        "name": "IVT",
+        "level": 1,
+        "id": "2315c9ba-7031-4f64-a7ef-e6879fd98618",
+        "size": "1024",
+        "order": 1,
+        "startAddress": "0x2000800",
+        "isFlash": true,
+        "boundary": "UPPER",
+        "x": 200,
+        "y": -310,
+        "children": [
+          {
+            "name": "IVT",
+            "level": 2,
+            "id": "6baab512-6f23-40fc-ace2-3895338576d4",
+            "size": "",
+            "order": 0,
+            "startAddress": 0,
+            "isFlash": true,
+            "x": 490,
+            "y": -310,
+            "children": [
+              {
+                "name": "IVT",
+                "level": 3,
+                "id": "0627beab-7123-40c5-a18d-b9bcf8e1296d",
+                "size": "",
+                "order": 0,
+                "startAddress": 0,
+                "isFlash": true,
+                "x": 780,
+                "y": -310,
+                "children": [
+                  {
+                    "name": "isr_vector",
+                    "level": 4,
+                    "id": "10a3d117-4a5c-428f-8462-c10daca96e93",
+                    "size": "",
+                    "order": 0,
+                    "startAddress": 0,
+                    "isFlash": true,
+                    "flags": "KEEP",
+                    "x": 1070,
+                    "y": -310
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "TEXT",
+        "level": 1,
+        "id": "5dacd8b2-a943-4507-a9df-17ddcbbd07d5",
+        "size": "0x1F4000",
+        "order": 3,
+        "startAddress": "0x200c000",
+        "isFlash": true,
+        "boundary": "LOWER",
+        "x": 200,
+        "y": -170,
+        "children": [
+          {
+            "name": "COPY",
+            "level": 2,
+            "id": "a27335d8-5cf1-4761-8494-6dad793d4095",
+            "size": "",
+            "order": 2,
+            "startAddress": 0,
+            "isFlash": true,
+            "x": 490,
+            "y": -30,
+            "children": [
+              {
+                "name": "CODE_FLASH",
+                "level": 3,
+                "id": "4c03ad2b-89c2-410f-a6d5-1ac63e348b28",
+                "size": "",
+                "order": 0,
+                "align": 4,
+                "startAddress": 0,
+                "flags": "NULL",
+                "isFlash": true,
+                "x": 780,
+                "y": -30,
+                "endAlign": null
+              },
+              {
+                "name": "DATA_FLASH",
+                "level": 3,
+                "id": "0670194a-8864-4c69-bab9-c9abf3e2cdcb",
+                "size": "",
+                "order": 3,
+                "align": 4,
+                "startAddress": 0,
+                "flags": "NULL",
+                "isFlash": true,
+                "x": 790,
+                "y": 150,
+                "endAlign": null
+              },
+              {
+                "name": "NC_DATA_FLASH",
+                "level": 3,
+                "id": "8581f097-7147-4c1f-b3f7-43f33b407c24",
+                "size": "",
+                "order": 2,
+                "startAddress": "",
+                "flags": "NULL",
+                "isFlash": true,
+                "x": 780,
+                "y": 90,
+                "align": 4,
+                "endAlign": null
+              },
+              {
+                "name": "D_DATA_FLASH",
+                "level": 3,
+                "id": "c3cf8658-dd8f-41a4-a370-d093d34209ae",
+                "size": "",
+                "order": 1,
+                "startAddress": "",
+                "flags": "NULL",
+                "isFlash": true,
+                "x": 770,
+                "y": 30,
+                "align": 4,
+                "endAlign": null
+              }
+            ]
+          },
+          {
+            "name": "TEXT",
+            "level": 2,
+            "id": "7b2b296e-e4ab-4ac2-a7c2-d4ef382a74a8",
+            "size": "",
+            "order": 0,
+            "startAddress": 0,
+            "isFlash": true,
+            "x": 490,
+            "y": -170,
+            "children": [
+              {
+                "name": "TEXT",
+                "level": 3,
+                "id": "79ac2245-96a6-45c2-bcde-7c487fdad01c",
+                "size": "",
+                "order": 0,
+                "startAddress": 0,
+                "flags": "NULL",
+                "isFlash": true,
+                "x": 780,
+                "y": -170,
+                "children": [
+                  {
+                    "name": "text",
+                    "level": 4,
+                    "id": "732b76e1-9154-44bd-82dc-dfce0db96064",
+                    "size": "",
+                    "order": 1,
+                    "startAddress": 0,
+                    "flags": "NULL",
+                    "isFlash": true,
+                    "x": 1340,
+                    "y": -110,
+                    "wildcard": true
+                  },
+                  {
+                    "name": "rodata",
+                    "level": 4,
+                    "id": "aa3d2cd7-5f0e-46fa-9861-ee1ee470efa4",
+                    "size": "",
+                    "order": 0,
+                    "startAddress": 0,
+                    "flags": "NULL",
+                    "isFlash": true,
+                    "x": 1340,
+                    "y": -170,
+                    "binFile": "",
+                    "wildcard": true
+                  },
+                  {
+                    "name": "mcal_text",
+                    "level": 4,
+                    "id": "e628d251-d911-4b36-8439-ef28e12bd7bc",
+                    "size": "",
+                    "order": 2,
+                    "startAddress": "",
+                    "flags": "NULL",
+                    "isFlash": true,
+                    "wildcard": false,
+                    "x": 1340,
+                    "y": -50
+                  },
+                  {
+                    "name": "mcal_const_cfg",
+                    "level": 4,
+                    "id": "f51dfcaf-62b2-4fcb-bf42-97c1e8e324a3",
+                    "size": "",
+                    "order": 4,
+                    "startAddress": "",
+                    "flags": "NULL",
+                    "isFlash": true,
+                    "x": 1340,
+                    "y": 70
+                  },
+                  {
+                    "name": "mcal_const",
+                    "level": 4,
+                    "id": "e0f49a04-6e76-44b8-b51b-37efa566a5c9",
+                    "size": "",
+                    "order": 3,
+                    "startAddress": "",
+                    "flags": "NULL",
+                    "isFlash": true,
+                    "x": 1340,
+                    "y": 10
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "ARM",
+            "level": 2,
+            "id": "86a89229-afd7-4111-83c4-c1ca8130af22",
+            "size": "",
+            "order": 1,
+            "startAddress": "",
+            "flags": "",
+            "isFlash": true,
+            "x": 490,
+            "y": -100,
+            "children": [
+              {
+                "name": "ARM",
+                "level": 3,
+                "id": "eca24c14-8b3c-4ec4-9cc0-4e23e88f19b3",
+                "size": "",
+                "order": 0,
+                "startAddress": "",
+                "flags": "",
+                "isFlash": true,
+                "x": 780,
+                "y": -100,
+                "children": [
+                  {
+                    "name": "ARM",
+                    "level": 4,
+                    "id": "7da8c03f-0543-439f-aa41-2596b519ada2",
+                    "size": "",
+                    "order": 0,
+                    "startAddress": "",
+                    "flags": "NULL",
+                    "isFlash": true,
+                    "wildcard": true,
+                    "x": 1070,
+                    "y": -100
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "BVT",
+        "level": 1,
+        "id": "39ace161-5b5e-4989-9950-a2feb018ea59",
+        "size": "0x800",
+        "order": 0,
+        "startAddress": "0x2000000",
+        "flags": "",
+        "isFlash": true,
+        "boundary": "UPPER",
+        "x": 200,
+        "y": -380,
+        "children": [
+          {
+            "name": "BVT",
+            "level": 2,
+            "id": "ab540a47-ab01-4e43-906a-e70c77daed7b",
+            "size": "",
+            "order": 0,
+            "startAddress": "",
+            "flags": "",
+            "isFlash": true,
+            "x": 490,
+            "y": -380,
+            "children": [
+              {
+                "name": "BVT",
+                "level": 3,
+                "id": "4eeab9a5-d2d6-4c2d-83ac-c65520cd3ab1",
+                "size": "",
+                "order": 0,
+                "startAddress": "",
+                "flags": "",
+                "isFlash": true,
+                "x": 780,
+                "y": -380,
+                "children": [
+                  {
+                    "name": "bvt_header",
+                    "level": 4,
+                    "id": "9ba66ae7-5b2d-4b81-b4c6-91e77f328b10",
+                    "size": "",
+                    "order": 0,
+                    "startAddress": "",
+                    "flags": "KEEP",
+                    "isFlash": true,
+                    "align": 4,
+                    "x": 1340,
+                    "y": -450
+                  },
+                  {
+                    "name": "sb_config_group",
+                    "level": 4,
+                    "id": "2887c4ad-2a0c-45c7-b684-75e059e565f7",
+                    "size": "",
+                    "order": 1,
+                    "startAddress": "",
+                    "flags": "KEEP",
+                    "isFlash": true,
+                    "align": 4,
+                    "x": 1340,
+                    "y": -390
+                  },
+                  {
+                    "name": "sb_config_section",
+                    "level": 4,
+                    "id": "ae317d9a-cb44-4e9d-aa17-7ef37cbfee4a",
+                    "size": "",
+                    "order": 2,
+                    "startAddress": "",
+                    "flags": "KEEP",
+                    "isFlash": true,
+                    "align": 16,
+                    "x": 1340,
+                    "y": -330
+                  },
+                  {
+                    "name": "sb_cmac",
+                    "level": 4,
+                    "id": "509774bf-df27-4442-8dc7-9f9e7f305211",
+                    "size": "",
+                    "order": 3,
+                    "startAddress": "",
+                    "flags": "KEEP",
+                    "isFlash": true,
+                    "align": 16,
+                    "x": 1340,
+                    "y": -270
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "NC_TEXT",
+        "level": 1,
+        "id": "060491a3-487e-4002-8c6f-4f1dc12544c5",
+        "size": "0xB400",
+        "order": 2,
+        "startAddress": "0x2000c00",
+        "flags": "",
+        "isFlash": true,
+        "boundary": "UPPER",
+        "x": 200,
+        "y": -240,
+        "children": [
+          {
+            "name": "NC_TEXT",
+            "level": 2,
+            "id": "36379be0-f2af-4bbf-a192-15a7aa572cd3",
+            "size": "",
+            "order": 0,
+            "startAddress": "",
+            "flags": "",
+            "isFlash": true,
+            "x": 490,
+            "y": -240,
+            "children": [
+              {
+                "name": "NC_TEXT",
+                "level": 3,
+                "id": "808dec02-b3e6-441c-97f2-84120264295d",
+                "size": "",
+                "order": 0,
+                "startAddress": "",
+                "flags": "NULL",
+                "isFlash": true,
+                "x": 780,
+                "y": -240,
+                "children": [
+                  {
+                    "name": "mcal_const_no_cacheable",
+                    "level": 4,
+                    "id": "a8fd1bc9-9362-4b9d-95db-885093689ace",
+                    "size": "",
+                    "order": 0,
+                    "startAddress": "",
+                    "flags": "NULL",
+                    "isFlash": true,
+                    "x": 1070,
+                    "y": -240
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "x": -180,
+    "y": -380
+  },
+  {
+    "name": "D-FLASH",
+    "level": 0,
+    "isFlash": true,
+    "id": "e8be57ed-cb5d-473e-b380-947fb73563c5",
+    "size": "0x40000",
+    "startAddress": "0x06000000",
+    "y": 270,
+    "flags": "100.00%",
+    "x": -180,
+    "children": [
+      {
+        "name": "FEE",
+        "level": 1,
+        "id": "773158a9-f67f-4e5b-a195-5fe0ba8320f6",
+        "size": "0x40000",
+        "order": 0,
+        "startAddress": "0x6000000",
+        "flags": "",
+        "isFlash": true,
+        "boundary": "UPPER",
+        "x": 200,
+        "y": 270
+      }
+    ]
+  },
+  {
+    "name": "DTCM",
+    "level": 0,
+    "isFlash": false,
+    "id": "e8be71ef-cb5d-473e-b380-947fb73563c5",
+    "size": "0x20000",
+    "startAddress": "0x20000000",
+    "y": 570,
+    "flags": "100.00%",
+    "x": -180,
+    "children": [
+      {
+        "name": "STACK",
+        "level": 1,
+        "id": "0f1ad9e9-2cae-4c9a-9a0c-7def08cbc76b",
+        "size": "4096",
+        "order": 1,
+        "startAddress": "0x2001f000",
+        "flags": "",
+        "isFlash": false,
+        "boundary": "LOWER",
+        "x": 200,
+        "y": 720,
+        "children": [
+          {
+            "name": "STACK",
+            "level": 2,
+            "id": "6e5a39a3-dfc4-4a39-a22a-b6fc844d90f4",
+            "size": "",
+            "order": 0,
+            "startAddress": "",
+            "flags": "",
+            "isFlash": false,
+            "x": 500,
+            "y": 720,
+            "children": [
+              {
+                "name": "STACK",
+                "level": 3,
+                "id": "beda27ba-ce39-4414-958e-29b1fb5b1d7a",
+                "size": "",
+                "order": 0,
+                "startAddress": "",
+                "flags": "NULL",
+                "isFlash": false,
+                "x": 780,
+                "y": 720,
+                "groupSize": "4096"
+              }
+            ]
+          }
+        ],
+        "init": "NORMAL"
+      },
+      {
+        "name": "D_RAM",
+        "level": 1,
+        "id": "8932bbaa-ab9d-42b0-86fa-dfa71fb9fc1c",
+        "size": "0x1F000",
+        "order": 0,
+        "startAddress": "0x20000000",
+        "flags": "",
+        "isFlash": false,
+        "boundary": "UPPER",
+        "init": "NORMAL",
+        "x": 200,
+        "y": 570,
+        "children": [
+          {
+            "name": "D_BSS",
+            "level": 2,
+            "id": "e2d65a82-2c1e-4ae6-9f27-7ce0ede6f1c5",
+            "size": "",
+            "order": 0,
+            "startAddress": "",
+            "flags": "",
+            "isFlash": false,
+            "x": 500,
+            "y": 570,
+            "children": [
+              {
+                "name": "D_BSS",
+                "level": 3,
+                "id": "27e88d81-91d5-40e1-871d-781806fe3e4b",
+                "size": "",
+                "order": 0,
+                "startAddress": "",
+                "flags": "NOLOAD",
+                "isFlash": false,
+                "x": 780,
+                "y": 570,
+                "children": [
+                  {
+                    "name": "dtcm_bss",
+                    "level": 4,
+                    "id": "b3718d3d-591b-4067-a458-d9c6bee0568f",
+                    "size": "",
+                    "order": 0,
+                    "startAddress": "",
+                    "flags": "NULL",
+                    "isFlash": false,
+                    "x": 1070,
+                    "y": 570
+                  }
+                ],
+                "clear": true
+              }
+            ]
+          },
+          {
+            "name": "D_DATA",
+            "level": 2,
+            "id": "e5695147-a91a-4388-9cf6-7d3c0d3aa06a",
+            "size": "",
+            "order": 0,
+            "startAddress": "",
+            "flags": "",
+            "isFlash": false,
+            "x": 500,
+            "y": 640,
+            "children": [
+              {
+                "name": "D_DATA",
+                "level": 3,
+                "id": "e203b618-b899-4905-9adb-4f36a36da6fd",
+                "size": "",
+                "order": 1,
+                "startAddress": "",
+                "flags": "NULL",
+                "isFlash": false,
+                "x": 770,
+                "y": 640,
+                "children": [
+                  {
+                    "name": "dtcm_data",
+                    "level": 4,
+                    "id": "add6b7a9-add2-4961-8d71-b51c7ad334b0",
+                    "size": "",
+                    "order": 0,
+                    "startAddress": "",
+                    "flags": "NULL",
+                    "isFlash": false,
+                    "x": 1070,
+                    "y": 640
+                  }
+                ],
+                "copyFrom": "c3cf8658-dd8f-41a4-a370-d093d34209ae",
+                "align": 4,
+                "endAlign": null
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "RAM",
+    "level": 0,
+    "isFlash": false,
+    "id": "71eff99e-ec18-4495-b4d3-8748da44c927",
+    "size": "0x40000",
+    "startAddress": "0x20020000",
+    "y": 820,
+    "flags": "100.00%",
+    "x": -180,
+    "children": [
+      {
+        "name": "RAM",
+        "level": 1,
+        "id": "041e1a12-a38d-474a-8611-3c5fe39ad680",
+        "size": "0x30000",
+        "order": 1,
+        "startAddress": "0x20030000",
+        "isFlash": false,
+        "boundary": "LOWER",
+        "x": 200,
+        "y": 960,
+        "children": [
+          {
+            "name": "BSS",
+            "level": 2,
+            "id": "8512e2b3-ab47-456f-9c32-b532eb942f24",
+            "size": "",
+            "order": 0,
+            "startAddress": 0,
+            "isFlash": false,
+            "clear": true,
+            "x": 500,
+            "y": 960,
+            "children": [
+              {
+                "name": "BSS",
+                "level": 3,
+                "id": "c9976186-8bd7-4212-b091-574a82d6befd",
+                "size": "",
+                "order": 0,
+                "startAddress": 0,
+                "flags": "NOLOAD",
+                "isFlash": false,
+                "x": 780,
+                "y": 960,
+                "clear": true,
+                "children": [
+                  {
+                    "name": "bss",
+                    "level": 4,
+                    "id": "6f24916e-dd23-4673-9c01-734802c0155a",
+                    "size": "",
+                    "order": 0,
+                    "startAddress": 0,
+                    "flags": "NULL",
+                    "isFlash": false,
+                    "x": 1070,
+                    "y": 960,
+                    "wildcard": true
+                  },
+                  {
+                    "name": "mcal_bss",
+                    "level": 4,
+                    "id": "daf971de-3b02-49b2-8741-aa4f9eae912e",
+                    "size": "",
+                    "order": 1,
+                    "startAddress": "",
+                    "flags": "NULL",
+                    "isFlash": false,
+                    "x": 1070,
+                    "y": 1020
+                  }
+                ],
+                "align": null
+              }
+            ]
+          },
+          {
+            "name": "DATA",
+            "level": 2,
+            "id": "fb79c358-1b80-4539-9e23-8d08877dcdd0",
+            "size": "",
+            "order": 1,
+            "startAddress": 0,
+            "isFlash": false,
+            "x": 500,
+            "y": 1090,
+            "children": [
+              {
+                "name": "DATA_RAM",
+                "level": 3,
+                "id": "de9985d9-e89a-4e88-8da6-2c6128c635ec",
+                "size": "",
+                "order": 0,
+                "align": 4,
+                "startAddress": 0,
+                "flags": "NULL",
+                "isFlash": false,
+                "x": 790,
+                "y": 1090,
+                "copyFrom": "0670194a-8864-4c69-bab9-c9abf3e2cdcb",
+                "children": [
+                  {
+                    "name": "data",
+                    "level": 4,
+                    "id": "c5361333-f443-40b9-8566-ac8d8ef209e2",
+                    "size": "",
+                    "order": 0,
+                    "startAddress": 0,
+                    "flags": "NULL",
+                    "isFlash": false,
+                    "x": 1070,
+                    "y": 1090,
+                    "wildcard": true
+                  },
+                  {
+                    "name": "mcal_data",
+                    "level": 4,
+                    "id": "24a5c055-5e35-48dd-9fb0-dcdb5a7fd8a5",
+                    "size": "",
+                    "order": 1,
+                    "startAddress": "",
+                    "flags": "NULL",
+                    "isFlash": false,
+                    "x": 1070,
+                    "y": 1150
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "init": "NORMAL"
+      },
+      {
+        "name": "NC_RAM",
+        "level": 1,
+        "id": "c2f4cef9-537f-4c74-9cfd-f5e33e45d810",
+        "size": "0x10000",
+        "order": 0,
+        "startAddress": "0x20020000",
+        "flags": "",
+        "isFlash": false,
+        "boundary": "UPPER",
+        "init": "NORMAL",
+        "x": 200,
+        "y": 820,
+        "children": [
+          {
+            "name": "NC_BSS",
+            "level": 2,
+            "id": "9007743d-d594-422e-9b53-d12ba79a9539",
+            "size": "",
+            "order": 0,
+            "startAddress": "",
+            "flags": "",
+            "isFlash": false,
+            "x": 500,
+            "y": 820,
+            "children": [
+              {
+                "name": "NC_BSS",
+                "level": 3,
+                "id": "3c3e2dc5-2d2d-4173-8a38-abace776c8c5",
+                "size": "",
+                "order": 0,
+                "startAddress": "",
+                "flags": "NOLOAD",
+                "isFlash": false,
+                "x": 780,
+                "y": 820,
+                "children": [
+                  {
+                    "name": "mcal_bss_no_cacheable",
+                    "level": 4,
+                    "id": "cb5b4025-c196-49e0-8909-0b754c319667",
+                    "size": "",
+                    "order": 0,
+                    "startAddress": "",
+                    "flags": "NULL",
+                    "isFlash": false,
+                    "x": 1070,
+                    "y": 820
+                  }
+                ],
+                "clear": true
+              }
+            ]
+          },
+          {
+            "name": "NC_DATA",
+            "level": 2,
+            "id": "8f58b6e6-144f-4f22-8115-9bb0e5a1e786",
+            "size": "",
+            "order": 1,
+            "startAddress": "",
+            "flags": "",
+            "isFlash": false,
+            "x": 500,
+            "y": 890,
+            "children": [
+              {
+                "name": "NC_DATA",
+                "level": 3,
+                "id": "da3f453f-0b11-459f-985c-3486f15a2feb",
+                "size": "",
+                "order": 1,
+                "startAddress": "",
+                "flags": "NULL",
+                "isFlash": false,
+                "x": 780,
+                "y": 890,
+                "children": [
+                  {
+                    "name": "mcal_data_no_cacheable",
+                    "level": 4,
+                    "id": "909a1e8b-8fa4-4232-b83c-378045dd9cd1",
+                    "size": "",
+                    "order": 0,
+                    "startAddress": "",
+                    "flags": "NULL",
+                    "isFlash": false,
+                    "x": 1070,
+                    "y": 890
+                  }
+                ],
+                "copyFrom": "8581f097-7147-4c1f-b3f7-43f33b407c24",
+                "align": 4
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

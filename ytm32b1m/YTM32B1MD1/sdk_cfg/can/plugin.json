@@ -1,0 +1,33 @@
+{
+    "name": "can",
+    "type": "driver",
+    "srcs": [
+        "App.vue"
+    ],
+    "mode": "raw",
+    "label": "CAN",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/flexcan_driver.h"
+    ],
+    "args": [
+        "FLEXCAN_DRV_Init {{#each this.data}}({{this.inst}},&{{this.name}}_State,&{{this.name}});{{/each}}"
+    ],
+    "generate": [
+        "can_config.c",
+        "can_config.h"
+    ],
+    "depend": [
+        "dma"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/flexcan_driver.h",
+            "to": "platform/drivers/inc/flexcan_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/flexcan",
+            "to": "platform/drivers/src/flexcan"
+        }
+    ],
+    "sign": "a96d6e4a29ed2c07c2948310359336000d73b04c7ea5225f39bec98831e6bae4386163915fd4841a977ba2108189162dfb0c852f87a8ff259f27a71760f5d02cf3fb03201cf68d684f9fab3e6196bb895fbd9125b6ac2f63998b528ecc1110c6151f0fbb3bd8b5285d2fc2b00e28f90d4ab56d50427f727c6150286e4f1b095e2be2275d47a114b794d34c4d7b5e79d5ddfd9f74bc5d73af6f3bb23e7e0f53bdb3edaa31b6491cfc3d6bf7b4ccf1a4bf528b5794618745b95a3021b3eeb16ff9fcf8428e98b8be922432cf2d683987507695c2548f0156b0ef8400faa64bd422b52e7e12405a6b9ccc98b93c630d923a7b02e0030dd44d38c66998ad917b54fc"
+}

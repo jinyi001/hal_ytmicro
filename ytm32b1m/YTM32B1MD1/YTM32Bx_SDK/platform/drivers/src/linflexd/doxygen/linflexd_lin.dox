@@ -1,0 +1,150 @@
+/*!
+@defgroup linflexd_lin LINFlexD LIN Driver （Linflexd_lin）
+@ingroup linflexd_driver
+@brief This section describes the programming interface of the Peripheral driver for LINFlexD in LIN mode.
+
+# LIN Driver Overview {#LINDRIVEROvw}
+
+The LIN (Local Interconnect Network) Driver is an use-case driven High Level Peripheral Driver. The driver provides
+users important key features. YUNTU provides LIN Stack as a middleware software package that is developed on LIN driver.
+Users also can create their own LIN applications and LIN stack that are compatible with LIN Specification.<br />
+
+# LIN Driver Device structures {#LINDRIVERDevS}
+
+The driver uses instantiations of the linflexd_state_t to maintain the current state of a particular LINFlexD Hardware instance
+module driver.<br />
+The user is required to provide memory for the driver state structures during the initialization. The driver itself
+does not statically allocate memory.
+
+# Integration guideline #
+
+## Compilation units ##
+
+The following files need to be compiled in the project:
+\verbatim
+${SDK_PATH}\platform\drivers\src\linflexd\linflexd_lin_driver.c
+${SDK_PATH}\platform\drivers\src\linflexd\linflexd_lin_irq.c
+\endverbatim
+
+## Include path ##
+
+The following paths need to be added to the include path of the toolchain:
+\verbatim
+${SDK_PATH}\platform\drivers\inc\
+\endverbatim
+
+## Compile symbols ##
+
+No special symbols are required for this component
+
+## Dependencies ##
+
+- \ref clock_manager @n
+- \ref interrupt_manager @n
+- \ref osif @n
+
+# LIN Driver Initialization {#LINDRIVERInit}
+
+1. To initialize the LIN driver, call the LINFlexD_DRV_Init() function and pass the instance number of the relevant LINFlexD
+hardware interface instance which is LINFlexD instance in this release.<br />
+For example: to use LINFlexD0 pass value 0 to the initialization function.
+2. Pass a user configuration structure #linflexd_user_config_t as shown here:
+~~~~~{.c}
+/* LINFlexD Driver configuration structure */
+typedef struct
+{
+    uint32_t baudRate;                              /*!< baudrate of LIN Hardware Interface to configure */
+    bool nodeFunction;                              /*!< Node function as Master or Slave */
+    linflexd_break_length_t breakLength;            /*!< Break length, only for master mode */
+    bool autobaudEnable;                            /*!< Enable Autobaud feature, only for slave mode */
+    bool timeoutEnable;                             /*!< Enable Timeout feature */
+    uint8_t responseTimeoutValue;                   /*!< Timeout value for response */
+    uint8_t headerTimeoutValue;                     /*!< Timeout value for header */
+    uint8_t filterCount;                             /*!< Actual filters used */
+    linflexd_id_filter_config_t *slaveFilterCfgPtr; /*!< Slave filter configurations, only for slave mode */
+} linflexd_user_config_t;
+~~~~~
+3. For LINFlexD, typically the user configures the #linflexd_user_config_t instantiation with a baudrate from 1000bps to 20000bps.<br />
+-E.g. 19200 bps linUserConfig.baudRate = 19200U.
+4. Node function can be MASTER or SLAVE.<br />
+-E.g. linUserConfig.nodeFunction = MASTER
+5. For LINFlexD only in master mode, typically the user configures the #linflexd_user_config_t instantiation with a breakLength from 10 bits to 50 bits.<br />
+-E.g. linUserConfig.breakLength = LINFlexD_BREAK_13_BIT
+6. If users do not want to use Autobaud feature, then just configure linUserConfig.autobaudEnable = FALSE.
+7. If users do not want to use timeout feature, then just configure linUserConfig.timeoutEnable = FALSE.
+8. If timeoutEnable is true, responseTimeoutValue which configures timeout value for response can take effect.
+9. If timeoutEnable is true, headerTimeoutValue which configures timeout value for header can take effect.
+10. For LINFlexD only in slave mode, typically the user configures the number of actual filters used.
+11. User can config several id filter which will be used in slave mode for LINFlexD. This is a code example to configure id filter:
+~~~~~{.c}
+    linflexd_id_filter_config_t idFilterConfig[1] = 
+        {
+            {
+                .filterEnable = true,
+                .maskEnable = false,
+                .dataFieldLength = 8,
+                .direction = LINFlexD_TX,
+                .checksumType = LIN_ENHANCED_CHECKSUM,
+                .id = 0x32,
+                .data = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+            }
+        }
+    linUserConfig.filterCount = 1;
+    linUserConfig.slaveFilterCfgPtr = idFilterConfig;
+~~~~~
+12. This is a code example to set up a user LINFlexD Driver configuration instantiation:
+~~~~~{.c}
+    /* Device instance number as UART instance*/
+    #define LI0 (0U)
+
+    linflexd_state_t linState;
+    linflexd_user_config_t linUserConfig;
+    /* Set baudrate 19200 bps */
+    linUserConfig.baudRate = 19200U;
+    /* Node is MASTER */
+    linUserConfig.nodeFunction = MASTER;
+    /* Disable autobaud feature */
+    linUserConfig.autobaudEnable = FALSE;
+
+    /* Initialize LINFlexD Hardware interface */
+    LINFlexD_DRV_Init(LI0, (linflexd_user_config_t *) &linUserConfig, (linflexd_state_t *) &linState);
+~~~~~
+
+# LINFlexD Data Transfers {#LINDRIVERTrnsf}
+
+The driver implements transmit and receive functions to transfer buffers of data by blocking and non-blocking modes.
+
+The blocking transmit and receive functions include LINFlexD_DRV_MasterTransferBlocking() function.
+
+The non-blocking (async) transmit and receive functions include the LINFlexD_DRV_MasterTransfer() and the LINFlexD_DRV_SlaveResponse() functions.
+
+The LINFlexD_DRV_SlaveResponse() function is recommended to be called in an interrupt event of receiving PID as implemented in LINFlexD Stack middleware.
+
+The LINFlexD_DRV_SlaveResponse() function should be called before data is transferring on the LINFlexD bus.
+
+Master nodes can transmit frame headers in non-blocking mode using LINFlexD_DRV_MasterTransferBlocking().
+
+In all these cases, the functions are interrupt-driven.
+
+# Autobaud feature {#LINDRIVERAutobaud}
+
+AUTOBAUD is an extensive feature in LINFlexD Driver which allows a slave node to automatically detect baudrate of LINFlexD bus
+and adapt its original baudrate to bus value. Auto Baud is applied when the baudrate of the incoming data is unknown.
+Currently autobaud feature is supported to detect LINFlexD bus baudrates 2400, 4800, 9600, 14400, 19200 bps.
+
+1. If autobaud feature is enabled, at LIN driver initialization slave's baudrate is set to 19200bps. 
+When receiving a frame header, the slave detect LIN bus's baudrate based on the synchronization byte and adapts its
+baudrate accordingly.
+
+2. Baudrate evaluation process is executed until autobaud successfully. During run-time if LIN bus's baudrate is
+changed suddenly to a value other than the slave's current baudrate, users shall reset MCU to execute baudrate
+evaluation process.
+
+## Note
+
+1. When the vector table is not in ram (__flash_vector_table__ = 1):
+    - INT_SYS_InstallHandler shall check if the function pointer provided as parameter for the new handler is already
+    present in the vector table for the given IRQ number.
+    - The user will be required to manually add the correct handlers in the startup files
+
+*/

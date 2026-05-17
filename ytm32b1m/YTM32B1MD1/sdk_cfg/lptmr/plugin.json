@@ -1,0 +1,31 @@
+{
+    "name": "lptmr",
+    "type": "driver",
+    "srcs": [
+        "App.vue"
+    ],
+    "mode": "raw",
+    "label": "LPTMR",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/lptmr_driver.h"
+    ],
+    "forceEnable": false,
+    "generate": [
+        "lptmr_config.c",
+        "lptmr_config.h"
+    ],
+    "args": [
+        "lpTMR_DRV_Init (0,&{{this.data.name}},false);"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/lptmr_driver.h",
+            "to": "platform/drivers/inc/lptmr_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/lptmr",
+            "to": "platform/drivers/src/lptmr"
+        }
+    ],
+    "sign": "47eeacb21b4fe8d1966a296579167ff4eea699e3fee3a2a3acd8132cd431c0f489d18cbfae9fab110d4c7c0eaa7d27e97e14c4b4359b013a2bdea1b6697be5c159261b0fbe4f226fd797cf729dc4b94eb07e909bf7aebf26ff83b7b19fb696211f3f60506a2ddeca2603a424f4bc792bf0311f5a61ab892f0c689774b82eb86562358f682ac9215598758e6958ec95806018c38a3758b3a3b3c9c42302cb1d2dbbbedfc2f39c60f828eec889eeafaadca2ce79a40305bf19bd52dd9624a857ca64020d4eb7d477c2bc501226a0524679288a7d79bd7ceb0b027a633a1d428c8d32cb73df9c2d9106032a7ed519b0797416759571a7a040d3a4e288e9d3688d79"
+}

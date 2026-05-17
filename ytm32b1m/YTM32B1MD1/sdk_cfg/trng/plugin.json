@@ -1,0 +1,29 @@
+{
+    "name": "trng",
+    "type": "driver",
+    "mode": "raw",
+    "srcs": [
+        "App.vue"
+    ],
+    "label": "TRNG",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/trng_driver.h"
+    ],
+    "generate": [
+        "trng_config.h"
+    ],
+    "args": [
+        "TRNG_DRV_Init (TRNG_INST,TRNG_ENTROPY_DELAY);"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/trng",
+            "to": "platform/drivers/src/trng"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/trng_driver.h",
+            "to": "platform/drivers/inc/trng_driver.h"
+        }
+    ],
+    "sign": "ab7be0256e05acf3aa11bf1fcf9dc4ca8e218df2ebb28595dd18065ba9bb9efa0cf32d7a228af0474862697c98fc4c597d0abc41f6c05afe97f966de554b2ff2cf684b0b9df8ac55413c9609653b60973d79d7f2ca9e4b763e9303e6680957d36ca8a614617936390cce6d62a821c5fcc8f1462f25ef0c187eabfd946fab9f4b4a95030ecbfb69f96296fc4448447ca58cc6d11fe96198988a66b7007e651adc2bc68e238c1d81d2a9db2d2ab77293c93509e2e5962b3dfae1b36cb6e0918cc26cf3835a522661416c45855603f945b94a0989bf7a3e0a786ed3f95378d432ebbf1f96833e559711caf6b2a287eb39b46e67d51d485f318731e52234c1ab3a53"
+}

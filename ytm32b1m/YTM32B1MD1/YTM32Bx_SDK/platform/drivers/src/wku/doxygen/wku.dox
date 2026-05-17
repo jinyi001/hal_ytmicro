@@ -1,0 +1,127 @@
+
+/*!
+@defgroup wku Wakeup Unit (WKU)
+@brief The YTMicro SDK provides Peripheral Drivers for the Wakeup Unit module. @details The Wakeup Unit (WKU) supports
+external GPIOs or reset pin or internal low power modules to wakeup system under power down mode.
+
+## The WKU supports features:
+
+- Support upto 32 external pins wakeup source
+- Support pin edge selection.
+- Support digital filter for pin wakeup.
+- Support wakeup pin flag and interrupt when system recovery from power down mode.
+
+## Integration guideline
+
+The following files need to be compiled in the project:
+
+```sh
+${SDK_PATH}\platform\drivers\src\wku\wku_driver.c
+```
+
+## Include path
+
+The following paths need to be added to the include path of the toolchain:
+
+```sh
+${SDK_PATH}\platform\drivers\inc\
+```
+
+## Preprocessor symbols
+
+No special symbols are required for this component
+
+## Dependencies
+
+- \ref clock_manager
+- \ref power_manager
+
+@defgroup wku_driver WKU Driver
+@ingroup wku
+
+## WKU Driver Guide
+
+When using power down mode, after waking up from power down mode, user application need to enable WKU module interrupt
+or internal wakeup module if user application needs to get wakeup reason.
+
+In order to be able to use the wakeup in your application, the first thing to do is initializing WKU with user
+configuration input.
+
+## WKU Driver Operation
+
+### PinWakeup feature ###
+
+This is example code to configure the WKU driver:
+
+```c
+/* Device instance number */
+#define INST_WKU          (0U)
+
+/* The number of channels */
+#define WKU_CHANNEL_COUNT  (3U)
+
+/* The hardware channel */
+#define WKU_HW_CHANNEL0    (0U)
+#define WKU_HW_CHANNEL1    (1U)
+#define WKU_HW_CHANNEL2    (2U)
+
+/* Configure for NMI feature */
+const wku_pin_wakeup_cfg_t wku_pinConfig[] =
+{
+    {
+        .hwChannel     = WKU_HW_CHANNEL0,
+        .wakeupEn      = true,
+        .edgeEvent     = WKU_EDGE_RISING,
+        .interruptEn   = false,
+        .filterEn      = true,
+        .filterClkSrc  = WKU_FILTER_CLK_SIRC
+    },
+    {
+        .hwChannel     = WKU_HW_CHANNEL1,
+        .wakeupEn      = true,
+        .edgeEvent     = WKU_EDGE_RISING,
+        .interruptEn   = false,
+        .filterEn      = true,
+        .filterClkSrc  = WKU_FILTER_CLK_SIRC
+    },
+    {
+        .hwChannel     = WKU_HW_CHANNEL2,
+        .wakeupEn      = true,
+        .edgeEvent     = WKU_EDGE_RISING,
+        .interruptEn   = false,
+        .filterEn      = true,
+        .filterClkSrc  = WKU_FILTER_CLK_SIRC
+    },
+};
+
+/*! Configuration for Reset feature */
+const wku_reset_cfg_t wku_ResetPinCfg =
+{
+    .wakeupEn      = true,
+    .filterEn      = true,
+    .filterClkSrc  = WKU_FILTER_CLK_SIRC
+};
+
+/* Main */
+int main(void)
+{
+    /* Configure for STANDBY mode */
+
+    /* Initialize */
+    WKU_DRV_InitPinWakeup(INST_WKU, 
+                        WKU_CHANNEL_COUNT, 
+                        wku_pinConfig); 
+    /* Initialize for external sources */
+    WKU_DRV_InitReset(INST_WKU, &wku_ResetPinCfg);
+
+    /* Enable External module */
+    WKU_DRV_EnableModuleWakeup(INST_WKU, WKU_lpTMR_WAKEUP);
+
+    /* Enter STANDBY mode */
+
+    /* Loop forever */
+
+    return 0;
+}
+```
+*/

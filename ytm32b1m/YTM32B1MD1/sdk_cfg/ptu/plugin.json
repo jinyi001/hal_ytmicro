@@ -1,0 +1,31 @@
+{
+    "name": "ptu",
+    "type": "driver",
+    "srcs": [
+        "App.vue"
+    ],
+    "mode": "raw",
+    "label": "PTU",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/ptu_driver.h"
+    ],
+    "forceEnable": false,
+    "generate": [
+        "ptu_config.c",
+        "ptu_config.h"
+    ],
+    "args": [
+        "PTU_DRV_Init (0,&{{this.name}});"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/ptu_driver.h",
+            "to": "platform/drivers/inc/ptu_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/ptu",
+            "to": "platform/drivers/src/ptu"
+        }
+    ],
+    "sign": "ad1660e3bc6c5f5d8dc03694040649ebb4a038425c4fb54fbd3c9113c01adc9db69d63e84fed76c3ec5e8087b34ac5d1b1555924f395459cfbdb48d8e097b463a0c465a7d5f8a2fd5182ed127c4388641fd896632baa20cb536b1ad7adbf3e1ac98ab0afd43625b3561cbe0374df050471ec87276329779f92e3ebce8e80ffdfd29daf5454abfa37048d5ee7adbc03854212052fe0d8559a38b300b3553bdac4ff60a57832e7f9d2051fe79ce6701ded47ce44a7cd00031b5d38ff76d216beae5f018e38205f733a16d21aa194c8767cd5b82736513e14e8c26d0e3dfe69ff649880bb5134a55af2bd7e5146e5c4fd689578ce7b0bec7e64e1d9765dc69e695a"
+}

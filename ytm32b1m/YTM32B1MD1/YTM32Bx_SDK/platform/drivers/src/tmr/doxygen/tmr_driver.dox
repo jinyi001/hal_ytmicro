@@ -1,0 +1,46 @@
+/*!
+* @defgroup tmr System Timer Module (TMR)
+* @ingroup tmr
+* @brief The S32 SDK provides Peripheral Drivers for the System Timer Module (TMR).
+*
+* The System Timer Module (TMR) is a 32-bit timer designed to support commonly required
+* system and application software timing functions. The TMR includes a 32-bit up counter and
+* four 32-bit compare channels with a separate interrupt source for each channel
+*
+* The number of TMR instances depends on the number of cores of MCU device, one for each core,
+* with four 32-bit compare channels in each TMR
+* 
+* ## Hardware background ##
+*
+* The TMR has the following features:
+*     - One 32-bit up counter with 8-bit prescaler
+*     - Four 32-bit compare channels
+*     - Independent interrupt source for each channel 
+*     - Counter can be stopped in debug mode 
+*     - TMR runs on the system clock by default
+*
+* 
+* ## Integration guideline ##
+*
+* ### Compilation units ###
+*
+* The following files need to be compiled in the project:
+* \verbatim
+${S32SDK_PATH}\platform\drivers\src\tmr\tmr_driver.c
+\endverbatim
+*
+* ### Include path ###
+*
+* The following paths need to be added to the include path of the toolchain:
+* \verbatim
+${S32SDK_PATH}\platform\drivers\inc\
+\endverbatim
+*
+* ### Preprocessor symbols ###
+*
+* No special symbols are required for this component
+* 
+* ### Dependencies ###
+\ref clock_manager \n
+* 
+*/

@@ -1,0 +1,31 @@
+{
+    "name": "dma",
+    "type": "driver",
+    "srcs": [
+        "App.vue"
+    ],
+    "mode": "raw",
+    "label": "DMA",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/dma_driver.h"
+    ],
+    "generate": [
+        "dma_config.c",
+        "dma_config.h"
+    ],
+    "depend": [],
+    "args": [
+        "DMA_DRV_Init (&dmaState,&dmaController_InitConfig,dmaChnState,dmaChnConfigArray,NUM_OF_CONFIGURED_DMA_CHANNEL);"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/dma_driver.h",
+            "to": "platform/drivers/inc/dma_driver.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/dma",
+            "to": "platform/drivers/src/dma"
+        }
+    ],
+    "sign": "2150a426729b936375ab409e1442a9ebf154d76f862cfbcda321c3878d34c7ec21771765e196317305d1513a253a7b6aa05baec93c4b39a388dc7a4d2df299e86ade2b4623627a4ede239de3c4d9826cdd3382a665db21444e4751f3df05dbec690371e70279d6815e14532fe6255a1d866e7c3a705e8c5d4253d8f54cc5816c21c339f10e5eea7c1866f67b3a0f6f8bf89a367c59d0032445fed874fcdf9f2449d172901568c07609e03af0c80e66c3858a7f9bddfcaeed689f3827c8c75e3d9327b6bbc6aef61398d5ab5f28c6cb0882b5a2ff960c679aa860b2886f12667b519e94fa9b51367e58d1312f7434a3e3b053e4d0c379497ccfd0c808557f8bcc"
+}

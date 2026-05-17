@@ -1,0 +1,31 @@
+{
+    "name": "i2c",
+    "type": "driver",
+    "mode": "raw",
+    "srcs": [
+        "App.vue"
+    ],
+    "label": "I2C",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/i2c_driver.h"
+    ],
+    "generate": [
+        "i2c_config.c",
+        "i2c_config.h"
+    ],
+    "args": [
+        "I2C_DRV_MasterInit {{#each this.data.master}}(0,&{{this.name}},&{{this.name}}_State);{{/each}}",
+        "I2C_DRV_SlaveInit {{#each this.data.slave}}(0,&{{this.name}},&{{this.name}}_State);{{/each}}"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/i2c",
+            "to": "platform/drivers/src/i2c"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/i2c_driver.h",
+            "to": "platform/drivers/inc/i2c_driver.h"
+        }
+    ],
+    "sign": "1d346bafa522e754c6195ccfbedd06c48b48b9b7464862df50c27d954665ed340eb837ce4c7be69b22a663011f25959067d24650e37874d9afd05679815a187583aefbfdd670da4ff70861165ba1bb394cae5c41b8f77e87c74d1f833328c67555002a7570bf38edb55060555d80735b98bf937e02416e3eaa583b346f626d3d7c639df055997468baeb2a41347b59d2ea2a8b62e57b26e8034bc8849c796b1aae9d88a3dcb37aaa4d05e14677b5838ed3260d93923c090d890ae0c481129824fcbe5c1bc7898a227d55761b46a23202e55fa9ffd8c62d97efd9837c7f88447019b1abc33f07e7a6bd6045d445b53d70464dc7c073863ec4f43b5237c578a9fa"
+}

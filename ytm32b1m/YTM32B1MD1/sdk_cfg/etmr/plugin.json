@@ -1,0 +1,105 @@
+{
+    "name": "etmr",
+    "type": "driver",
+    "srcs": [
+        "App.vue",
+        "Common.vue",
+        "IC.vue",
+        "MC.vue",
+        "OC.vue",
+        "PWM.vue",
+        "QD.vue"
+    ],
+    "mode": "raw",
+    "label": "ETMR",
+    "includes": [
+        "./../../YTM32Bx_SDK/platform/drivers/inc/etmr/etmr_common.h",
+        "./../../YTM32Bx_SDK/platform/drivers/inc/etmr/etmr_ic_driver.h",
+        "./../../YTM32Bx_SDK/platform/drivers/inc/etmr/etmr_oc_driver.h",
+        "./../../YTM32Bx_SDK/platform/drivers/inc/etmr/etmr_pwm_driver.h",
+        "./../../YTM32Bx_SDK/platform/drivers/inc/etmr/etmr_qd_driver.h",
+        "./../../YTM32Bx_SDK/platform/drivers/inc/etmr/etmr_mc_driver.h"
+    ],
+    "args": [
+        "eTMR_DRV_InitInputCapture {{#each this.data.ic.data}}(0,&{{this.name}});{{/each}}",
+        "eTMR_DRV_InitOutputCompare {{#each this.data.oc.data}}(0,&{{this.name}});{{/each}}",
+        "eTMR_DRV_QuadDecodeStart {{#each this.data.qd.data}}(0,&{{this.name}});{{/each}}",
+        "eTMR_DRV_InitPwm {{#each this.data.pwm.data}}(0,&{{this.name}});{{/each}}",
+        "eTMR_DRV_InitCounter {{#each this.data.mc.data}}(0,&{{this.name}});{{/each}}",
+        "eTMR_DRV_Init {{#each this.data.common}}(0,&{{this.name}},&{{this.name}}_State);{{/each}}"
+    ],
+    "forceEnable": false,
+    "generate": [
+        "etmr_config.c",
+        "etmr_config.h"
+    ],
+    "move": [
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/etmr/etmr_common.c",
+            "to": "platform/drivers/src/etmr/etmr_common.c"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/etmr/etmr_common.h",
+            "to": "platform/drivers/inc/etmr/etmr_common.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/etmr/etmr_hw_access.c",
+            "to": "platform/drivers/src/etmr/etmr_hw_access.c"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/etmr/etmr_hw_access.h",
+            "to": "platform/drivers/src/etmr/etmr_hw_access.h"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/etmr/etmr_ic_driver.c",
+            "to": "platform/drivers/src/etmr/etmr_ic_driver.c",
+            "condition": "{{isTruthy this.data.ic.enable}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/etmr/etmr_ic_driver.h",
+            "to": "platform/drivers/inc/etmr/etmr_ic_driver.h",
+            "condition": "{{isTruthy this.data.ic.enable}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/etmr/etmr_oc_driver.c",
+            "to": "platform/drivers/src/etmr/etmr_oc_driver.c",
+            "condition": "{{isTruthy this.data.oc.enable}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/etmr/etmr_oc_driver.h",
+            "to": "platform/drivers/inc/etmr/etmr_oc_driver.h",
+            "condition": "{{isTruthy this.data.oc.enable}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/etmr/etmr_pwm_driver.c",
+            "to": "platform/drivers/src/etmr/etmr_pwm_driver.c",
+            "condition": "{{isTruthy this.data.pwm.enable}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/etmr/etmr_pwm_driver.h",
+            "to": "platform/drivers/inc/etmr/etmr_pwm_driver.h",
+            "condition": "{{isTruthy this.data.pwm.enable}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/etmr/etmr_qd_driver.c",
+            "to": "platform/drivers/src/etmr/etmr_qd_driver.c",
+            "condition": "{{isTruthy this.data.qd.enable}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/etmr/etmr_qd_driver.h",
+            "to": "platform/drivers/inc/etmr/etmr_qd_driver.h",
+            "condition": "{{isTruthy this.data.qd.enable}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/src/etmr/etmr_mc_driver.c",
+            "to": "platform/drivers/src/etmr/etmr_mc_driver.c",
+            "condition": "{{isTruthy this.data.mc.enable}}"
+        },
+        {
+            "from": "./../../YTM32Bx_SDK/platform/drivers/inc/etmr/etmr_mc_driver.h",
+            "to": "platform/drivers/inc/etmr/etmr_mc_driver.h",
+            "condition": "{{isTruthy this.data.mc.enable}}"
+        }
+    ],
+    "sign": "743f737cb76d43cd5685ff47657df4fdb80a5dde54947aaee709559b613bb8d889d093a537ee4f76aef432c19ca14ec3aa13ac361aea71f6c22c5aca5b0131df9aedf90e471e89ac47f575bd396d1f84eef2db481efb9674b4a9b276564bbff94fea3c51fdb12416e0356acdc5bb6f7586c47e8eb17fb0423b8108ad1e35240294a4998a8256e251800ff8c0b4421eaf41989395c20450e1c0184d56b7d6cf58973b73b97c0bd73746c09f8f9841977d0a445812cb055ad1b8038651e83b0422823cb44c469e29f8aa30476466115c670234b4d0ebb0a1a857c355dffcaf3b8efea932022b76d6cf316be09913130173bd17207f00eb2a4a712e8bcb4c67aa7e"
+}

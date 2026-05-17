@@ -1,0 +1,18 @@
+/*!
+@defgroup linflexd_driver LINFlexD Driver (Linflexd)
+@brief This section describes the programming interface of the Peripheral driver for LINFlexD.
+
+# LINFlexD Driver Overview {#LINFLEXDDRIVEROvw}
+
+The LINFlexD Controller is a semiconductor IP block supporting the Local Interconnect Network
+(LIN) protocol for both master and slave applications.
+The LINFlexD manages a high number of LIN messages efficiently with a minimum of CPU load. To
+reduce the CPU loading in master mode, the LINFlexD autonomously handles the LIN messages
+after software has triggered the header transmission, until the next header transmission request in
+transmitter mode or until checksum reception in the receiver mode.
+The LINFlexD supports LIN protocol versions 1.3, 2.0, 2.1, and 2.2, and provides an 8-byte buffer for
+transmission/reception data.
+The LINFlexD also supports a UART mode for UART transfers of 8-bit, 9-bit, or 13-bit data frames.
+Optional DMA support is available for both transmit (Tx) and receive (Rx) data.<br />
+
+*/
