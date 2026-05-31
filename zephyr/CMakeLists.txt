@@ -55,9 +55,9 @@ list(FILTER YTM32_DRIVER_SOURCES EXCLUDE REGEX ".*/rtc/.*")
 list(FILTER YTM32_DRIVER_SOURCES EXCLUDE REGEX ".*/interrupt_manager\\.c$")
 zephyr_library_sources(${YTM32_DRIVER_SOURCES})
 
-# Include baremetal OSIF by default if needed by the HAL (Zephyr apps can override or provide osif_zephyr.c later)
-zephyr_library_sources(
-  ${YTM32_SDK_DIR}/rtos/osif/osif_baremetal.c
-)
+# Use Zephyr-native OSIF shim instead of vendor baremetal OSIF.
+# osif_baremetal.c reconfigures SysTick on every OSIF_SemaWait / OSIF_TimeDelay
+# call, which conflicts with CONFIG_CORTEX_M_SYSTICK owned by Zephyr.
+zephyr_library_sources(${CMAKE_CURRENT_SOURCE_DIR}/osif_zephyr.c)
 
 endif()
