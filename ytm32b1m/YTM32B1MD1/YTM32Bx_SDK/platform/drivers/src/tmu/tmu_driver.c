@@ -8,6 +8,12 @@
 /*!
  * @file tmu_driver.c
  * @version 1.4.1
+ *
+ * @brief TMU Driver - implementation of the public TMU_DRV_* API.
+ *
+ * This file implements the instance-based Trigger Mux routing functions
+ * declared in tmu_driver.h. Each driver API resolves the TMU peripheral base
+ * address and delegates register access to the TMU hardware access layer.
  */
 
 #include <stddef.h>
@@ -22,30 +28,12 @@
 static TMU_Type *const s_tmuBase[TMU_INSTANCE_COUNT] = TMU_BASE_PTRS;
 
 /*******************************************************************************
- * Code
+ * Initialization & De-initialization
  ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name :     TMU_DRV_Init
- * Description   :     This function first resets the source triggers of all TMU target modules
- * to their default values, then configures the TMU with all the user defined in-out mappings.
- * If at least one of the target modules is locked, the function will not change any of the
- * TMU target modules and return an error code.
- * This example shows how to set up the tmu_user_config_t parameters and how to call the
- * TMU_DRV_Init() function with the required parameters:
- *   tmu_user_config_t             tmuConfig;
- *   tmu_inout_mapping_config_t    tmuInoutMappingConfig[] =
- *   {
- *      {TMU_TRIG_SOURCE_TMU_IN9,     TMU_TARGET_MODULE_DMA_CH0,     false},
- *      {TMU_TRIG_SOURCE_FTM1_EXT_TRIG,  TMU_TARGET_MODULE_TMU_OUT4, true}
- *   };
- *   tmuConfig.numInOutMappingConfigs = 2;
- *   tmuConfig.inOutMappingConfig     = tmuInoutMappingConfig;
- *   TMU_DRV_Init(instance, &tmuConfig);
- *
- * Implements    :     TMU_DRV_Init_Activity
- *END**************************************************************************/
+/*!
+ * @brief Reset the TMU routing matrix and apply user-defined routes.
+ */
 status_t TMU_DRV_Init(const uint32_t instance,
                       const tmu_user_config_t *const tmuUserConfig)
 {
@@ -56,12 +44,12 @@ status_t TMU_DRV_Init(const uint32_t instance,
     TMU_Type *base = s_tmuBase[instance];
     uint8_t count;
 
-    /* Reset source triggers of all TMU target modules to default. */
+    /* Reset the TMU routing matrix before applying user mappings. */
     status = TMU_Init(base);
 
     if (status == STATUS_SUCCESS)
     {
-        /* Loop through all in-out mappings in the configuration and apply them in TMU */
+        /* Program each requested source-to-target route. */
         for (count = 0U; count < tmuUserConfig->numInOutMappingConfigs; count++)
         {
             TMU_SetTrigSourceForTargetModule(base, tmuUserConfig->inOutMappingConfig[count].triggerSource,
@@ -72,14 +60,9 @@ status_t TMU_DRV_Init(const uint32_t instance,
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMU_DRV_Deinit
- * Description   : Reset to default values the source triggers corresponding to all target modules,
- * if none of the target modules is locked.
- *
- * Implements    : TMU_DRV_Deinit_Activity
- *END**************************************************************************/
+/*!
+ * @brief Reset all TMU route selections to their register reset values.
+ */
 status_t TMU_DRV_Deinit(const uint32_t instance)
 {
     DEV_ASSERT(instance < TMU_INSTANCE_COUNT);
@@ -87,20 +70,19 @@ status_t TMU_DRV_Deinit(const uint32_t instance)
     TMU_Type *base = s_tmuBase[instance];
     status_t status;
 
-    /* Reset source triggers of all TMU target modules to default. */
+    /* Restore reset values to the TMU MUX registers. */
     status = TMU_Init(base);
 
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMU_DRV_SetTrigSourceForTargetModule
- * Description   : This function configures a TMU link between a source trigger and a target module,
- * if the requested target module is not locked.
- *
- * Implements    : TMU_DRV_SetTrigSourceForTargetModule_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Routing Configuration
+ ******************************************************************************/
+
+/*!
+ * @brief Update the trigger source connected to one target module.
+ */
 status_t TMU_DRV_SetTrigSourceForTargetModule(const uint32_t instance,
                                               const tmu_trigger_source_t triggerSource,
                                               const tmu_target_module_t targetModule)
@@ -110,7 +92,7 @@ status_t TMU_DRV_SetTrigSourceForTargetModule(const uint32_t instance,
     TMU_Type *base = s_tmuBase[instance];
     status_t status;
 
-    /* Configure link between trigger source and target module. */
+    /* Forward the route update to the HW access layer. */
     TMU_SetTrigSourceForTargetModule(base, triggerSource, targetModule);
 
     status = STATUS_SUCCESS;
@@ -118,13 +100,13 @@ status_t TMU_DRV_SetTrigSourceForTargetModule(const uint32_t instance,
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMU_DRV_GetTrigSourceForTargetModule
- * Description   : This function returns the TMU source trigger linked to a selected target module.
- *
- * Implements    : TMU_DRV_GetTrigSourceForTargetModule_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Routing Query
+ ******************************************************************************/
+
+/*!
+ * @brief Read back the trigger source currently selected for one target.
+ */
 tmu_trigger_source_t TMU_DRV_GetTrigSourceForTargetModule(const uint32_t instance,
                                                           const tmu_target_module_t targetModule)
 {
@@ -134,7 +116,6 @@ tmu_trigger_source_t TMU_DRV_GetTrigSourceForTargetModule(const uint32_t instanc
 
     return TMU_GetTrigSourceForTargetModule(base, targetModule);
 }
-
 
 /*******************************************************************************
  * EOF

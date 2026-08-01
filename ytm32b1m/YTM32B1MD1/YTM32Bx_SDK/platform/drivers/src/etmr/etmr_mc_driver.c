@@ -8,18 +8,24 @@
 /*!
  * @file etmr_mc_driver.c
  * @version 1.4.1
+ *
+ * @brief eTMR Timer/Counter Mode Driver — implementation.
+ *
+ * This file implements the timer/counter (MC) mode functions declared
+ * in etmr_mc_driver.h. The eTMR is configured as a simple counter
+ * with all channel outputs disabled.
  */
 
 #include "etmr_mc_driver.h"
 #include "etmr_hw_access.h"
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Initialize the eTMR counter in timer/counter mode.
  *
- * Function Name : eTMR_DRV_InitCounter
- * Description   : Initializes the eTMR counter.
- *
- * Implements    : eTMR_DRV_InitCounter_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @param[in] timer     Pointer to the timer configuration structure.
+ * @return Operation status.
+ */
 status_t eTMR_DRV_InitCounter(uint32_t instance, const etmr_timer_param_t *timer)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -59,13 +65,12 @@ status_t eTMR_DRV_InitCounter(uint32_t instance, const etmr_timer_param_t *timer
     return retStatus;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Start the eTMR counter.
  *
- * Function Name : eTMR_DRV_CounterStart
- * Description   : Starts the eTMR counter.
- *
- * Implements    : eTMR_DRV_CounterStart_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @return Operation status.
+ */
 status_t eTMR_DRV_CounterStart(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -76,13 +81,12 @@ status_t eTMR_DRV_CounterStart(uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Stop the eTMR counter.
  *
- * Function Name : eTMR_DRV_CounterStop
- * Description   : Stops the eTMR counter.
- *
- * Implements    : eTMR_DRV_CounterStop_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @return Operation status.
+ */
 status_t eTMR_DRV_CounterStop(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -93,13 +97,12 @@ status_t eTMR_DRV_CounterStop(uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Read the current eTMR counter value.
  *
- * Function Name : eTMR_DRV_CounterRead
- * Description   : Reads back the current value of the eTMR counter.
- *
- * Implements    : eTMR_DRV_CounterRead_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @return The current counter value.
+ */
 uint32_t eTMR_DRV_CounterRead(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -108,14 +111,11 @@ uint32_t eTMR_DRV_CounterRead(uint32_t instance)
     return eTMR_GetCntVal(etmrBase);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Populate a timer configuration structure with default values.
  *
- * Function Name : eTMR_MC_DRV_SetDefaultConfig
- * Description   : This function will get the default configuration values
- * in the structure which is used as a common use-case.
- * Return        : None
- * Implements    : eTMR_MC_DRV_GetDefaultConfig_Activity
- *END**************************************************************************/
+ * @param[out] config  Pointer to the structure to be filled with defaults.
+ */
 void eTMR_MC_DRV_SetDefaultConfig(etmr_timer_param_t *const config)
 {
     DEV_ASSERT(config != NULL);

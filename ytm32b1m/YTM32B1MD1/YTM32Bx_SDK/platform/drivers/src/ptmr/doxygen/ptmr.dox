@@ -1,11 +1,268 @@
 /*!
-@defgroup ptmr Low Power Interrupt Timer (pTMR)
-@brief The Low Power Periodic Interrupt Timer (pTMR) is a multi-channel timer module
-generating independent pre-trigger and trigger outputs. These timer channels can operate
-individually or can be chained together. The pTMR can operate in low power modes if
-configured to do so. The pre-trigger and trigger outputs can be used to trigger other
-modules on the device.
+@defgroup ptmr
+@ingroup mod_timer Low Power Periodic Interrupt Timer (pTMR)
+@brief Hardware multi-channel periodic timer module for the YTMicro SDK.
+
 @details
-The S32 SDK provides Peripheral Drivers for the Low Power Interrupt Timer (pTMR) module of S32 devices.
+The pTMR (Low Power Periodic Interrupt Timer) module provides a multi-channel
+countdown timer engine that generates periodic interrupt events. Each channel
+operates as an independent 32-bit down-counter, and channels can optionally
+be chained together for extended timing periods. The module supports low-power
+operation and can be configured to run or freeze during processor debug mode.
+
+@section ptmr_features Key Features
+- **4 independent timer channels**, each with a 32-bit countdown counter.
+- **Channel chaining**: cascade channels for timing periods beyond 32-bit range.
+- **Dual period units**: configure period in raw clock counts or microseconds.
+- **Per-channel interrupt generation** on timer timeout (counter reaches zero).
+- **Debug mode control**: freeze or continue counting during processor halt.
+- **Optional IPC function clock source** (on supported devices) for flexible
+  clocking independent of the peripheral bus clock.
+
+@section ptmr_arch Module Architecture
+
+@verbatim
+┌──────────────────────────────────────────────────┐
+│                Application Code                  │
+│          (calls pTMR_DRV_* functions)            │
+├──────────────────────────────────────────────────┤
+│        pTMR Driver Layer (ptmr_driver.h/c)       │
+│  ● Instance-based API (pTMR_DRV_Init, etc.)      │
+│  ● Uses instance index (0..N) to resolve         │
+│    peripheral base address                       │
+├──────────────────────────────────────────────────┤
+│    pTMR HW Access Layer (ptmr_hw_access.h)       │
+│  ● Direct register-level access (pTMR_Enable,    │
+│    pTMR_SetTimerPeriodByCount, etc.)             │
+│  ● All inline functions for performance          │
+├──────────────────────────────────────────────────┤
+│          pTMR Peripheral Hardware                │
+│       (MCR, CH[n].TCR/TSV/TCV/TFR regs)         │
+└──────────────────────────────────────────────────┘
+@endverbatim
+
+@subsection ptmr_arch_driver Driver Layer (ptmr_driver.h)
+Application code should **only** use the `pTMR_DRV_*` functions from
+ptmr_driver.h. These functions accept a zero-based **instance** index and
+resolve the hardware base address internally using `pTMR_BASE_PTRS`.
+
+@subsection ptmr_arch_hw HW Access Layer (ptmr_hw_access.h)
+This internal layer provides low-level inline register accessors. It is
+organized into six functional groups:
+- **Module Control** — pTMR_Enable(), pTMR_Disable(), pTMR_Reset()
+- **Timer Channel Start / Stop** — pTMR_StartTimerChannels(), pTMR_StopTimerChannels()
+- **Timer Period Configuration** — pTMR_SetTimerPeriodByCount(), pTMR_GetTimerPeriodByCount(), pTMR_GetCurrentTimerCount()
+- **Interrupt Management** — pTMR_EnableInterruptTimerChannels(), pTMR_DisableInterruptTimerChannels(), pTMR_GetInterruptFlagTimerChannels(), pTMR_ClearInterruptFlagTimerChannels()
+- **Channel Configuration** — pTMR_SetTimerChannelChainCmd(), pTMR_SetTimerRunInDebugCmd()
+- **Clock Source Selection** — pTMR_SetTimerClockSource(), pTMR_GetTimerClockSource() (conditional)
+
+@section ptmr_config Configuration Parameters
+
+@subsection ptmr_config_struct ptmr_user_config_t Fields (Module-level)
+| Field                  | Type  | Description                                            | Default |
+|------------------------|-------|--------------------------------------------------------|---------|
+| enableRunInDebug       | bool  | Continue running when processor enters debug mode.     | false   |
+| useFunctionClockSource | bool  | Use IPC function clock instead of PCLK (conditional).  | N/A     |
+
+@subsection ptmr_config_chan ptmr_user_channel_config_t Fields (Per-channel)
+| Field              | Type                 | Description                                  | Default             |
+|--------------------|----------------------|----------------------------------------------|---------------------|
+| periodUnits        | ptmr_period_units_t  | Unit of the period field (counts or µs).     | MICROSECONDS        |
+| period             | uint32_t             | Timer period in the selected unit.           | 1000000 (1 second)  |
+| chainChannel       | bool                 | Chain this channel to the previous channel.  | false               |
+| isInterruptEnabled | bool                 | Enable interrupt on timer timeout.           | true                |
+
+@subsection ptmr_config_features Device Feature Macros
+| Macro                              | Description                                                  |
+|------------------------------------|--------------------------------------------------------------|
+| pTMR_INSTANCE_COUNT                | Number of pTMR peripheral instances on the device.           |
+| pTMR_CH_COUNT                      | Number of timer channels per pTMR instance (typically 4).    |
+| FEATURE_pTMR_HAS_IPC_CLOCK_SOURCE | Set to 1 if device supports IPC function clock source.       |
+| FEATURE_pTMR_HAS_NUM_IRQS_CHANS   | Number of separate interrupt lines available per instance.   |
+
+@section ptmr_usage Usage Patterns
+
+@subsection ptmr_usage_basic Pattern 1: Basic Timer Initialization and Periodic Interrupt
+The most common usage: initialize the module, configure a channel for 1-second
+periodic interrupts, start counting, then de-initialize when done.
+
+@code{.c}
+#define PTMR_INST  (0U)
+#define PTMR_CH    (0U)
+
+ptmr_user_config_t moduleConfig;
+ptmr_user_channel_config_t channelConfig;
+
+/* Step 1: Get default module configuration */
+pTMR_DRV_GetDefaultConfig(&moduleConfig);
+
+/* Step 2: Initialize the pTMR module */
+pTMR_DRV_Init(PTMR_INST, &moduleConfig);
+
+/* Step 3: Get default channel configuration (1s period, interrupt enabled) */
+pTMR_DRV_GetDefaultChanConfig(&channelConfig);
+
+/* Step 4: Initialize channel 0 */
+pTMR_DRV_InitChannel(PTMR_INST, PTMR_CH, &channelConfig);
+
+/* Step 5: Start channel 0 counting */
+pTMR_DRV_StartTimerChannels(PTMR_INST, PTMR_CH);
+
+/* ... timer runs, ISR is triggered periodically ... */
+
+/* Step 6: Stop and de-initialize */
+pTMR_DRV_StopTimerChannels(PTMR_INST, PTMR_CH);
+pTMR_DRV_Deinit(PTMR_INST);
+@endcode
+
+@subsection ptmr_usage_chain Pattern 2: Channel Chaining for Extended Period
+When a single 32-bit channel cannot represent the required timing period,
+chain channel 1 to channel 0. Channel 1 decrements on each channel 0
+timeout event, effectively creating a 64-bit cascaded counter.
+
+@code{.c}
+#define PTMR_INST  (0U)
+
+ptmr_user_config_t moduleConfig;
+ptmr_user_channel_config_t ch0Config, ch1Config;
+
+pTMR_DRV_GetDefaultConfig(&moduleConfig);
+pTMR_DRV_Init(PTMR_INST, &moduleConfig);
+
+/* Channel 0: base timer with fast period (e.g. 1ms) */
+pTMR_DRV_GetDefaultChanConfig(&ch0Config);
+ch0Config.period = 1000U;  /* 1 ms */
+ch0Config.isInterruptEnabled = false;
+pTMR_DRV_InitChannel(PTMR_INST, 0U, &ch0Config);
+
+/* Channel 1: chained to channel 0, triggers every 1000 ch0 timeouts (= 1s) */
+pTMR_DRV_GetDefaultChanConfig(&ch1Config);
+ch1Config.periodUnits = pTMR_PERIOD_UNITS_COUNTS;
+ch1Config.period = 999U;  /* Decrements 1000 times (0..999) */
+ch1Config.chainChannel = true;
+ch1Config.isInterruptEnabled = true;
+pTMR_DRV_InitChannel(PTMR_INST, 1U, &ch1Config);
+
+/* Start both channels */
+pTMR_DRV_StartTimerChannels(PTMR_INST, 0U);
+pTMR_DRV_StartTimerChannels(PTMR_INST, 1U);
+@endcode
+
+@subsection ptmr_usage_period Pattern 3: Runtime Period Reconfiguration
+Change the timer period while the channel is running. The new value takes
+effect after the current period expires.
+
+@code{.c}
+#define PTMR_INST  (0U)
+#define PTMR_CH    (0U)
+
+/* Start with 500ms period */
+pTMR_DRV_SetTimerPeriodByUs(PTMR_INST, PTMR_CH, 500000U);
+pTMR_DRV_StartTimerChannels(PTMR_INST, PTMR_CH);
+
+/* ... after some event, change to 100ms period ... */
+pTMR_DRV_SetTimerPeriodByUs(PTMR_INST, PTMR_CH, 100000U);
+
+/* Or set period in raw counts for precise control */
+pTMR_DRV_SetTimerPeriodByCount(PTMR_INST, PTMR_CH, 48000000U);
+@endcode
+
+@section ptmr_api API Quick Reference
+
+@subsection ptmr_api_init Initialization & De-initialization
+| Function                       | Description                                                |
+|--------------------------------|------------------------------------------------------------|
+| pTMR_DRV_GetDefaultConfig()    | Fill module config struct with default values.             |
+| pTMR_DRV_GetDefaultChanConfig()| Fill channel config struct with default values.            |
+| pTMR_DRV_Init()                | Initialize pTMR module with user configuration.            |
+| pTMR_DRV_Deinit()              | Stop all channels and disable the pTMR module.             |
+| pTMR_DRV_InitChannel()         | Initialize a timer channel with user configuration.        |
+
+@subsection ptmr_api_start Timer Start & Stop
+| Function                        | Description                                               |
+|---------------------------------|-----------------------------------------------------------|
+| pTMR_DRV_StartTimerChannels()   | Start counting on the specified timer channel.            |
+| pTMR_DRV_StopTimerChannels()    | Stop counting on the specified timer channel.             |
+
+@subsection ptmr_api_period Timer Period
+| Function                        | Description                                               |
+|---------------------------------|-----------------------------------------------------------|
+| pTMR_DRV_SetTimerPeriodByUs()   | Set timer period in microseconds.                         |
+| pTMR_DRV_SetTimerPeriodByCount()| Set timer period in raw clock counts.                     |
+| pTMR_DRV_GetTimerPeriodByUs()   | Get current timer period in microseconds.                 |
+| pTMR_DRV_GetTimerPeriodByCount()| Get current timer period in raw clock counts.             |
+| pTMR_DRV_GetCurrentTimerUs()    | Get current counter value in microseconds.                |
+| pTMR_DRV_GetCurrentTimerCount() | Get current counter value in raw clock counts.            |
+
+@subsection ptmr_api_irq Interrupt Management
+| Function                                    | Description                                    |
+|---------------------------------------------|------------------------------------------------|
+| pTMR_DRV_EnableTimerChannelInterrupt()      | Enable interrupt for a timer channel.          |
+| pTMR_DRV_DisableTimerChannelInterrupt()     | Disable interrupt for a timer channel.         |
+| pTMR_DRV_GetInterruptFlagTimerChannels()    | Read the interrupt flag of a timer channel.    |
+| pTMR_DRV_ClearInterruptFlagTimerChannels()  | Clear the interrupt flag of a timer channel.   |
+
+@section ptmr_notes Important Notes
+
+@subsection ptmr_notes_clock Clock Dependency
+The pTMR peripheral clock must be enabled via the clock_manager **before**
+calling pTMR_DRV_Init(). The driver does not manage clocks internally.
+See @ref clock_manager.
+
+@subsection ptmr_notes_chain Channel Chaining Constraints
+- Channel 0 **cannot** be chained because it has no preceding channel.
+- A chained channel decrements its counter once each time the previous
+  channel times out, rather than on each clock cycle.
+- Both the base channel and the chained channel must be started for the
+  cascade to function correctly.
+
+@subsection ptmr_notes_debug Debug Mode Behavior
+When `enableRunInDebug` is set to false (default), all timer channels freeze
+when the processor enters debug (halt) mode. This prevents timer-related
+side effects during debugging. Set to true only when real-time timer
+behavior must be preserved during debug sessions.
+
+@subsection ptmr_notes_ipc IPC Clock Source (Device-Specific)
+On devices with `FEATURE_pTMR_HAS_IPC_CLOCK_SOURCE == 1`:
+- The pTMR can be clocked from the IPC function clock instead of PCLK.
+- The IPC function clock frequency **must not exceed PCLK / 4**.
+  Exceeding this limit results in undefined timer behavior.
+- Configure the clock source via the `useFunctionClockSource` field in
+  ptmr_user_config_t before calling pTMR_DRV_Init().
+
+@subsection ptmr_notes_interrupt Interrupt Handling
+The pTMR driver does not install interrupt handlers internally. The application
+must provide interrupt service routines using one of two methods:
+1. **Weak symbol override**: Define `pTMRx_Chy_Handler()` functions to override
+   the default weak ISR symbols provided by the startup code.
+2. **Interrupt Manager**: Use `INT_SYS_InstallHandler()` to dynamically install
+   ISRs at runtime (requires interrupt vector table in RAM).
+
+@warning Inside the ISR, always call pTMR_DRV_ClearInterruptFlagTimerChannels()
+to acknowledge the interrupt. Failure to clear the flag will cause the ISR to
+re-enter immediately.
+
+@section ptmr_integration Integration Guide
+
+@subsection ptmr_integration_files Compilation Units
+The following source files must be added to the project build:
+@verbatim
+${SDK_PATH}/platform/drivers/src/ptmr/ptmr_driver.c
+@endverbatim
+
+@subsection ptmr_integration_include Include Paths
+Add the following directory to the toolchain include path:
+@verbatim
+${SDK_PATH}/platform/drivers/inc/
+@endverbatim
+
+@subsection ptmr_integration_symbols Compile Symbols
+No special compile-time symbols are required for this module. Device-specific
+feature macros (`FEATURE_pTMR_*`) are automatically defined in the device
+features header.
+
+@subsection ptmr_integration_deps Dependencies
+- @ref clock_manager — Required for enabling the pTMR peripheral clock.
+- @ref interrupt_manager — Required for enabling/disabling channel IRQs.
 
 */

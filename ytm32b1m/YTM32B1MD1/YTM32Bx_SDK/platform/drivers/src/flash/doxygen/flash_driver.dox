@@ -1,115 +1,262 @@
-/*!
-@defgroup flash Flash Memory (Flash)
-@brief Flash Memory Module provides the general flash APIs
-@details
-Flash memory is ideal for single-supply applications, permitting in-the-field erase and
-reprogramming operations without the need for any external high voltage power sources.
-The flash module includes a memory controller that executes commands to modify flash
-memory contents. An erased bit reads '1' and a programmed bit reads '0'. The
-programming operation is unidirectional; it can only move bits from the '1' state (erased)
-to the '0' state (programmed). Only the erase operation restores bits from '0' to '1'; bits
-cannot be programmed from a '0' to a '1'.
-
-@note User should get flash memory information from user manual, as flash controller not support
- read while write operation. User need to disable global interrupt before flash write and erase
- operation in one flash block. SDK won't check if global interrupt is disabled or not.
-
- For chips have separate data flash blocks, user can read/write/erase data flash when application
- running in main flash arrays.
-
-## EFM Flash Driver
-The EFM flash module includes the following accessible memory regions.
-1. Program flash memory for vector space and code store.
-2. Data flash memory for application data storage.
-3. Customer Non-volatile Region(NVR) for customer data storage.
-
-Some platforms may be designed to have only program flash memory or all of them.
-
- For chips support HCU, Flash driver will support HCU hardware key storage. User can use related
- APIs to program HCU key, and HCU key not support read access.
-
- For chips support flash block swap feature, Flash driver support flash swap commands, user can call
- flash swap APIs to swap flash block. The boot swap will be valid on next boot.
-
-The driver includes general APIs to handle specific operations on EFM Flash module.
-The user can use those APIs directly in the application.
-
- EEPROM and EEPROM emulation are not supported in flash SDK.
-
-## Integration guideline ##
- 
-### Compilation units ###
-
-The following files need to be compiled in the project:
-\verbatim
-${SDK_PATH}\platform\drivers\src\flash\flash_driver.c
-\endverbatim
-
-### Include path ###
-
-The following paths need to be added to the include path of the toolchain:
-\verbatim
-${SDK_PATH}\platform\drivers\inc\
-\endverbatim
-
-### Compile symbols ###
-
-No special symbols are required for this component
-
-### Dependencies ###
-
-### Interrupts ###
-The flash module can generate interrupts, if enabled on corresponding flash APIs, but these interrupts
-are not handled by the driver. The application should handle these interrupts.
-
-\ref clock_manager
-
-## Important Note
-
-1. If using callback in the application, any code reachable from this function
-must not be placed in a Flash block targeted for a program/erase operation to avoid the RWW error.
-Functions can be placed in RAM section by using the START/END_FUNCTION_DEFINITION/DECLARATION_RAMSECTION macros.
-2. EFM module depends on the clock manager, so the clock manager must be initialized before EFM module, and the
-clock manager should update EFM_CTRL_RWS field and EFM clock setting correctly before any flash operation.
-3. If the flash block is swapped, the flash driver will not check the swap status, and the application can get boot
-information form flash register.
-
-## Example code ##
-1. To initialize the Flash module, call FLASH_DRV_Init() function and pass
-   the user configuration data structure to it.
-    This is example code to configure the Flash driver:
-~~~~~{.c}
-   #define FLASH_INST  (0) /* FLASH instance */
-
-    /* Configuration structure FlashInitConfig */
-   flash_user_config_t FlashInitConfig = {
-       .async = false,          /* Sync mode, wait erase/program done */
-       .disGlobalInt = true,    /* Disable global interrupt during flash operation for sync mode */
-       .readVerify = true,      /* Enable read verify after erase or program by the hardware automatically */
-       .callback = NULL,
-   };
-
-   flash_state_t FlashState;
-
-   /* Initializes the Flash */
-   FLASH_DRV_Init(FLASH_INST, &FlashInitConfig, &FlashState);
-~~~~~
-
-2. To erase a flash sector, call FLASH_DRV_EraseSector() function and pass
-   the address and size of the sector to be erased.
-    This is example code to erase a flash sector:
-~~~~~{.c}
-   /* Erase a flash sector */
-   FLASH_DRV_EraseSector(FLASH_INST, 0xC8000, 0x1000);
-~~~~~
-
-3. To program a flash sector, call FLASH_DRV_Program() function and pass
-   the address and size of the sector to be programmed.
-    This is example code to program a flash sector:
-~~~~~{.c}
-   /* Program a flash sector */
-   FLASH_DRV_Program(FLASH_INST, 0xC8000, 0x1000, data);
-~~~~~
-
-
-*/
+/*! 
+ * @defgroup flash
+ * @ingroup mod_flash Flash Memory (Flash)
+ * @brief Embedded flash memory controller for program storage and data persistence.
+ * 
+ * @details The Flash driver provides a hardware abstraction layer for the EFM
+ *          (Embedded Flash Module) peripheral, enabling erase, program, and
+ *          verification operations on internal flash memory. It supports both
+ *          P-Flash (program flash) and D-Flash (data flash) regions, with
+ *          optional NVR (Non-Volatile Region) access, boot swap, and HCU
+ *          security key loading on supported devices.
+ *
+ * @section flash_features Key Features
+ *
+ * - **Multi-region support**: P-Flash, D-Flash, and NVR regions
+ * - **Two operation modes**:
+ *   - Synchronous (blocking): API returns after command completion
+ *   - Asynchronous (interrupt-driven): API returns immediately; callback on completion
+ * - **Sector, block, and array-level erase** granularity
+ * - **Hardware read-after-write verification** (optional)
+ * - **Quick erase with retry** for improved reliability
+ * - **Data integrity**: 32-bit byte-sum checksum computation
+ * - **ECC fault detection**: Single-bit (recoverable) and double-bit (unrecoverable) fault interrupts
+ * - **Boot swap**: Dual-bank firmware update support
+ * - **Security key loading**: AES/RSA key transfer to hardware crypto unit (HCU)
+ * - **Callback support**: User-defined callbacks for async events and sync polling
+ *
+ * @section flash_memory_regions Supported Memory Regions
+ *
+ * | Region    | Description                       | Typical Use Case             |
+ * |-----------|-----------------------------------|------------------------------|
+ * | P-Flash   | Program Flash (main code storage) | Application firmware         |
+ * | D-Flash   | Data Flash (persistent storage)   | Calibration, configuration   |
+ * | NVR       | Non-Volatile Region               | Keys, serial numbers, trim   |
+ * | Boot NVR  | Boot-swap control area            | Dual-bank update management  |
+ *
+ * @section flash_arch Module Architecture
+ *
+ * The Flash driver is organized into two layers:
+ *
+ * @verbatim
+ *   ┌──────────────────────────────────────────┐
+ *   │  Application                             │
+ *   ├──────────────────────────────────────────┤
+ *   │  Flash Driver  (flash_driver.h/c)        │
+ *   │  └─ FLASH_DRV_* APIs                     │
+ *   ├──────────────────────────────────────────┤
+ *   │  HW Access     (flash_hw_access.h)       │
+ *   │  └─ FLASH_Get/Set/Clear* inline fns      │
+ *   ├──────────────────────────────────────────┤
+ *   │  EFM Peripheral Hardware                 │
+ *   └──────────────────────────────────────────┘
+ * @endverbatim
+ *
+ * - **Flash Driver**: Application-level API with instance management, state
+ *   tracking, sync/async mode handling, command sequencing, and callback dispatch.
+ * - **HW Access Layer**: Thin inline wrappers for direct register reads/writes.
+ *   Used only by the driver layer — not intended for application use.
+ *
+ * @section flash_config Configuration Parameters
+ *
+ * All configuration is carried in the flash_user_config_t structure:
+ *
+ * | Parameter    | Type             | Description                                           | Default   |
+ * |--------------|------------------|-------------------------------------------------------|-----------|
+ * | async        | bool             | true = interrupt-driven mode (RWW devices only)       | false     |
+ * | disGlobalInt | bool             | true = suppress global IRQs during sync operations    | true      |
+ * | readVerify   | bool             | true = HW read-verify after every erase/program       | true      |
+ * | wdgEnable    | bool             | true = enable EFM watchdog (device-specific)          | false     |
+ * | callback     | flash_callback_t | User event callback pointer or NULL_CALLBACK          | NULL      |
+ *
+ * @section flash_usage Usage Patterns
+ *
+ * @subsection flash_usage_basic Pattern 1 — Basic Init + Sector Erase + Program
+ *
+ * @code{.c}
+ *   flash_user_config_t flashConfig;
+ *   flash_state_t flashState;
+ *
+ *   // 1. Get defaults and initialize
+ *   FLASH_DRV_GetDefaultConfig(&flashConfig);
+ *   FLASH_DRV_Init(0U, &flashConfig, &flashState);
+ *
+ *   // 2. Erase a 4 KB sector
+ *   FLASH_DRV_EraseSector(0U, 0x00010000U, 4096U);
+ *
+ *   // 3. Program 256 bytes (64 words)
+ *   uint32_t buffer[64] = { ... };
+ *   FLASH_DRV_Program(0U, 0x00010000U, 256U, buffer);
+ *
+ *   // 4. Verify
+ *   uint32_t checksum;
+ *   FLASH_DRV_CheckSum(0U, 0x00010000U, 256U, &checksum);
+ *
+ *   // 5. Clean up
+ *   FLASH_DRV_Deinit(0U);
+ * @endcode
+ *
+ * @subsection flash_usage_async Pattern 2 — Asynchronous Mode with Callback
+ *
+ * @code{.c}
+ *   void flashCallback(flash_event_t event)
+ *   {
+ *       switch (event)
+ *       {
+ *           case FLASH_EVENT_COMPLETE:
+ *               // Erase/program finished
+ *               break;
+ *           case FLASH_EVENT_ERROR:
+ *               // Handle error
+ *               break;
+ *           default:
+ *               break;
+ *       }
+ *   }
+ *
+ *   flash_user_config_t flashConfig;
+ *   flash_state_t flashState;
+ *
+ *   FLASH_DRV_GetDefaultConfig(&flashConfig);
+ *   flashConfig.async = true;
+ *   flashConfig.callback = flashCallback;
+ *   FLASH_DRV_Init(0U, &flashConfig, &flashState);
+ *
+ *   // Erase returns immediately; callback is invoked on completion
+ *   FLASH_DRV_EraseSector(0U, 0x00010000U, 4096U);
+ * @endcode
+ *
+ * @subsection flash_usage_nvr Pattern 3 — NVR Operations
+ *
+ * @code{.c}
+ *   // NVR erase + program (available when FEATURE_EFM_ERASE_NVR_CMD_CODE is defined)
+ *   FLASH_DRV_EraseNVR(0U, FEATURE_EFM_BOOT_NVR_ADDR);
+ *
+ *   uint32_t nvrData[4] = { 0x11223344, 0x55667788, 0x99AABBCC, 0xDDEEFF00 };
+ *   FLASH_DRV_ProgramNVR(0U, FEATURE_EFM_BOOT_NVR_ADDR, 16U, nvrData);
+ *
+ *   uint32_t readBack[4];
+ *   FLASH_DRV_ReadNVR(0U, FEATURE_EFM_BOOT_NVR_ADDR, 16U, readBack);
+ * @endcode
+ *
+ * @subsection flash_usage_bootswap Pattern 4 — Boot Swap
+ *
+ * @code{.c}
+ *   // Swap boot blocks (available when FEATURE_EFM_BOOT_SWAP_CMD_CODE is defined)
+ *   status_t status = FLASH_DRV_BootSwap(0U);
+ *   if (status == STATUS_SUCCESS)
+ *   {
+ *       // Swap command accepted; takes effect on next reset
+ *       NVIC_SystemReset();
+ *   }
+ * @endcode
+ *
+ * @section flash_api API Quick Reference
+ *
+ * @subsection flash_api_init Initialization & De-initialization
+ * | Function | Description |
+ * |----------|-------------|
+ * | FLASH_DRV_Init() | Initialize driver with configuration. |
+ * | FLASH_DRV_Deinit() | De-initialize and release resources. |
+ * | FLASH_DRV_GetDefaultConfig() | Fill configuration struct with defaults. |
+ *
+ * @subsection flash_api_config Runtime Configuration
+ * | Function | Description |
+ * |----------|-------------|
+ * | FLASH_DRV_SetAsyncMode() | Switch between synchronous and asynchronous mode. |
+ * | FLASH_DRV_SetDisableGlobalInt() | Toggle global IRQ suppression in sync mode. |
+ * | FLASH_DRV_SetReadVerify() | Toggle hardware read verification after erase/program. |
+ *
+ * @subsection flash_api_erase Erase Operations
+ * | Function | Description |
+ * |----------|-------------|
+ * | FLASH_DRV_EraseArray() | Erase the entire flash array. |
+ * | FLASH_DRV_EraseBlock() | Erase a flash block. |
+ * | FLASH_DRV_EraseSector() | Erase one or more sectors. |
+ * | FLASH_DRV_EraseSectorQuick() | Quick erase with automatic retry. |
+ *
+ * @subsection flash_api_program Program Operations
+ * | Function | Description |
+ * |----------|-------------|
+ * | FLASH_DRV_Program() | Program P-Flash or D-Flash region. |
+ * | FLASH_DRV_ProgramDFlash() | Program D-Flash region only. |
+ *
+ * @subsection flash_api_integrity Data Integrity
+ * | Function | Description |
+ * |----------|-------------|
+ * | FLASH_DRV_CheckSum() | Compute 32-bit byte-sum checksum over a flash region. |
+ *
+ * @subsection flash_api_status Status Query
+ * | Function | Description |
+ * |----------|-------------|
+ * | FLASH_DRV_GetBusyStatus() | Check whether the driver is busy with an operation. |
+ * | FLASH_DRV_GetDoneStatus() | Check the hardware command-done flag. |
+ * | FLASH_DRV_GetReadCollisionFlag() | Check the read-collision error flag. |
+ *
+ * @subsection flash_api_irq Interrupt Management
+ * | Function | Description |
+ * |----------|-------------|
+ * | FLASH_DRV_EnableCmdCompleteInterrupt() | Enable command-done interrupt. |
+ * | FLASH_DRV_DisableCmdCompleteInterrupt() | Disable command-done interrupt. |
+ * | FLASH_DRV_EnableReadCollisionInterrupt() | Enable read-collision interrupt. |
+ * | FLASH_DRV_DisableReadCollisionInterrupt() | Disable read-collision interrupt. |
+ * | FLASH_DRV_EnableSingleBitFaultInterrupt() | Enable single-bit ECC fault interrupt. |
+ * | FLASH_DRV_DisableSingleBitFaultInterrupt() | Disable single-bit ECC fault interrupt. |
+ * | FLASH_DRV_EnableDoubleBitFaultInterrupt() | Enable double-bit ECC fault interrupt. |
+ * | FLASH_DRV_DisableDoubleBitFaultInterrupt() | Disable double-bit ECC fault interrupt. |
+ *
+ * @subsection flash_api_nvr NVR Operations
+ * | Function | Description |
+ * |----------|-------------|
+ * | FLASH_DRV_EraseNVR() | Erase one NVR sector. |
+ * | FLASH_DRV_ProgramNVR() | Program data to an NVR sector. |
+ * | FLASH_DRV_ReadNVR() | Read data from an NVR region. |
+ *
+ * @subsection flash_api_bootswap Boot Swap
+ * | Function | Description |
+ * |----------|-------------|
+ * | FLASH_DRV_BootSwap() | Swap the active and inactive boot flash blocks. |
+ *
+ * @subsection flash_api_keys Security Keys
+ * | Function | Description |
+ * |----------|-------------|
+ * | FLASH_DRV_LoadAESKey() | Load an AES key from NVR into the HCU. |
+ * | FLASH_DRV_LoadRSAKey() | Load an RSA key from NVR into the HCU. |
+ *
+ * @section flash_notes Important Notes
+ *
+ * - **RAM-resident code**: The command write sequence (FLASH_LaunchCommandSequence)
+ *   is executed from RAM. The linker must allocate a RAM section for this function
+ *   using START/END_FUNCTION_DEFINITION_RAMSECTION macros.
+ * - **Read-While-Write (RWW)**: Async mode is only supported on devices with RWW
+ *   flash. On non-RWW devices, use synchronous mode only.
+ * - **Flash command unlock**: The EFM peripheral requires an unlock sequence
+ *   before each command. The driver handles this automatically.
+ * - **Alignment requirements**: All destination addresses must be aligned to
+ *   FEATURE_EFM_WRITE_UNIT_SIZE. Data buffers must be 32-bit aligned.
+ * - **Callback restrictions**: Functions reachable from the callback must NOT
+ *   reside in the flash block being erased or programmed. Place callbacks in RAM
+ *   or in a separate flash block.
+ * - **Clock dependency**: The EFM peripheral clock must be enabled via the
+ *   clock_manager before calling any flash API.
+ *
+ * @section flash_integration Integration Guide
+ *
+ * To use the Flash driver in a project:
+ *
+ * 1. **Include headers**:
+ *    @code{.c}
+ *    #include "flash_driver.h"
+ *    @endcode
+ *
+ * 2. **Clock setup**: Ensure the EFM clock is enabled before calling any API.
+ *
+ * 3. **Allocate state**: Declare a flash_state_t variable per instance;
+ *    it must persist for the driver's lifetime.
+ *
+ * 4. **Interrupt setup** (async mode only): The EFM IRQ is automatically
+ *    enabled by FLASH_DRV_Init() when async mode is selected.
+ *
+ * 5. **Linker configuration**: Map the RAM section for the command write
+ *    sequence function.
+ */

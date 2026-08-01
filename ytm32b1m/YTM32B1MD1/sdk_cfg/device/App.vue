@@ -194,6 +194,14 @@
         >
           <el-checkbox v-model="data.useSecureBoot" />
         </el-form-item>
+        <el-form-item
+          label="Enable HardFault Reset"
+          prop="enableHFReset"
+        >
+          <el-checkbox
+            v-model="data.enableHFReset"
+          />
+        </el-form-item>
       </el-form>
     </div>
   </div>
@@ -329,6 +337,7 @@ function getDefaultData() {
     sdkVer: "",
     useFreeRtos: false,
     useSecureBoot: false,
+    enableHFReset: true,
     stack_top: "STACK_end",
     vector_ram: "IVT_RAM_start",
     vector_flash_region: ".isr_vector",

@@ -5,6 +5,31 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+/*!
+ * @file ee_emulation.h
+ * @version 1.4.1
+ *
+ * @brief EEPROM Emulation driver - public API for Flash-backed fixed-size
+ *        records.
+ *
+ * This header defines the application-facing APIs and derived layout macros
+ * used by the EEPROM emulation module. The module stores fixed-size records in
+ * a round-robin pool of Flash sectors, rebuilds sector state during
+ * initialization, and exposes simple read, write, and erase-style lifecycle
+ * operations to application code.
+ *
+ * The APIs are organized into the following categories:
+ *   - Initialization
+ *   - Record Access
+ *   - Shutdown
+ *
+ * @note The application must provide `ee_user_config.h` with the EEPROM size,
+ *       record size, sector allocation policy, retry limits, callback
+ *       settings, and start address definitions used by this module.
+ * @warning Every entry in `eeprom_config_t::startSecAddr` must reference a
+ *          valid erasable Flash sector dedicated to EEPROM emulation.
+ */
+
 #ifndef _EE_EMULATION_H_
 #define _EE_EMULATION_H_
 
@@ -15,199 +40,258 @@
 #include "ee_user_config.h"
 
 /*!
- *
+ * @defgroup ee_emulation_driver EEPROM Emulation Driver
  * @ingroup ee_emulation
- * @details This section describes the EEPROM api in ee_emulation module Driver.
+ * @brief Public APIs and layout helpers for Flash-backed EEPROM emulation.
+ * @details Provides derived record or sector layout macros, runtime state
+ *          containers, and application-facing services for initializing the
+ *          emulation pool, reading records, writing updated records, and
+ *          erasing the allocated sectors during shutdown.
  * @{
  */
+
+/*******************************************************************************
+ * Definitions
+ ******************************************************************************/
 
 /*!
- * @addtogroup ee_emulation_driver
+ * @name Record Layout
+ * @brief Macros that describe one emulated EEPROM record stored in Flash.
  * @{
  */
+#define EE_RECORD_HEADER_SIZE           (FEATURE_EFM_WRITE_UNIT_SIZE)        /*!< Bytes reserved for the record header programmed after the payload. */
+#define EE_RECORD_STATUS_OFFSET         (EE_RECORD_LENGTH - EE_RECORD_HEADER_SIZE) /*!< Offset of the status-and-ID header within one stored record. */
+/*! @} */ /* End of Record Layout */
 
-/******************************************************************************/
-/*                            Macros related to a record                      */
-/******************************************************************************/
-/* macros relating to size of each element*/
-#define EE_RECORD_HEADER_SIZE           (FEATURE_EFM_WRITE_UNIT_SIZE)
-/* macros relating to offset of each element*/
-#define EE_RECORD_STATUS_OFFSET         (EE_RECORD_LENGTH - EE_RECORD_HEADER_SIZE)
-
-/******************************************************************************/
-/*                            Macros related to a sector                      */
-/******************************************************************************/
-/* macros relating to size of each element*/
-#define EE_INDICATOR_SIZE               (FEATURE_EFM_WRITE_UNIT_SIZE)
-#define EE_SECTOR_HEADER_SIZE           (EE_INDICATOR_SIZE * 3) /* sector header = 3*EE_INDICATOR_SIZE */
+/*!
+ * @name Sector Layout
+ * @brief Macros that describe one Flash sector participating in EEPROM
+ *        emulation.
+ * @{
+ */
+#define EE_INDICATOR_SIZE               (FEATURE_EFM_WRITE_UNIT_SIZE)        /*!< Bytes reserved for each sector-state indicator. */
+#define EE_SECTOR_HEADER_SIZE           (EE_INDICATOR_SIZE * 3)              /*!< Bytes consumed by erase-cycle, dead, and active indicators. */
 #if FEATURE_EFM_HAS_DATA_FLASH
-#define EE_SECTOR_SIZE                  FEATURE_EFM_DATA_ARRAY_SECTOR_SIZE
+#define EE_SECTOR_SIZE                  FEATURE_EFM_DATA_ARRAY_SECTOR_SIZE   /*!< Physical sector size when the device provides dedicated data Flash. */
 #else
-#define EE_SECTOR_SIZE                  FEATURE_EFM_MAIN_ARRAY_SECTOR_SIZE
+#define EE_SECTOR_SIZE                  FEATURE_EFM_MAIN_ARRAY_SECTOR_SIZE   /*!< Physical sector size when EEPROM emulation uses main-array Flash. */
 #endif
-/* macros relating to offset of each element*/
-#define EE_SECTOR_ACTIND_OFFSET         (EE_INDICATOR_SIZE * 2) /* active indicator */
-#define EE_SECTOR_DEADIND_OFFSET        (EE_INDICATOR_SIZE * 1) /* dead indicator */
-#define EE_SECTOR_ERSCYC_OFFSET         (EE_INDICATOR_SIZE * 0) /* erase cycle */
+#define EE_SECTOR_ACTIND_OFFSET         (EE_INDICATOR_SIZE * 2)              /*!< Offset of the active indicator within the sector header. */
+#define EE_SECTOR_DEADIND_OFFSET        (EE_INDICATOR_SIZE * 1)              /*!< Offset of the dead-sector indicator within the sector header. */
+#define EE_SECTOR_ERSCYC_OFFSET         (EE_INDICATOR_SIZE * 0)              /*!< Offset of the erase-cycle value within the sector header. */
+#define EE_LONG_WORD_MASK               (0x3U)                               /*!< Mask used to detect payload alignment against the 4-byte write granule. */
+#define EE_MAX_WRITE_LOOP               (0x1000U)                            /*!< Maximum high-level write retries before aborting a stalled update loop. */
+/*! @} */ /* End of Sector Layout */
 
-/* bit mask of long word (4 bytes) size*/
-#define EE_LONG_WORD_MASK              (0x3U)
+/*!
+ * @name Sector State Marker Values
+ * @brief Constants programmed into record and sector headers.
+ * @{
+ */
+#define EE_DATA_INDICATOR               (0x55555555U)                        /*!< Pattern written into active or dead indicators once the state is valid. */
+#define EE_RECORD_STATUS_VALID          (0x5555U)                            /*!< Record-status value that marks one stored record as valid. */
+/*! @} */ /* End of Sector State Marker Values */
 
-#define EE_MAX_WRITE_LOOP               (0x1000U)
+/*!
+ * @name Derived Geometry Helpers
+ * @brief Macros that derive record counts and storage geometry from the user
+ *        configuration.
+ * @{
+ */
+#define GET_MOD(divisor, dividend)      ((divisor) % (dividend))             /*!< Integer remainder helper used by the storage geometry macros. */
+#define GET_INT(divisor, dividend)      ((divisor) / (dividend))             /*!< Integer division helper used by the storage geometry macros. */
 
-/******************************************************************************/
-/* Macros related to value used to program to sector header to make different */
-/* sector status                                                              */
-/******************************************************************************/
-#define EE_DATA_INDICATOR               (0x55555555U) /* data to program to active/dead indicator */
-#define EE_RECORD_STATUS_VALID          (0x5555U) /* data to program to record status */
-
-/******************************************************************************/
-/*                  Macros to calculate internal value                        */
-/******************************************************************************/
-#define GET_MOD(divisor, dividend) ((divisor) % (dividend))
-#define GET_INT(divisor, dividend) ((divisor)/(dividend))
-
-/* Length of 1 record  */
-#define EE_DATA_VALUE_ALIGNED_PART      (EE_DATA_VALUE_SIZE & (~EE_LONG_WORD_MASK))
+#define EE_DATA_VALUE_ALIGNED_PART      (EE_DATA_VALUE_SIZE & (~EE_LONG_WORD_MASK)) /*!< Largest record payload prefix aligned to the Flash write granule. */
 #if (EE_DATA_VALUE_SIZE & EE_LONG_WORD_MASK)
-#define EE_RECORD_LENGTH                (EE_DATA_VALUE_ALIGNED_PART + 0x04U + EE_RECORD_HEADER_SIZE)
+#define EE_RECORD_LENGTH                (EE_DATA_VALUE_ALIGNED_PART + 0x04U + EE_RECORD_HEADER_SIZE) /*!< Total stored record length when a padded tail write is required. */
 #else
-#define EE_RECORD_LENGTH                (EE_DATA_VALUE_ALIGNED_PART + EE_RECORD_HEADER_SIZE)
+#define EE_RECORD_LENGTH                (EE_DATA_VALUE_ALIGNED_PART + EE_RECORD_HEADER_SIZE) /*!< Total stored record length when the payload is already aligned. */
 #endif
 
-/* Number of Data Records is calculated if we know the total Data Size. */
 #if (GET_MOD(EE_EEPROM_SIZE, EE_DATA_VALUE_SIZE) != 0U)
-#define EE_MAX_RECORD_NUMBER            (GET_INT(EE_EEPROM_SIZE, EE_DATA_VALUE_SIZE) + 1U)
+#define EE_MAX_RECORD_NUMBER            (GET_INT(EE_EEPROM_SIZE, EE_DATA_VALUE_SIZE) + 1U) /*!< Number of logical record identifiers needed to cover the requested EEPROM size. */
 #else
-#define EE_MAX_RECORD_NUMBER            (GET_INT(EE_EEPROM_SIZE, EE_DATA_VALUE_SIZE))
+#define EE_MAX_RECORD_NUMBER            (GET_INT(EE_EEPROM_SIZE, EE_DATA_VALUE_SIZE)) /*!< Number of logical record identifiers needed to cover the requested EEPROM size. */
 #endif
+/*! @} */ /* End of Derived Geometry Helpers */
 
-/******************************************************************************/
-/*              Macros to determine the total number of sectors               */
-/*                      allocated for EEPROM Emulation                        */
-/******************************************************************************/
-/* Total number of alternative sectors used */
-/* Number of alternative sectors needed for Round Robin scheme. This number must be minimum equal to 2 */
-#define EE_ACTUAL_READY_SECTORS         0x2U
-/* This should be a minimum of 3 */
-#define EE_READY_SECTORS                (EE_ACTUAL_READY_SECTORS + EE_EXTRA_READY_SECTORS)
-/* Number of records that can be stored in a sector */
-#define EE_SECTOR_CAPACITY              GET_INT(EE_SECTOR_SIZE - EE_SECTOR_HEADER_SIZE, EE_RECORD_LENGTH)
-
-/* Number of bytes in a sector that are not used for emulation */
-#define EE_SECTOR_WASTE                 GET_MOD(EE_SECTOR_SIZE- EE_SECTOR_HEADER_SIZE, EE_RECORD_LENGTH)
-/* Number of sectors required to store the specified EEPROM size */
+/*!
+ * @name Sector Pool Sizing
+ * @brief Macros that derive active, ready, and total sector counts for the
+ *        round-robin pool.
+ * @{
+ */
+#define EE_ACTUAL_READY_SECTORS         0x2U                                 /*!< Minimum number of ready sectors required by the round-robin scheme. */
+#define EE_READY_SECTORS                (EE_ACTUAL_READY_SECTORS + EE_EXTRA_READY_SECTORS) /*!< Total ready-sector budget, including user-reserved spare sectors. */
+#define EE_SECTOR_CAPACITY              GET_INT(EE_SECTOR_SIZE - EE_SECTOR_HEADER_SIZE, EE_RECORD_LENGTH) /*!< Number of records that fit in one sector after the header area is removed. */
+#define EE_SECTOR_WASTE                 GET_MOD(EE_SECTOR_SIZE - EE_SECTOR_HEADER_SIZE, EE_RECORD_LENGTH) /*!< Unused bytes left at the end of one sector after record packing. */
 #if GET_MOD(EE_MAX_RECORD_NUMBER + 0x1U, EE_SECTOR_CAPACITY)
-#define EE_ACTIVE_SECTOR_REQUIRED       (GET_INT(EE_MAX_RECORD_NUMBER + 0x1U, EE_SECTOR_CAPACITY) + 0x1U)
+#define EE_ACTIVE_SECTOR_REQUIRED       (GET_INT(EE_MAX_RECORD_NUMBER + 0x1U, EE_SECTOR_CAPACITY) + 0x1U) /*!< Minimum active sectors required to hold every record plus the swap slot. */
 #else
-#define EE_ACTIVE_SECTOR_REQUIRED       GET_INT(EE_MAX_RECORD_NUMBER + 0x1U, EE_SECTOR_CAPACITY)
+#define EE_ACTIVE_SECTOR_REQUIRED       GET_INT(EE_MAX_RECORD_NUMBER + 0x1U, EE_SECTOR_CAPACITY) /*!< Minimum active sectors required to hold every record plus the swap slot. */
 #endif
+#define EE_ACTIVE_SECTORS               (EE_EXTRA_ACTIVE_SECTORS + EE_ACTIVE_SECTOR_REQUIRED) /*!< Total active-sector budget after applying the user-reserved active margin. */
+#define EE_ALLOCATED_SECTORS            (EE_ACTIVE_SECTORS + EE_READY_SECTORS) /*!< Total sectors that must be mapped into `startSecAddr`. */
+/*! @} */ /* End of Sector Pool Sizing */
 
-/* Total number of ACTIVE sectors allocated */
-#define EE_ACTIVE_SECTORS               (EE_EXTRA_ACTIVE_SECTORS + EE_ACTIVE_SECTOR_REQUIRED)
-
-/* Total number of sectors allocated will also include some 'alternative sectors' */
-#define EE_ALLOCATED_SECTORS            (EE_ACTIVE_SECTORS + EE_READY_SECTORS)
-
-
-/* Callback function prototype */
+/*!
+ * @brief Callback type invoked while long Flash operations are polled.
+ */
 typedef void (*ee_callback_t)(void);
 
-/* define Eeprom Config type */
+/*!
+ * @brief EEPROM emulation runtime state container.
+ *
+ * The application fills `startSecAddr` before initialization. The remaining
+ * fields are maintained by the driver while it discovers the active sector
+ * window, tracks the next blank record slot, and preserves erase-cycle
+ * information for swap recovery.
+ *
+ * | Field | Type | Description |
+ * |-------|------|-------------|
+ * | startSecAddr | `uint32_t[EE_ALLOCATED_SECTORS]` | Ordered list of Flash sector base addresses reserved for EEPROM emulation. |
+ * | blankSpace | `uint32_t` | Address of the next writable record slot in the youngest active sector. |
+ * | eraseCycValue | `uint32_t` | Erase-cycle value associated with the current youngest active sector. |
+ * | maxValidIndex | `uint32_t` | Highest live entry index in `startSecAddr` after dead sectors are removed. |
+ */
 typedef struct
 {
-    uint32_t startSecAddr[EE_ALLOCATED_SECTORS];      /* pointer to point to start address of each emulated sector */
-    uint32_t blankSpace;       /* the blank space to write new record */
-    uint32_t eraseCycValue; /* erase cycle of current active sector */
-    uint32_t maxValidIndex; /* maximum valid index */
+    uint32_t startSecAddr[EE_ALLOCATED_SECTORS]; /*!< Flash sector base addresses assigned to the emulation pool. */
+    uint32_t blankSpace;                         /*!< Next writable record address inside the current youngest active sector. */
+    uint32_t eraseCycValue;                     /*!< Erase-cycle value tracked for the current active write sector. */
+    uint32_t maxValidIndex;                     /*!< Highest live sector index after dead sectors are compacted out. */
 } eeprom_config_t;
 
-/******************************************************************************/
-/*                             Global variables                               */
-/******************************************************************************/
-/* Null Callback function definition */
-#define EE_NULL_CALLBACK ((ee_callback_t)0x00000000U)
+/*!
+ * @name Callback Support
+ * @brief Macros and variables related to the optional long-operation callback.
+ * @{
+ */
+#define EE_NULL_CALLBACK                ((ee_callback_t)0x00000000U)         /*!< Sentinel used when no callback is registered. */
 #if EE_CALLBACK_ENABLE
-/* A function pointer to the CallBack function */
-#define p_gEECallBack   g_EECallBack
-extern  ee_callback_t    g_EECallBack;
+#define p_gEECallBack                   g_EECallBack                          /*!< Alias used by the implementation to access the registered callback. */
+extern ee_callback_t g_EECallBack;                                           /*!< Application callback invoked while Flash erase or program commands are pending. */
 #else
-#define p_gEECallBack   EE_NULL_CALLBACK
+#define p_gEECallBack                   EE_NULL_CALLBACK                      /*!< Alias that collapses to a null callback when callbacks are disabled. */
 #endif
+/*! @} */ /* End of Callback Support */
 
-/******************************************************************************/
-/*                          Function declarations                             */
-/******************************************************************************/
+/*******************************************************************************
+ * API
+ ******************************************************************************/
 
 /*!
- * @brief Emulated EEPROM Initialize.
+ * @name Initialization
+ * @brief Functions for discovering sector state and preparing the emulation
+ *        pool for record access.
+ * @{
+ */
+
+/*!
+ * @brief Discover live sectors, repair incomplete state, and prepare the
+ *        emulation pool for record access.
  *
- * This function is used to initialize EEPROM system including:
- *      - remove dead sector from EEPROM system and determine maximum
- *        valid index in array of start sector address after that.
- *      - Initialize all sectors by erasing the "possible-error-sector".
- *      - Initialize and update cache table if enabled.
+ * This function removes sectors already marked dead, reconstructs the active
+ * sector window, initializes missing sector headers when necessary, and
+ * rebuilds the optional cache table.
  *
- * @param[in] eepromConfig: EEPROM configuration.
- * @return operation status
- * @retval STATUS_SUCCESS: all sectors are initialized successfully.
- * @retval STATUS_EdPROM_MAKE_DEAD_SUCCESS: sector is initialized unsuccessfully and then
- *                                          make it to DEAD successfully.
- * @retval STATUS_EdPROM_MAKE_DEAD_ERROR: sector is initialized unsuccessfully and then
- *                                         make it to DEAD unsuccessfully.
+ * @param[in,out] eepromConfig  Pointer to the EEPROM emulation runtime state.
+ *                              `startSecAddr` must already contain
+ *                              `EE_ALLOCATED_SECTORS` Flash sector base
+ *                              addresses reserved for EEPROM emulation.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS                   Initialization completed
+ *                                          successfully.
+ * @retval STATUS_EdPROM_MAKE_DEAD_SUCCESS  One recovery step failed, the
+ *                                          sector was retired successfully,
+ *                                          and initialization can continue.
+ * @retval STATUS_EdPROM_MAKE_DEAD_ERROR    A recovery step failed and the
+ *                                          sector could not be retired.
+ *
+ * @post `blankSpace`, `eraseCycValue`, and `maxValidIndex` reflect the
+ *       reconstructed runtime state of the emulation pool.
  */
 status_t Eed_InitEeprom(eeprom_config_t *eepromConfig);
 
+/*! @} */ /* End of Initialization */
+
 /*!
- * @brief Emulated EEPROM Write.
+ * @name Record Access
+ * @brief Functions for writing and reading fixed-size EEPROM records.
+ * @{
+ */
+
+/*!
+ * @brief Write one logical EEPROM record.
  *
- * This function is used to write the specific data record.
- * The data in parameter "p_data" will be written to the specific record.
+ * The driver writes the record payload pointed to by @a pData into the slot
+ * identified by @a data_id. When the current active sector is full, the
+ * driver performs the required sector-swap sequence before retrying the
+ * record write.
  *
- * @note The data size is defined by EE_DATA_VALUE_SIZE, user have to make sure
- * EE_DATA_VALUE_SIZE of pData is readable.
+ * @param[in,out] eepromConfig  Pointer to the EEPROM emulation runtime state.
+ * @param[in] data_id           Logical record identifier. Must be less than
+ *                              `EE_MAX_RECORD_NUMBER`.
+ * @param[in] pData             Pointer to `EE_DATA_VALUE_SIZE` bytes of source
+ *                              data.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS                   The record was written
+ *                                          successfully.
+ * @retval STATUS_EdPROM_ID_OUT_OF_RANGE    `data_id` is outside the emulated
+ *                                          EEPROM address space.
+ * @retval STATUS_EdPROM_MAKE_DEAD_ERROR    The write or swap flow failed and
+ *                                          the affected sector could not be
+ *                                          retired safely.
  *
- * @param[in] eepromConfig: EEPROM configuration.
- * @param[in] data_id: index of the record to be written.
- * @param[in] pData: pointer to the data to be written.
- * @return operation status
- * @retval STATUS_SUCCESS: write operation is successful.
- * @retval STATUS_EdPROM_MAKE_DEAD_ERROR: write operation is unsuccessful.
+ * @note `pData` must reference at least `EE_DATA_VALUE_SIZE` readable bytes.
  */
 status_t Eed_WriteEeprom(eeprom_config_t *eepromConfig, uint16_t data_id, const uint8_t *pData);
 
 /*!
- * @brief Emulated EEPROM Read.
+ * @brief Read the newest stored copy of one logical EEPROM record.
  *
- * This function is used to read the specific data record.
- * This function will update data in pData with the data in the specific record.
+ * @param[in,out] eepromConfig  Pointer to the EEPROM emulation runtime state.
+ * @param[in] data_id           Logical record identifier. Must be less than
+ *                              `EE_MAX_RECORD_NUMBER`.
+ * @param[out] pData            Pointer to `EE_DATA_VALUE_SIZE` writable bytes
+ *                              that receive the record payload.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS                The requested record was found and
+ *                                       copied into @a pData.
+ * @retval STATUS_EdPROM_ID_OUT_OF_RANGE `data_id` is outside the emulated
+ *                                       EEPROM address space.
+ * @retval STATUS_EdPROM_ID_NOT_FOUND    No valid record with the requested ID
+ *                                       is currently stored.
  *
- * @note User have to make sure EE_DATA_VALUE_SIZE of pData is writable.
- *
- * @param[in] eepromConfig: EEPROM configuration.
- * @param[in] data_id: index of the record to be read.
- * @param[out] pData: pointer to the data to be read.
- * @return operation status
- * @retval STATUS_SUCCESS: read operation is successful.
- * @retval STATUS_EdPROM_ID_OUT_OF_RANGE: Given data_id is out of range.
- * @retval STATUS_EdPROM_ID_NOT_FOUND: Given data_id is not found.
+ * @note `pData` must reference at least `EE_DATA_VALUE_SIZE` writable bytes.
  */
 status_t Eed_ReadEeprom(eeprom_config_t *eepromConfig, uint16_t data_id, uint8_t *pData);
 
+/*! @} */ /* End of Record Access */
+
 /*!
- * @brief Emulated EEPROM De-Init.
- *
- * This function is to release all the Flash used to EEPROM emulation. After de-initialized, the Flash
- * for emulation will be fully erased.
- *
- * @param[in] eepromConfig: EEPROM configuration.
- * @param[in] data_id: index of the record to be erased.
- * @return operation status
- * @retval STATUS_SUCCESS: erase operation is successful.
- * @retval STATUS_EdPROM_SECTOR_ERASE_ERROR: EEPROM erase operation is unsuccessful.
+ * @name Shutdown
+ * @brief Functions for releasing the Flash region reserved for EEPROM
+ *        emulation.
+ * @{
  */
 
+/*!
+ * @brief Erase every sector assigned to the EEPROM emulation pool.
+ *
+ * @param[in,out] eepromConfig  Pointer to the EEPROM emulation runtime state.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS                    All allocated sectors were erased
+ *                                           successfully.
+ * @retval STATUS_EdPROM_SECTOR_ERASE_ERROR  At least one sector erase failed.
+ *
+ * @post The Flash sectors listed in `startSecAddr` are returned to the blank
+ *       state expected by a fresh EEPROM emulation initialization.
+ */
 status_t Eed_DeinitEeprom(eeprom_config_t *eepromConfig);
+
+/*! @} */ /* End of Shutdown */
+
+/*! @} */ /* End of ee_emulation_driver */
 
 #endif /* _EE_EMULATION_H_ */

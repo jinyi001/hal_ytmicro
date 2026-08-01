@@ -1,127 +1,75 @@
 /*!
-@defgroup linflexd_uart LINFlexD UART Driver (Linflexd_uart)
-@ingroup linflexd_driver
-@brief This section describes the programming interface of the Peripheral driver for LINFlexD in UART mode.
-
-# UART Driver Overview {#UARTDRIVEROvw}
-
-The LINFlexD in UART mode is used for serial communication. These sections
-describe the YTMicro SDK software modules API that can be used for initializing and configuring the module, as well
-as initiating serial communications using the interrupt-based method.<br />
-
-# UART Driver Device structures {#UARTDRIVERDevS}
-
-The driver uses instantiations of the linflexd_uart_state_t to maintain the current state of a particular UART Hardware instance
-module driver.<br />
-The user is required to provide memory for the driver state structures during the initialization. The driver itself
-does not statically allocate memory.
-
-# Integration guideline #
-
-## Compilation units ##
-
-The following files need to be compiled in the project:
-\verbatim
-${SDK_PATH}\platform\drivers\src\linflexd\linflexd_uart_driver.c
-${SDK_PATH}\platform\drivers\src\linflexd\linflexd_uart_irq.c
-\endverbatim
-
-## Include path ##
-
-The following paths need to be added to the include path of the toolchain:
-\verbatim
-${SDK_PATH}\platform\drivers\inc\
-\endverbatim
-
-## Compile symbols ##
-
-No special symbols are required for this component
-
-## Dependencies ##
-
-- \ref clock_manager @n
-- \ref interrupt_manager @n
-- \ref osif @n
-
-# UART Driver Initialization {#UARTDRIVERInit}
-
-1. To initialize the UART driver, call the LINFlexD_UART_DRV_Init() function and pass the instance number of the relevant LINFlexD
-hardware interface instance which is LINFlexD instance in this release.<br />
-For example: to use LINFlexD0 pass value 0 to the initialization function.
-2. Pass a user configuration structure #linflexd_uart_user_config_t as shown here:
-~~~~~{.c}
-/* UART Driver configuration structure */
-typedef struct
-{
-    uint32_t baudRate;                             /*!< baud rate */
-    bool parityCheck;                              /*!< parity control - enabled/disabled
-                                                        NOTE: this parameter is valid only for 8/16 bits words;
-                                                              for 7/15 word length parity is always enabled */
-    linflexd_uart_parity_type_t parityType;        /*!< always 0/always 1/even/odd */
-    linflexd_uart_stop_bits_count_t stopBitsCount; /*!< number of stop bits, 1 stop bit (default) or 2 stop bits */
-    linflexd_uart_word_length_t wordLength;        /*!< number of bits per transmitted/received word */
-    linflexd_uart_transfer_type_t txTransferType;    /*!< Type of UART tx transfer (interrupt/dma based) */
-    linflexd_uart_transfer_type_t rxTransferType;    /*!< Type of UART rx transfer (interrupt/dma based) */
-    uint8_t rxDMAChannel;                          /*!< Channel number for DMA rx channel.
-                                                        If DMA mode is not used this field will be ignored. */
-    uint8_t txDMAChannel;                          /*!< Channel number for DMA tx channel.
-                                                        If DMA mode is not used this field will be ignored. */
-} linflexd_uart_user_config_t;
-~~~~~
-3. For UART, typically the user configures the #linflexd_user_config_t instantiation with a baudrate.<br />
--E.g. 115200 bps uartInitConfig.baudRate = 115200U.
-4. UART transfers with parity check or not.
-5. Only parity check enbaled, parity type will take effect.<br />
--E.g. uartInitConfig.parityType = LINFlexD_UART_PARITY_EVEN
-6. User can config stopBitsCount to change UART stop bits.<br />
--E.g. uartInitConfig.stopBitsCount = LINFlexD_UART_ONE_STOP_BIT.
-7. User can config wordLength to change UART data length.<br />
--E.g. uartInitConfig.wordLength = LINFlexD_UART_8_BITS
-8. UART tx transfer will base on txTransferType.
-9. UART rx transfer will base on rxTransferType.
-10. Only DMA rx transfer selected, rxDMAChannel will take effect and UART rx transfer will use the rxDMAChannel.
-11. Only DMA tx transfer selected, txDMAChannel will take effect and UART tx transfer will use the txDMAChannel.
-12. This is a code example to set up a user LINFlexD UART Driver configuration instantiation:
-~~~~~{.c}
-    /* Device instance number as UART instance*/
-    #define LI0 (0U)
-
-    linflexd_uart_state_t uartState;
-    linflexd_uart_user_config_t uartUserConfig;
-    /* Set baudrate 115200 bps */
-    uartUserConfig.baudRate = 115200U;
-    /* Parity check disable */
-    uartUserConfig.parityCheck = false;
-    /* Set stop bits 1-bit */
-    uartUserConfig.stopBitsCount = LINFlexD_UART_ONE_STOP_BIT;
-    /* Set word length 8-bits */
-    uartUserConfig.wordLength = LINFlexD_UART_8_BITS;
-    /* Set tx transfer based on interrupt */
-    uartUserConfig.txTransferType = LINFlexD_UART_USING_INTERRUPTS;
-    /* Set rx transfer based on interrupt */
-    uartUserConfig.rxTransferType = LINFlexD_UART_USING_INTERRUPTS;
-
-    /* Initialize LINFlexD Hardware interface */
-    LINFlexD_UART_DRV_Init(LI0, (linflexd_uart_user_config_t *) &uartUserConfig, (linflexd_uart_state_t *) &uartState);
-~~~~~
-
-# UART Data Transfers {#UARTDRIVERTrnsf}
-
-The driver implements transmit and receive functions to transfer buffers of data by blocking, polling and non-blocking modes.
-
-The blocking transmit and receive functions include LINFlexD_UART_DRV_SendDataBlocking() and the LINFlexD_UART_DRV_ReceiveDataBlocking functions.
-
-The polling transmit and receive functions include LINFlexD_UART_DRV_SendDataPolling() and the LINFlexD_UART_DRV_ReceiveDataPolling functions.
-
-The non-blocking (async) transmit and receive functions include the LINFlexD_UART_DRV_SendData() and the LINFlexD_UART_DRV_ReceiveData functions.
-
-The LINFlexD_UART_DRV_ReceiveData() function should be called before data is transferring on the LINFlexD bus.
-
-## Note
-
-1. When the vector table is not in ram (__flash_vector_table__ = 1):
-    - INT_SYS_InstallHandler shall check if the function pointer provided as parameter for the new handler is already
-    present in the vector table for the given IRQ number.
-    - The user will be required to manually add the correct handlers in the startup files
-
-*/
+ * @defgroup linflexd_uart LINFlexD UART Driver
+ * @ingroup linflexd_driver
+ * @brief UART mode driver for the LINFlexD peripheral.
+ *
+ * ## Key Features
+ * - Configurable baud rate with fractional divider
+ * - Word length: 7, 8, 15, or 16 bits
+ * - Parity: even, odd, always-0, always-1; disabled only for 8/16-bit words
+ * - Stop bits: 1 or 2
+ * - Three transfer models: blocking, polling, and non-blocking
+ * - Interrupt-driven and DMA-driven data transfer
+ * - Rx/Tx callback support for continuous streaming
+ * - Idle line timeout detection with configurable counter
+ * - Sleep mode with automatic wakeup on bus activity
+ *
+ * ## Configuration
+ *
+ * Fill a @ref linflexd_uart_user_config_t structure and pass it to
+ * LINFlexD_UART_DRV_Init(). Key fields:
+ *
+ * | Field             | Description                                 |
+ * |-------------------|---------------------------------------------|
+ * | baudRate          | Desired baud rate in bps                    |
+ * | wordLength        | Data word width (7/8/15/16 bits)            |
+ * | parityCheck       | Enable or disable parity                    |
+ * | parityType        | Parity type when enabled                    |
+ * | stopBitsCount     | Number of stop bits (1 or 2)                |
+ * | txTransferType    | Interrupt or DMA for Tx                     |
+ * | rxTransferType    | Interrupt or DMA for Rx                     |
+ *
+ * ## Usage Patterns
+ *
+ * ### Basic Init → Tx → Rx → Deinit
+ * @code
+ * linflexd_uart_state_t state;
+ * linflexd_uart_user_config_t config;
+ * config.baudRate       = 115200U;
+ * config.wordLength     = LINFlexD_UART_8_BITS;
+ * config.parityCheck    = false;
+ * config.stopBitsCount  = LINFlexD_UART_ONE_STOP_BIT;
+ * config.txTransferType = LINFlexD_UART_USING_INTERRUPTS;
+ * config.rxTransferType = LINFlexD_UART_USING_INTERRUPTS;
+ *
+ * LINFlexD_UART_DRV_Init(0U, &state, &config);
+ *
+ * // Blocking transmit
+ * LINFlexD_UART_DRV_SendDataBlocking(0U, txBuf, sizeof(txBuf), 1000U);
+ *
+ * // Blocking receive
+ * LINFlexD_UART_DRV_ReceiveDataBlocking(0U, rxBuf, 10U, 1000U);
+ *
+ * LINFlexD_UART_DRV_Deinit(0U);
+ * @endcode
+ *
+ * ## API Reference
+ *
+ * | Group                          | Key Functions                                     |
+ * |-------------------------------|---------------------------------------------------|
+ * | Initialization / Deinitialization | LINFlexD_UART_DRV_Init, LINFlexD_UART_DRV_Deinit |
+ * | Data Transmission             | LINFlexD_UART_DRV_SendDataBlocking, LINFlexD_UART_DRV_SendData |
+ * | Data Reception                | LINFlexD_UART_DRV_ReceiveDataBlocking, LINFlexD_UART_DRV_ReceiveData |
+ * | Buffer Management             | LINFlexD_UART_DRV_SetTxBuffer, LINFlexD_UART_DRV_SetRxBuffer |
+ * | Power Mode                    | LINFlexD_UART_DRV_GoToSleepMode, LINFlexD_UART_DRV_GotoIdleState |
+ * | Timeout Configuration         | LINFlexD_UART_DRV_ConfigureTimeoutCounter         |
+ *
+ * ## Integration Notes
+ * - The application must enable the LINFlexD peripheral clock before calling Init.
+ * - Only one mode (UART or LIN) may be active per LINFlexD instance.
+ * - For DMA transfers, DMA channels must be configured and the DMA driver
+ *   initialized before calling Init.
+ * - Callbacks execute in interrupt context; keep them short.
+ *
+ * @note Word lengths of 15 and 16 bits use 2-byte buffer elements.
+ */

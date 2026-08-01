@@ -8,6 +8,12 @@
 /*!
  * @file power_manager_YTM32B1Mx.h
  * @version 1.4.1
+ *
+ * @brief Power Manager — YTM32B1Mx platform-specific definitions and API.
+ *
+ * This header defines the power modes, configuration structures, and
+ * platform-specific functions for the YTM32B1M series MCUs. It is
+ * automatically included by power_manager.h based on the target CPU.
  */
 
 #ifndef POWER_MANAGER_YTM32B1Mx_H
@@ -16,22 +22,31 @@
 #include "device_registers.h"
 #include "status.h"
 
+/*!
+ * @ingroup power_manager
+ * @defgroup power_ytm32b1mx Power Manager (YTM32B1Mx)
+ * @brief YTM32B1Mx-specific power mode definitions and implementation.
+ * @{
+ */
+
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
+
 /*!
- * @brief Power modes enumeration.
+ * @brief Power mode enumeration for YTM32B1Mx devices.
  *
- * Defines power modes. Used in the power mode configuration structure
- * (power_manager_user_config_t). From ARM core perspective, Power modes
- * can be generally divided into run modes, sleep and deepsleep modes
- * List of power modes supported by specific chip along with requirements for entering
- * and exiting of these modes can be found in chip documentation.
- * List of all supported power modes:\n
- *  \li POWER_MANAGER_RUN - RUN mode.
- *  \li POWER_MANAGER_SLEEP - SLEEP mode.
- *  \li POWER_MANAGER_DEEPSLEEP - DEEPSLEEP mode.
- * Implements power_manager_modes_t_Class
+ * Lists the power modes available on the YTM32B1M series. The available
+ * modes depend on the specific device variant and feature macros.
+ *
+ * | Value                      | Description                                   |
+ * |----------------------------|-----------------------------------------------|
+ * | POWER_MANAGER_RUN          | Normal run mode, full performance.            |
+ * | POWER_MANAGER_SLEEP        | Core in sleep, normal interrupt wakeup.       |
+ * | POWER_MANAGER_DEEPSLEEP    | Most clocks gated, async interrupt wakeup.    |
+ * | POWER_MANAGER_STANDBY      | LDO in low power, async interrupt wakeup.     |
+ * | POWER_MANAGER_POWERDOWN    | Partial digital powered, WKU wakeup.          |
+ * | POWER_MANAGER_DEEPPOWERDOWN| Deepest low-power, limited wakeup sources.    |
  */
 typedef enum
 {
@@ -48,18 +63,12 @@ typedef enum
 } power_manager_modes_t;
 
 /*!
- * @brief Power mode user configuration structure.
+ * @brief Power mode user configuration structure for YTM32B1Mx.
  *
- * List of power mode configuration structure members depends on power options available
- * for the specific chip. Complete list contains:
- * mode - power mode. List of available modes is chip-specific. See power_manager_modes_t
- * list of modes.
- * sleepOnExitOption - Controls whether the sleep-on-exit option value is used(when set to true)
- * or ignored(when set to false). See sleepOnExitValue.
- * sleepOnExitValue - When set to true, ARM core returns to sleep or deep sleep
- * state after interrupt service finishes. When set to false, core stays
- * woken-up.
- * Implements power_manager_user_config_t_Class
+ * | Field           | Type                    | Description                                        |
+ * |-----------------|-------------------------|----------------------------------------------------|
+ * | powerMode       | power_manager_modes_t   | Target power mode to enter.                        |
+ * | sleepOnExitValue| bool                    | If true, core returns to sleep after ISR completes.|
  */
 typedef struct
 {
@@ -68,8 +77,17 @@ typedef struct
 } power_manager_user_config_t;
 
 /*!
- * @brief Power Modes
+ * @brief Power mode status enumeration.
  *
+ * Reports the current hardware power mode state.
+ *
+ * | Value          | Description                    |
+ * |----------------|--------------------------------|
+ * | STAT_RUN       | Currently in RUN mode.         |
+ * | STAT_SLEEP     | Currently in SLEEP mode.       |
+ * | STAT_DEEPSLEEP | Currently in DEEPSLEEP mode.   |
+ * | STAT_STANDBY   | Currently in STANDBY mode.     |
+ * | STAT_INVALID   | Invalid / unknown power mode.  |
  */
 typedef enum
 {
@@ -81,8 +99,20 @@ typedef enum
 } power_mode_stat_t;
 
 /*!
- * @brief System Reset Source Name definitions
- * Implements rcu_source_names_t_Class
+ * @brief System reset source enumeration for YTM32B1Mx.
+ *
+ * Identifies the source of a system reset event.
+ *
+ * | Value                       | Description                          |
+ * |-----------------------------|--------------------------------------|
+ * | RCU_EXTERNAL_PIN            | External pin reset.                  |
+ * | RCU_CMU_LOSS_OF_CLOCK       | Clock monitor unit loss-of-clock.    |
+ * | RCU_SOFTWARE                | Software-triggered reset.            |
+ * | RCU_WDG                     | Watchdog timer reset.                |
+ * | RCU_FORCE_POWER_ON          | Forced power-on reset.               |
+ * | RCU_POWER_ON                | Normal power-on reset.               |
+ * | RCU_CORE_LOCKUP             | ARM core lockup reset.               |
+ * | RCU_DEEPSLEEP_ACK_TIMEOUT   | Deep sleep acknowledge timeout.      |
  */
 typedef enum
 {
@@ -98,6 +128,7 @@ typedef enum
     RCU_DEEPSLEEP_ACK_TIMEOUT    = 8U,       /*!<Deepsleep acknowledge timeout reset */
     RCU_SRC_NAME_MAX
 } rcu_source_names_t;
+
 /*******************************************************************************
  * API
  ******************************************************************************/
@@ -106,48 +137,48 @@ typedef enum
 extern "C" {
 #endif
 
+/*******************************************************************************
+ * Platform Initialization
+ ******************************************************************************/
 /*!
- * @brief This function implementation-specific configuration of power modes.
+ * @name Platform Initialization
+ * @brief YTM32B1Mx-specific initialization and default configuration.
+ * @{
+ */
+
+/*!
+ * @brief Perform platform-specific power manager initialization.
  *
- * This function performs the actual implementation-specific initialization based on the provided power mode configurations.
- * In addition, This function get all clock source were enabled. This one was used for update init clock when CPU 
-    jump from very low power mode to run or high speed run mode.
+ * Called internally by POWER_SYS_Init(). Performs any YTM32B1Mx-specific
+ * hardware setup required for power mode management.
  *
- * @return Operation status
- *        - STATUS_SUCCESS: Operation was successful.
- *        - STATUS_ERROR: Operation failed.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS  Initialization completed successfully.
+ * @retval STATUS_ERROR    Initialization failed.
  */
 status_t POWER_SYS_DoInit(void);
 
 /*!
- * @brief This function implementation-specific de-initialization of power manager.
+ * @brief Perform platform-specific power manager de-initialization.
  *
- * This function performs the actual implementation-specific de-initialization.
+ * Called internally by POWER_SYS_Deinit(). Restores platform-specific
+ * hardware to its default state.
  *
- * @return Operation status
- *        - STATUS_SUCCESS: Operation was successful.
- *        - STATUS_ERROR: Operation failed.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS  De-initialization completed successfully.
+ * @retval STATUS_ERROR    De-initialization failed.
  */
 status_t POWER_SYS_DoDeinit(void);
 
 /*!
- * @brief This function configures the power mode.
+ * @brief Get the default power mode configuration for YTM32B1Mx.
  *
- * This function performs the actual implementation-specific logic to switch to one of the defined power modes.
+ * Fills the configuration structure with the default values:
+ *   - powerMode = POWER_MANAGER_RUN
+ *   - sleepOnExitValue = false
  *
- * @param configPtr: Pointer to user configuration structure
- * @return Operation status
- *        - STATUS_SUCCESS: Operation was successful.
- *        - STATUS_MCU_TRANSITION_FAILED: Operation failed.
- */
-status_t POWER_SYS_DoSetMode(const power_manager_user_config_t * const configPtr);
-
-/*!
- * @brief Gets the default power_manager configuration structure.
- *
- * This function gets the power_manager configuration structure of the default power mode.
- *
- * @param[out] defaultConfig : Pointer to power mode configuration structure of the default power mode.
+ * @param[out] defaultConfig  Pointer to the configuration to fill.
+ *                            Must not be NULL.
  */
 static inline void POWER_SYS_DoGetDefaultConfig(power_manager_user_config_t * const defaultConfig)
 {
@@ -155,13 +186,42 @@ static inline void POWER_SYS_DoGetDefaultConfig(power_manager_user_config_t * co
     defaultConfig->sleepOnExitValue = false;         /*!< Sleep on exit value */
 }
 
+/*! @} */ /* End of Platform Initialization */
+
+/*******************************************************************************
+ * Platform Mode Control
+ ******************************************************************************/
+/*!
+ * @name Platform Mode Control
+ * @brief YTM32B1Mx-specific power mode switching.
+ * @{
+ */
+
+/*!
+ * @brief Perform platform-specific power mode switch.
+ *
+ * Called internally by POWER_SYS_SetMode(). Configures the ARM SCB and
+ * PCU registers and executes the WFI/STANDBY instruction to enter the
+ * requested power mode.
+ *
+ * @param[in] configPtr  Pointer to the target power mode configuration.
+ *                       Must not be NULL.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS              Mode switch completed successfully.
+ * @retval STATUS_MCU_TRANSITION_FAILED Mode switch failed.
+ */
+status_t POWER_SYS_DoSetMode(const power_manager_user_config_t * const configPtr);
+
+/*! @} */ /* End of Platform Mode Control */
+
 #if defined(__cplusplus)
 }
 #endif
 
+/*! @} */ /* End of power_ytm32b1mx group */
+
 #endif /* POWER_MANAGER_YTM32B1Mx_H */
 
-/*! @}*/
 /*******************************************************************************
  * EOF
  ******************************************************************************/

@@ -8,51 +8,31 @@
 /*!
  * @file trng_driver.c
  * @version 1.4.1
+ *
+ * @brief TRNG Driver - implementation of the public TRNG_DRV_* API.
+ *
+ * This file implements the polling-oriented TRNG driver declared in
+ * trng_driver.h. The driver resolves the peripheral base address from the
+ * instance index and delegates low-level register programming to the hardware
+ * access layer in trng_hw_access.h.
  */
 
 #include "trng_driver.h"
+
 /*******************************************************************************
  * Variables
  ******************************************************************************/
 
 /*! @brief Table of base addresses for TRNG instances. */
-static TRNG_Type * const g_trngBase[TRNG_INSTANCE_COUNT] = TRNG_BASE_PTRS ;
+static TRNG_Type * const g_trngBase[TRNG_INSTANCE_COUNT] = TRNG_BASE_PTRS;
 
+/*******************************************************************************
+ * Initialization & De-initialization
+ ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TRNG_DRV_Get_Ent
- * Description   : This function read the entropy value.
- * Reading the highest offset(ENT(7)) will clear the entire entropy value
- * and start a new entropy generation.  
- *
- *END**************************************************************************/
-void TRNG_DRV_Get_Ent(uint32_t instance,uint32_t pEntValue[])
-{
-    DEV_ASSERT(instance < TRNG_INSTANCE_COUNT);
-    TRNG_Type * const base = g_trngBase[instance];
-
-    if(pEntValue != NULL)
-    {
-        pEntValue[0] = TRNG_Get_ENT(base,0);
-        pEntValue[1] = TRNG_Get_ENT(base,1);
-        pEntValue[2] = TRNG_Get_ENT(base,2);
-        pEntValue[3] = TRNG_Get_ENT(base,3);
-#if !defined(FEATURE_TRNG_ENTROPY_COUNT_OPTIMIZE) || (FEATURE_TRNG_ENTROPY_COUNT_OPTIMIZE != 1)
-        pEntValue[4] = TRNG_Get_ENT(base,4);
-        pEntValue[5] = TRNG_Get_ENT(base,5);
-        pEntValue[6] = TRNG_Get_ENT(base,6);
-        pEntValue[7] = TRNG_Get_ENT(base,7);
-#endif /* FEATURE_TRNG_ENTROPY_COUNT_OPTIMIZE */
-    }
-}
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : TRNG_DRV_GetDefaultConfig
- * Description   : Get default config of TRNG.
- *
- *END**************************************************************************/
+/*!
+ * @brief Load the internal TRNG configuration shadow with default values.
+ */
 static void TRNG_DRV_GetDefaultConfig(void)
 {
     trngCfgSetting.lrunMax = 0x22;
@@ -73,22 +53,18 @@ static void TRNG_DRV_GetDefaultConfig(void)
     trngCfgSetting.pEntValue = NULL;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TRNG_DRV_Init
- * Description   : This function first resets the source triggers of all TRNG target modules
- * to their default values, then configures the TRNG with all the user defined in-out mappings. 
- *
- *END**************************************************************************/
+/*!
+ * @brief Initialize the TRNG driver and start entropy generation.
+ */
 void TRNG_DRV_Init(uint32_t instance, uint32_t entroyDelay)
 {
     DEV_ASSERT(instance < TRNG_INSTANCE_COUNT);
 
     TRNG_Type * const base = g_trngBase[instance];
 
-    if(entroyDelay <= 0xFFFFU)
+    if (entroyDelay <= 0xFFFFU)
     {
-        /* Reset the TRNG registers to their default state, including disabling the TRNG */
+        /* Reset the TRNG block before applying the default configuration. */
         TRNG_HW_Init(base);
         TRNG_DRV_GetDefaultConfig();
         trngCfgSetting.entropyDelay = entroyDelay;
@@ -103,29 +79,52 @@ void TRNG_DRV_Init(uint32_t instance, uint32_t entroyDelay)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TRNG_DRV_DeInit
- * Description   : Reset to default values the source triggers corresponding to all target modules.
- *
- *END**************************************************************************/
+/*!
+ * @brief Reset the TRNG peripheral to its default state.
+ */
 void TRNG_DRV_DeInit(uint32_t instance)
 {
     DEV_ASSERT(instance < TRNG_INSTANCE_COUNT);
     TRNG_Type * const base = g_trngBase[instance];
 
-    /* Reset the TRNG registers to their default state, including disabling the TRNG */
+    /* Restore the TRNG register block to its reset configuration. */
     TRNG_HW_Init(base);
-
-
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TRNG_DRV_IsIDLE
- * Description   : This function return the status of the entropy generation FSM.
- *
- *END**************************************************************************/
+/*******************************************************************************
+ * Entropy Data Access
+ ******************************************************************************/
+
+/*!
+ * @brief Read the current entropy block from the TRNG ENT registers.
+ */
+void TRNG_DRV_Get_Ent(uint32_t instance, uint32_t pEntValue[])
+{
+    DEV_ASSERT(instance < TRNG_INSTANCE_COUNT);
+    TRNG_Type * const base = g_trngBase[instance];
+
+    if (pEntValue != NULL)
+    {
+        pEntValue[0] = TRNG_Get_ENT(base, 0);
+        pEntValue[1] = TRNG_Get_ENT(base, 1);
+        pEntValue[2] = TRNG_Get_ENT(base, 2);
+        pEntValue[3] = TRNG_Get_ENT(base, 3);
+#if !defined(FEATURE_TRNG_ENTROPY_COUNT_OPTIMIZE) || (FEATURE_TRNG_ENTROPY_COUNT_OPTIMIZE != 1)
+        pEntValue[4] = TRNG_Get_ENT(base, 4);
+        pEntValue[5] = TRNG_Get_ENT(base, 5);
+        pEntValue[6] = TRNG_Get_ENT(base, 6);
+        pEntValue[7] = TRNG_Get_ENT(base, 7);
+#endif /* FEATURE_TRNG_ENTROPY_COUNT_OPTIMIZE */
+    }
+}
+
+/*******************************************************************************
+ * Status Query
+ ******************************************************************************/
+
+/*!
+ * @brief Get the current entropy-generation status.
+ */
 status_t TRNG_DRV_GetStatus(uint32_t instance)
 {
     DEV_ASSERT(instance < TRNG_INSTANCE_COUNT);
@@ -133,11 +132,12 @@ status_t TRNG_DRV_GetStatus(uint32_t instance)
     TRNG_Type * const base = g_trngBase[instance];
     bool entropyValid = TRNG_GetStatusFlag(base, TRNG_ENTROPY_VALID);
     bool freqCountValid = TRNG_GetStatusFlag(base, TRNG_FREQUENCY_COUNT_VALID);
-    if(TRNG_GetStatusFlag(base,TRNG_BUSY))
+
+    if (TRNG_GetStatusFlag(base, TRNG_BUSY))
     {
         status = STATUS_BUSY;
     }
-    else if(entropyValid && freqCountValid)
+    else if (entropyValid && freqCountValid)
     {
         status = STATUS_SUCCESS;
     }
@@ -145,5 +145,9 @@ status_t TRNG_DRV_GetStatus(uint32_t instance)
     {
         status = STATUS_ERROR;
     }
+
     return status;
 }
+/*******************************************************************************
+ * EOF
+ ******************************************************************************/

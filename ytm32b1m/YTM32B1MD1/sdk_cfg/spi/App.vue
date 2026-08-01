@@ -232,7 +232,7 @@
                 <el-input v-model="data.master[activeMasterInst].callback" />
               </el-form-item>
               <el-form-item
-                label="Calllback parameter"
+                label="Callback parameter"
                 prop="callbackParam"
               >
                 <el-input v-model="data.master[activeMasterInst].callbackParam" />
@@ -463,7 +463,7 @@
                 <el-input v-model="data.slave[activeSlaveInst].callback" />
               </el-form-item>
               <el-form-item
-                label="Calllback parameter"
+                label="Callback parameter"
                 prop="callbackParam"
               >
                 <el-input v-model="data.slave[activeSlaveInst].callbackParam" />

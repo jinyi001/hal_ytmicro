@@ -7,7 +7,12 @@
 
 /*!
  * @file spi_hw_access.h
- * @version 1.4.1
+ * @brief SPI hardware register access layer.
+ *
+ * This header provides low-level inline and non-inline functions for
+ * direct SPI peripheral register manipulation. It is used internally
+ * by the SPI master/slave driver layers and should not be called
+ * directly by application code.
  */
 
 #ifndef SPI_HW_ACCESS_H
@@ -23,8 +28,23 @@
  * Definitions
  ******************************************************************************/
 
-
-/*! @brief Prescaler values for SPI clock source.
+/*!
+ * @brief Prescaler values for the SPI baud rate clock source.
+ *
+ * These values are programmed into the TCR PRESCALE field and applied
+ * as a power-of-two divider to the module source clock before the
+ * SCK divider stage.
+ *
+ * | Value      | Divide Ratio |
+ * |------------|:------------:|
+ * | SPI_DIV_1  | 1            |
+ * | SPI_DIV_2  | 2            |
+ * | SPI_DIV_4  | 4            |
+ * | SPI_DIV_8  | 8            |
+ * | SPI_DIV_16 | 16           |
+ * | SPI_DIV_32 | 32           |
+ * | SPI_DIV_64 | 64           |
+ * | SPI_DIV_128| 128          |
  */
 typedef enum
 {
@@ -38,7 +58,25 @@ typedef enum
     SPI_DIV_128 = 7U,
 } spi_prescaler_t;
 
-/*! @brief SPI status flags.
+/*!
+ * @brief SPI status and interrupt flag identifiers.
+ *
+ * Used with SPI_GetStatusFlag(), SPI_ClearStatusFlag(), and
+ * SPI_SetIntMode() to query, clear, or enable/disable individual
+ * status flags and their corresponding interrupt sources.
+ *
+ * | Flag                   | Bit   | W1C | Description                    |
+ * |------------------------|:-----:|:---:|--------------------------------|
+ * | SPI_RX_DATA_FLAG       | 0     | No  | RX data available              |
+ * | SPI_TX_DATA_FLAG       | 1     | No  | TX FIFO ready for data         |
+ * | SPI_WORD_COMPLETE      | 2     | Yes | One word transfer completed    |
+ * | SPI_FRAME_COMPLETE     | 3     | Yes | One frame transfer completed   |
+ * | SPI_TRANSFER_COMPLETE  | 4     | Yes | Entire transfer completed      |
+ * | SPI_TRANSMIT_ERROR     | 5     | Yes | TX FIFO underrun               |
+ * | SPI_RECEIVE_ERROR      | 6     | Yes | RX FIFO overrun                |
+ * | SPI_DATA_MATCH         | 7     | Yes | Received data matches pattern  |
+ * | SPI_MODULE_BUSY        | 0x12  | No  | Module busy with transfer      |
+ * | SPI_ALL_STATUS         | 0xFC  | —   | Mask for clearing all W1C flags|
  */
 typedef enum
 {
@@ -54,7 +92,8 @@ typedef enum
     SPI_ALL_STATUS = 0x000000FC       /*!< Used for clearing all w1c status flags */
 } spi_status_flag_t;
 
-/*! @brief SPI master or slave configuration.
+/*!
+ * @brief SPI master or slave mode selection.
  */
 typedef enum
 {
@@ -62,7 +101,15 @@ typedef enum
     SPI_SLAVE = 0U      /*!< SPI peripheral operates in slave mode. */
 } spi_master_slave_mode_t;
 
-/*! @brief SPI pin (SDO and SDI) configuration.
+/*!
+ * @brief SPI SDO/SDI pin routing configuration.
+ *
+ * | Value               | SDI Pin      | SDO Pin      |
+ * |---------------------|:------------:|:------------:|
+ * | SPI_SDI_IN_SDO_OUT  | Input        | Output       |
+ * | SPI_SDI_IN_OUT      | Input+Output | —            |
+ * | SPI_SDO_IN_OUT      | —            | Input+Output |
+ * | SPI_SDI_OUT_SDO_IN  | Output       | Input        |
  */
 typedef enum
 {
@@ -72,7 +119,8 @@ typedef enum
     SPI_SDI_OUT_SDO_IN = 3U      /*!< SPI SDO input, SDI output. */
 } spi_pin_config_t;
 
-/*! @brief SPI data output configuration.
+/*!
+ * @brief SPI data output behavior when chip select is de-asserted.
  */
 typedef enum
 {
@@ -80,12 +128,12 @@ typedef enum
     SPI_DATA_OUT_TRISTATE = 1U  /*!< Data out is tri-stated when chip select de-asserted */
 } spi_data_out_config_t;
 
-/*! @brief SPI Transmit Command Register configuration structure.
+/*!
+ * @brief Transmit Command Register (TCR) configuration structure.
  *
- * This structure contains the Transmit Command Register (TCR) settings. Any writes
- * to the TCR will cause the entire TCR contents to be pushed to the TX FIFO.
- * Therefore any updates to the TCR should include updates to all of the register
- * bit fields to form a 32-bit write to the TCR.
+ * Groups all parameters that affect the SPI transmission behavior.
+ * Writing to the TCR pushes the entire register contents to the TX FIFO,
+ * so all fields should be configured before writing.
  */
 typedef struct
 {
@@ -103,23 +151,12 @@ typedef struct
     spi_sck_polarity_t clkPolarity; /*!< Selects clock polarity. */
 } spi_tx_cmd_config_t;
 
-/*! @brief SPI initialization configuration structure.
+/*!
+ * @brief SPI module initialization configuration structure.
  *
- * This structure contains parameters for the user to fill in to configure the SPI.
- * The user passes this structure into the SPI init function to configure it to
- * their desired parameters.
- * Example user code for:
-    - 60MHz assumed, check ref manual for exact value
-    - baudrate 500KHz
-    - master mode
-    - PCS is active low
-   @code
-    spi_init_config_t spiCfg;
-    spiCfg.spiSrcClk = 60000000;
-    spiCfg.baudRate = 500000;
-    spiCfg.spiMode = SPI_MASTER;
-    spiCfg.pcsPol = SPI_ACTIVE_LOW;
-   @endcode
+ * Contains basic parameters needed for initial SPI module setup,
+ * including source clock frequency, desired baud rate, master/slave
+ * mode, and PCS polarity.
  */
 typedef struct
 {
@@ -129,7 +166,11 @@ typedef struct
     spi_signal_polarity_t pcsPol;      /*!< SPI PCS polarity */
 } spi_init_config_t;
 
-/*! @brief SPI delay type selection
+/*!
+ * @brief SPI timing delay type selection.
+ *
+ * Used with SPI_SetDelay() to configure one of the three
+ * configurable timing parameters.
  */
 typedef enum
 {
@@ -153,26 +194,27 @@ extern "C" {
 #endif
 
 /*!
- * @name Configuration
+ * @name Module Control
+ * Functions for SPI module initialization, enable/disable, and mode
+ * selection.
  * @{
  */
 
 /*!
- * @brief Resets the SPI internal logic and registers to their default settings.
+ * @brief Reset the SPI module to its default state.
  *
- * This function first performs a software reset of the SPI module which resets the
- * internal SPI logic and most registers, then proceeds to manually reset all of the
- * SPI registers to their default setting to ensuring these registers at programmed to
- * their default value which includes disabling the module.
+ * Performs a software reset of the SPI internal logic and clears all
+ * registers to their default values. The module is left disabled
+ * after this call.
  *
- * @param Module base pointer of type SPI_Type.
+ * @param[in] base  SPI peripheral base pointer.
  */
 void SPI_Init(SPI_Type *base);
 
 /*!
- * @brief Enables the SPI module.
+ * @brief Enable the SPI module.
  *
- * @param base Module base pointer of type SPI_Type.
+ * @param[in] base  SPI peripheral base pointer.
  */
 static inline void SPI_Enable(SPI_Type *base)
 {
@@ -180,42 +222,57 @@ static inline void SPI_Enable(SPI_Type *base)
 }
 
 /*!
- * @brief Disables the SPI module.
+ * @brief Disable the SPI module.
  *
- * @param base Module base pointer of type SPI_Type.
- * @return This function returns STATUS_BUSY if it is detected that the Module Busy Flag
- *         (MBF) is set, otherwise, if success, it returns STATUS_SUCCESS.
+ * Checks the Module Busy Flag (MBF) before disabling. If the module
+ * is currently busy, returns STATUS_BUSY without disabling.
+ *
+ * @param[in] base  SPI peripheral base pointer.
+ * @return STATUS_SUCCESS if disabled successfully, STATUS_BUSY if
+ *         the module is currently processing a transfer.
  */
 status_t SPI_Disable(SPI_Type *base);
 
 /*!
- * @brief Configures the SPI for master or slave.
+ * @brief Configure the SPI for master or slave mode.
  *
- * Note that the SPI module must first be disabled before configuring this.
+ * @param[in] base  SPI peripheral base pointer.
+ * @param[in] mode  Master or slave mode selection.
+ * @return STATUS_SUCCESS on success.
  *
- * @param base Module base pointer of type SPI_Type.
- * @param mode Mode setting (master or slave) of type spi_master_slave_mode_t
- * @return This function returns the error condition STATUS_ERROR if the module is not
- *         disabled else it returns STATUS_SUCCESS.
+ * @pre The SPI module must be disabled before calling this function.
  */
 status_t SPI_SetMasterSlaveMode(SPI_Type *base, spi_master_slave_mode_t mode);
 
 /*!
- * @brief Returns whether the SPI module is in master mode.
+ * @brief Check if the SPI module is configured as master.
  *
- * @param base Module base pointer of type SPI_Type.
- * @return Returns true if SPI in master mode or false if in slave mode.
+ * @param[in] base  SPI peripheral base pointer.
+ * @return true if master mode, false if slave mode.
  */
 static inline bool SPI_IsMaster(const SPI_Type *base)
 {
     return (((base->CTRL >> SPI_CTRL_MODE_SHIFT) & 1U) != 0U);
 }
+
+/*@}*/
+
 #if !defined(FEATURE_SPI_LITE_VERSION)
 /*!
- * @brief Gets FIFO sizes of the SPI module.
+ * @name FIFO Management
+ * Functions for querying FIFO sizes, flushing FIFOs, and configuring
+ * watermark thresholds. Not available on FEATURE_SPI_LITE_VERSION.
+ * @{
+ */
+
+/*!
+ * @brief Get the hardware FIFO depth of the SPI module.
  *
- * @ param base Module base pointer of type SPI_Type.
- * @ param fifoSize The FIFO size passed back to the user
+ * Reads the FIFO size field from the TXFIFO register and returns
+ * the depth as a power-of-two value.
+ *
+ * @param[in]  base      SPI peripheral base pointer.
+ * @param[out] fifoSize  Pointer to store the FIFO depth (in words).
  */
 static inline void SPI_GetFifoSizes(const SPI_Type *base, uint8_t *fifoSize)
 {
@@ -226,21 +283,22 @@ static inline void SPI_GetFifoSizes(const SPI_Type *base, uint8_t *fifoSize)
 }
 
 /*!
- * @brief Flushes the SPI FIFOs.
+ * @brief Flush the SPI TX and/or RX FIFOs.
  *
- * @param base Module base pointer of type SPI_Type.
- * @param flushTxFifo Flushes (true) the Tx FIFO, else do not flush (false) the Tx FIFO
- * @param flushRxFifo Flushes (true) the Rx FIFO, else do not flush (false) the Rx FIFO
+ * @param[in] base        SPI peripheral base pointer.
+ * @param[in] flushTxFifo true to flush the TX FIFO, false to leave unchanged.
+ * @param[in] flushRxFifo true to flush the RX FIFO, false to leave unchanged.
  */
 void SPI_SetFlushFifoCmd(SPI_Type *base, bool flushTxFifo, bool flushRxFifo);
 
 /*!
- * @brief Sets the RX FIFO watermark values.
+ * @brief Set the RX FIFO watermark threshold.
  *
- * This function allows the user to set the RX FIFO watermarks.
+ * An RX data flag is asserted when the number of words in the RX FIFO
+ * exceeds this watermark value.
  *
- * @param base Module base pointer of type SPI_Type.
- * @param rxWater The RX FIFO watermark value
+ * @param[in] base     SPI peripheral base pointer.
+ * @param[in] rxWater  RX FIFO watermark value.
  */
 static inline void SPI_SetRxWatermarks(SPI_Type *base, uint32_t rxWater)
 {
@@ -251,12 +309,13 @@ static inline void SPI_SetRxWatermarks(SPI_Type *base, uint32_t rxWater)
 }
 
 /*!
- * @brief Sets the TX FIFO watermark values.
+ * @brief Set the TX FIFO watermark threshold.
  *
- * This function allows the user to set the TX FIFO watermarks.
+ * A TX data flag is asserted when the number of words in the TX FIFO
+ * is less than or equal to this watermark value.
  *
- * @param base Module base pointer of type SPI_Type.
- * @param txWater The TX FIFO watermark value
+ * @param[in] base     SPI peripheral base pointer.
+ * @param[in] txWater  TX FIFO watermark value.
  */
 static inline void SPI_SetTxWatermarks(SPI_Type *base, uint32_t txWater)
 {
@@ -265,23 +324,23 @@ static inline void SPI_SetTxWatermarks(SPI_Type *base, uint32_t txWater)
     spi_tmp |= (txWater << SPI_TXFIFO_WATER_SHIFT);
     base->TXFIFO = spi_tmp;
 }
-#endif /* !defined(FEATURE_SPI_LITE_VERSION) */
+
 /*@}*/
+#endif /* !defined(FEATURE_SPI_LITE_VERSION) */
 
 /*!
- * @name Status flags and Interrupt configuration
+ * @name Status and Interrupt
+ * Functions for reading/clearing status flags and enabling/disabling
+ * interrupt sources.
  * @{
  */
 
 /*!
- * @brief Gets the SPI status flag state.
+ * @brief Get the state of a specific SPI status flag.
  *
- * This function returns the state of one of the SPI status flags as requested by
- * the user.
- *
- * @param base Module base pointer of type SPI_Type.
- * @param statusFlag The status flag, of type spi_status_flag_t
- * @return State of the status flag: asserted (true) or not-asserted (false)
+ * @param[in] base        SPI peripheral base pointer.
+ * @param[in] statusFlag  Status flag to query.
+ * @return true if the flag is asserted, false otherwise.
  */
 static inline bool SPI_GetStatusFlag(const SPI_Type *base,
                                      spi_status_flag_t statusFlag)
@@ -290,30 +349,25 @@ static inline bool SPI_GetStatusFlag(const SPI_Type *base,
 }
 
 /*!
- * @brief Clears the SPI status flag.
+ * @brief Clear a write-1-to-clear (W1C) status flag.
  *
- * This function clears the state of one of the SPI status flags as requested by
- * the user. Note, the flag must be w1c capable, if not the function returns an error.
- * w1c capable flags are:
- *   SPI_WORD_COMPLETE
- *   SPI_FRAME_COMPLETE
- *   SPI_TRANSFER_COMPLETE
- *   SPI_TRANSMIT_ERROR
- *   SPI_RECEIVE_ERROR
- *   SPI_DATA_MATCH
+ * Only W1C-capable flags can be cleared: SPI_WORD_COMPLETE,
+ * SPI_FRAME_COMPLETE, SPI_TRANSFER_COMPLETE, SPI_TRANSMIT_ERROR,
+ * SPI_RECEIVE_ERROR, SPI_DATA_MATCH. Pass SPI_ALL_STATUS to clear
+ * all W1C flags at once.
  *
- * @param base Module base pointer of type SPI_Type.
- * @param statusFlag The status flag, of type spi_status_flag_t
- * @return STATUS_SUCCESS or SPI_STS_INVALID_PARAMETER
+ * @param[in] base        SPI peripheral base pointer.
+ * @param[in] statusFlag  Status flag to clear, or SPI_ALL_STATUS.
+ * @return STATUS_SUCCESS on success.
  */
 status_t SPI_ClearStatusFlag(SPI_Type *base, spi_status_flag_t statusFlag);
 
 /*!
- * @brief Configures the SPI interrupts.
+ * @brief Enable or disable a specific SPI interrupt source.
  *
- * @param base Module base pointer of type SPI_Type.
- * @param interruptSrc The interrupt source, of type spi_status_flag_t
- * @param enable Enable (true) or disable (false) the interrupt source
+ * @param[in] base          SPI peripheral base pointer.
+ * @param[in] interruptSrc  Interrupt source (uses spi_status_flag_t values).
+ * @param[in] enable        true to enable, false to disable.
  */
 static inline void SPI_SetIntMode(SPI_Type *base,
                                   spi_status_flag_t interruptSrc, bool enable)
@@ -328,11 +382,11 @@ static inline void SPI_SetIntMode(SPI_Type *base,
 }
 
 /*!
- * @brief Returns if the SPI interrupt request is enabled or disabled.
+ * @brief Check if a specific SPI interrupt source is enabled.
  *
- * @param base Module base pointer of type SPI_Type.
- * @param interruptSrc The interrupt source, of type spi_status_flag_t
- * @return Returns if the interrupt source is enabled (true) or disabled (false)
+ * @param[in] base          SPI peripheral base pointer.
+ * @param[in] interruptSrc  Interrupt source to query.
+ * @return true if enabled, false if disabled.
  */
 static inline bool SPI_GetIntMode(const SPI_Type *base,
                                   spi_status_flag_t interruptSrc)
@@ -342,16 +396,22 @@ static inline bool SPI_GetIntMode(const SPI_Type *base,
 
 /*@}*/
 
-/*!
- * @name DMA configuration
- * @{
- */
 #if !defined(FEATURE_SPI_LITE_VERSION)
 /*!
- * @brief Sets the SPI Transmit Data DMA configuration (enable or disable).
+ * @name DMA Configuration
+ * Functions for enabling/disabling DMA requests for TX and RX paths.
+ * Not available on FEATURE_SPI_LITE_VERSION.
+ * @{
+ */
+
+/*!
+ * @brief Enable or disable the TX DMA request.
  *
- * @param base Module base pointer of type SPI_Type.
- * @param enable Enable (true) or disable (false) the TX DMA request
+ * When enabled, the SPI module generates a DMA request whenever
+ * the TX FIFO watermark condition is met.
+ *
+ * @param[in] base    SPI peripheral base pointer.
+ * @param[in] enable  true to enable TX DMA, false to disable.
  */
 static inline void SPI_SetTxDmaCmd(SPI_Type *base, bool enable)
 {
@@ -359,42 +419,43 @@ static inline void SPI_SetTxDmaCmd(SPI_Type *base, bool enable)
 }
 
 /*!
- * @brief Sets the SPI Receive Data DMA configuration (enable or disable).
+ * @brief Enable or disable the RX DMA request.
  *
- * @param base Module base pointer of type SPI_Type.
- * @param enable Enable (true) or disable (false) the RX DMA request
+ * When enabled, the SPI module generates a DMA request whenever
+ * the RX FIFO watermark condition is met.
+ *
+ * @param[in] base    SPI peripheral base pointer.
+ * @param[in] enable  true to enable RX DMA, false to disable.
  */
 static inline void SPI_SetRxDmaCmd(SPI_Type *base, bool enable)
 {
     (base->CTRL) = (base->CTRL & (~SPI_CTRL_RXDMAEN_MASK)) | (enable ? SPI_CTRL_RXDMAEN_MASK : 0U);
 }
+
+/*@}*/
 #endif /* !defined(FEATURE_SPI_LITE_VERSION) */
 
 /*!
- * @brief Manually configures a specific SPI delay parameter (module must be disabled to
- *        change the delay values).
+ * @name Clock and Baud Rate
+ * Functions for configuring SCK frequency, prescaler, and timing
+ * delays between transfers and chip-select edges.
+ * @{
+ */
+
+/*!
+ * @brief Configure a specific SPI timing delay.
  *
- * This function configures the:
- * SCK to PCS delay, or
- * PCS to SCK delay, or
- * Between transfer delay.
+ * Sets one of the three configurable delay parameters:
+ * - SCK to PCS delay: delay + 1 SCK cycles
+ * - PCS to SCK delay: delay + 1 SCK cycles
+ * - Between-transfer delay: delay + 2 SCK cycles
  *
- * These delay names are available in type spi_delay_type_t.
+ * @param[in] base        SPI peripheral base pointer.
+ * @param[in] whichDelay  Delay type to configure.
+ * @param[in] delay       8-bit delay value (0x00–0xFF).
+ * @return STATUS_SUCCESS.
  *
- * The user passes which delay they want to configure along with the delay value.
- * This allows the user to directly set the delay values if they have
- * pre-calculated them or if they simply wish to manually increment the value.
- *
- * Note that the SPI module must first be disabled before configuring this.
- * Note that the SPI module must be configure for master mode before configuring this.
- *
- * @param base Module base pointer of type SPI_Type.
- * @param whichDelay The desired delay to configure, must be of type spi_delay_type_t
- * @param delay The 8-bit delay value 0x00 to 0xFF (255). The delay is equal to:
- *             -delay + 1 cycles of the SPI baud rate clock (SCK to PCS and PCS to SCK)
- *             -delay + 2 cycles of the SPI baud rate clock (Between transfer delay)
- * @return Either STATUS_SUCCESS, SPI_STS_OUT_OF_RANGE, or STATUS_ERROR if
- *         SPI is not disabled or if is not set for master mode.
+ * @pre The SPI module must be disabled and in master mode.
  */
 static inline status_t SPI_SetDelay(SPI_Type *base, spi_delay_type_t whichDelay, uint32_t delay)
 {
@@ -406,300 +467,48 @@ static inline status_t SPI_SetDelay(SPI_Type *base, spi_delay_type_t whichDelay,
     return STATUS_SUCCESS;
 }
 
-/*@}*/
-
 /*!
- * @name SPI Bus Configuration
- * @{
- */
-
-/*!
- * @brief Configures the desired SPI PCS polarity.
+ * @brief Calculate and set the SPI baud rate.
  *
- * This function allows the user to configure the polarity of a particular PCS signal.
- * Note that the SPI module must first be disabled before configuring this.
+ * Finds the best prescaler and divider combination to achieve a baud
+ * rate as close as possible to the requested value. Also configures
+ * default timing delay values based on the calculated divider.
  *
- * @param base Module base pointer of type SPI_Type.
- * @param whichPcs Select which PCS to program, of type spi_which_pcs_t
- * @param pcsPolarity Set PCS as active high or low, of type spi_signal_polarity_t
- * @return This function returns the error condition STATUS_ERROR if the module is not
- *         disabled else it returns STATUS_SUCCESS.
- */
-status_t SPI_SetPcsPolarityMode(SPI_Type *base, spi_which_pcs_t whichPcs,
-                                spi_signal_polarity_t pcsPolarity);
-
-/*!
- * @brief Configures the SPI SDO/SDI pin configuration mode.
+ * @param[in]  base             SPI peripheral base pointer.
+ * @param[in]  bitsPerSec       Desired baud rate in bits per second.
+ * @param[in]  sourceClockInHz  SPI module source clock frequency in Hz.
+ * @param[out] tcrPrescaleValue Pointer to store the calculated TCR
+ *                              PRESCALE value for later TCR programming.
+ * @return The actual calculated baud rate in bits per second, or 0
+ *         on error.
  *
- * This function configures the pin mode of the SPI.
- * For the SDI and SDO pins, the user can configure these pins as follows:
- *  SDI is used for input data and SDO for output data.
- *  SDO is used for input data and SDO for output data.
- *  SDI is used for input data and SDI for output data.
- *  SDO is used for input data and SDI for output data.
- *
- * The user has the option to configure the output data as:
- *  Output data retains last value when chip select is de-asserted (default setting).
- *  Output data is tristated when chip select is de-asserted.
- *
- * Finally, the user has the option to configure the PCS[3:2] pins as:
- *  Enabled for PCS operation (default setting).
- *  Disabled - this is need if the user wishes to configure the SPI mode for 4-bit transfers
- *             where these pins will be used as I/O data pins.
- *
- * Note that the SPI module must first be disabled before configuring this.
- *
- * @param base Module base pointer of type SPI_Type.
- * @param pinCfg Select configuration for the SDO/SDI pins (see spi_pin_config_t)
- * @param dataOutConfig Select data output config after chip select de-assertion
- * @param pcs3and2Enable Enable or disable PCS[3:2]
- * @return This function returns the error condition STATUS_ERROR if the module is not
- *         disabled else it returns STATUS_SUCCESS.
- */
-status_t SPI_SetPinConfigMode(SPI_Type *base,
-                              spi_pin_config_t pinCfg,
-                              spi_data_out_config_t dataOutConfig,
-                              bool pcs3and2Enable);
-
-/*!
- * @brief Sets the SPI baud rate in bits per second.
- *
- * This function takes in the desired bitsPerSec (baud rate) and calculates the nearest
- * possible baud rate without exceeding the desired baud rate, and returns the
- * calculated baud rate in bits-per-second. It requires that the caller also provide
- * the frequency of the module source clock (in Hertz). Also note that the baud rate
- * does not take into affect until the Transmit Control Register (TCR) is programmed
- * with the PRESCALE value. Hence, this function returns the PRESCALE tcrPrescaleValue
- * parameter for later programming in the TCR.  It is up to the higher level
- * peripheral driver to alert the user of an out of range baud rate input.
- *
- * Note that the SPI module must first be disabled before configuring this.
- * Note that the SPI module must be configure for master mode before configuring this.
- *
- * @param base Module base pointer of type SPI_Type.
- * @param bitsPerSec The desired baud rate in bits per second
- * @param sourceClockInHz Module source input clock in Hertz
- * @param tcrPrescaleValue The TCR PRESCALE value, needed by user to program the TCR
- * @return  The actual calculated baud rate. This function may also return a "0" if the
- *          SPI is not configued for master mode or if the SPI module is not disabled.
+ * @pre The SPI module must be disabled and in master mode.
  */
 uint32_t SPI_SetBaudRate(SPI_Type *base, uint32_t bitsPerSec,
                          uint32_t sourceClockInHz, uint32_t *tcrPrescaleValue);
 
 /*!
- * @brief Configures the baud rate divisor manually (only the SPI_CCR[SCKDIV]).
+ * @brief Manually set the SCK clock divider value.
  *
- * This function allows the caller to manually set the baud rate divisor in the event
- * that this divider is known and the caller does not wish to call the
- * SPI_SetBaudRate function. Note that this only affects the SPI_CCR[SCKDIV]).
- * The Transmit Control Register (TCR) is programmed separately with the PRESCALE value.
- * The valid range is 0x00 to 0xFF, if the user inputs outside of this range, an error
- * is returned.
+ * Directly programs the CLK[SCKDIV] field without automatic
+ * prescaler calculation. Use when the divider value is already known.
  *
- * Note that the SPI module must first be disabled before configuring this.
- * Note that the SPI module must be configure for master mode before configuring this.
+ * @param[in] base     SPI peripheral base pointer.
+ * @param[in] divisor  Baud rate divisor (0x00–0xFF).
+ * @return STATUS_SUCCESS on success.
  *
- * @param base Module base pointer of type SPI_Type.
- * @param divisor Desired baud rate divisor setting (0x00 to 0xFF)
- * @return STATUS_SUCCESS or SPI_STS_OUT_OF_RANGE if divisor > 0xFF
+ * @pre The SPI module must be disabled and in master mode.
  */
 status_t SPI_SetBaudRateDivisor(SPI_Type *base, uint32_t divisor);
 
-/*!
- * @brief Sets the PCS flag to the value of the whichPcs parameter.
- *
- * @param base Module base pointer of type SPI_Type.
- * @param whichPcs Desired chip
- */
-void SPI_SetPcs(SPI_Type *base, spi_which_pcs_t whichPcs);
-
-/*@}*/
-
-/*!
- * @name Data transfer
- * @{
- */
-
-/*!
- * @brief Sets the Transmit Command Register (TCR) parameters.
- *
- * The Transmit Command Register (TCR) contains multiple parameters that affect
- * the transmission of data, such as clock phase and polarity, which PCS to use,
- * whether or not the PCS remains asserted at the completion of a frame, etc.
- * Any writes to this register results in an immediate push of the entire register
- * and its contents to the TX FIFO.  Hence, writes to this register should include
- * all of the desired parameters written to the register at once. Hence, the user
- * should fill in the members of the spi_tx_cmd_config_t data structure and pass
- * this to the function.
- *
- * @param base Module base pointer of type SPI_Type.
- * @param txCmdCfgSet Structure that contains the Transmit Command Register (TCR)
- *                    settings of type spi_tx_cmd_config_t
- */
-void SPI_SetTxCommandReg(SPI_Type *base, const spi_tx_cmd_config_t *txCmdCfgSet);
-
-/*!
- * @brief Writes data into the TX data buffer.
- *
- * This function writes data passed in by the user to the Transmit Data Register (TDR).
- * The user can pass up to 32-bits of data to load into the TDR. If the frame size exceeds 32-bits,
- * the user will have to manage sending the data one 32-bit word at a time.
- * Any writes to the TDR will result in an immediate push to the TX FIFO.
- * This function can be used for either master or slave mode.
- *
- * @param base Module base pointer of type SPI_Type.
- * @param data The data word to be sent
- */
-static inline void SPI_WriteData(SPI_Type *base, uint32_t data)
-{
-    base->DATA = data;
-}
-
-/*!
- * @brief Reads data from the data buffer.
- *
- * This function reads the data from the Receive Data Register (RDR).
- * This function can be used for either master or slave mode.
- *
- * @param base Module base pointer of type SPI_Type.
- * @return The data read from the data buffer
- */
-static inline uint32_t SPI_ReadData(const SPI_Type *base)
-{
-    return (uint32_t) base->DATA;
-}
-
 #if !defined(FEATURE_SPI_LITE_VERSION)
 /*!
- * @brief Reads TX COUNT form the FIFO Status Register.
+ * @brief Set the clock prescaler for master mode.
  *
- * This function reads the TX COUNT field  from the FIFO Status Register (FSR).
+ * Configures the PRESCALE field in the Transmit Command Register (TCR).
  *
- * @param base Module base pointer of type SPI_Type.
- * @return The data read from the FIFO Status Register
- */
-static inline uint32_t SPI_ReadTxCount(const SPI_Type *base)
-{
-    return (uint32_t) (((uint32_t) (base->TXFIFO & SPI_TXFIFO_COUNT_MASK)) >> SPI_TXFIFO_COUNT_SHIFT);
-}
-
-/*!
- * @brief Reads RX COUNT form the FIFO Status Register.
- *
- * This function reads the RX COUNT field  from the FIFO Status Register (FSR).
- *
- * @param base Module base pointer of type SPI_Type.
- * @return The data read from the FIFO Status Register
- */
-static inline uint32_t SPI_ReadRxCount(const SPI_Type *base)
-{
-    return (uint32_t) ((((uint32_t) base->RXFIFO & (uint32_t) SPI_RXFIFO_COUNT_MASK))
-        >> (uint32_t) SPI_RXFIFO_COUNT_SHIFT);
-}
-#endif /* !defined(FEATURE_SPI_LITE_VERSION) */
-
-/*!
- * @brief Clear RXMSK bit form TCR Register.
- *
- * This function clears the RXMSK bit from the Transmit Command Register (TCR).
- *
- * @param base Module base pointer of type SPI_Type.
- */
-static inline void SPI_ClearRxmaskBit(SPI_Type *base)
-{
-    (base->TXCFG) = ((base->TXCFG) & (~SPI_TXCFG_MSKRX_MASK));
-}
-
-/*!
- * @brief Set RXMSK bit form TCR Register.
- *
- * This function set the RXMSK bit from the Transmit Command Register (TCR).
- *
- * @param base Module base pointer of type SPI_Type.
- */
-static inline void SPI_SetRxmskBit(SPI_Type *base)
-{
-    (base->TXCFG) = ((base->TXCFG) | (SPI_TXCFG_MSKRX_MASK));
-}
-
-/*!
- * @brief Clear TXMSK bit form TCR Register.
- *
- * This function clears the TXMSK bit from the Transmit Command Register (TCR).
- *
- * @param base Module base pointer of type SPI_Type.
- */
-static inline void SPI_ClearTxmaskBit(SPI_Type *base)
-{
-    (base->TXCFG) = ((base->TXCFG) & (~SPI_TXCFG_MSKTX_MASK));
-}
-
-/*!
- * @brief Set TXMSK bit form TCR Register.
- *
- * This function set the TXMSK bit from the Transmit Command Register (TCR).
- *
- * @param base Module base pointer of type SPI_Type.
- */
-static inline void SPI_SetTxmskBit(SPI_Type *base)
-{
-    (base->TXCFG) = ((base->TXCFG) | (SPI_TXCFG_MSKTX_MASK));
-}
-
-/*!
- * @brief Clear CONT bit form continues mode.
- *
- * This function clears the CONT bit from the continues mode.
- *
- * @param base Module base pointer of type SPI_Type.
- */
-static inline void SPI_ClearContBit(SPI_Type *base)
-{
-    (base->TXCFG) = ((base->TXCFG) & (~SPI_TXCFG_CONT_MASK));
-}
-
-/*!
- * @brief Set CONT bit form TCR Register.
- *
- * This function sets the CONT bit from the Transmit Command Register (TCR).
- *
- * @param base Module base pointer of type SPI_Type.
- */
-static inline void SPI_SetContBit(SPI_Type *base)
-{
-    (base->TXCFG) = ((base->TXCFG) | (SPI_TXCFG_CONT_MASK));
-}
-
-#if !defined(FEATURE_SPI_LITE_VERSION)
-/*!
- * @brief Clear CONTC bit form TCR Register.
- *
- * This function clears the CONTC bit from the Transmit Command Register (TCR).
- *
- * @param base Module base pointer of type SPI_Type.
- */
-static inline void SPI_ClearContCBit(SPI_Type *base)
-{
-    (base->TXCFG) = ((base->TXCFG) & (~SPI_TXCFG_CONTC_MASK));
-}
-
-/*!
- * @brief Set CONTC bit form TCR Register.
- *
- * This function set the CONTC bit from the Transmit Command Register (TCR).
- *
- * @param base Module base pointer of type SPI_Type.
- */
-static inline void SPI_SetContCBit(SPI_Type *base)
-{
-    (base->TXCFG) = ((base->TXCFG) | (SPI_TXCFG_CONTC_MASK));
-}
-
-/*!
- * @brief Configures the clock prescaler used for all SPI master logic.
- *
- * @param base Module base pointer of type SPI_Type.
- * @param prescaler Prescaler value for master logic.
+ * @param[in] base       SPI peripheral base pointer.
+ * @param[in] prescaler  Prescaler divider value.
  */
 static inline void SPI_SetClockPrescaler(SPI_Type *base, spi_prescaler_t prescaler)
 {
@@ -710,10 +519,10 @@ static inline void SPI_SetClockPrescaler(SPI_Type *base, spi_prescaler_t prescal
 }
 
 /*!
- * @brief Get the clock prescaler used for all SPI master logic.
+ * @brief Get the current clock prescaler value.
  *
- * @param base Module base pointer of type SPI_Type.
- * @return Prescaler value for master logic.
+ * @param[in] base  SPI peripheral base pointer.
+ * @return Current prescaler divider value.
  */
 static inline spi_prescaler_t SPI_GetClockPrescaler(const SPI_Type *base)
 {
@@ -721,14 +530,70 @@ static inline spi_prescaler_t SPI_GetClockPrescaler(const SPI_Type *base)
     spi_prescaler_t prescaler = (spi_prescaler_t)prescalerValue;
     return prescaler;
 }
-
 #endif /* !FEATURE_SPI_LITE_VERSION */
 
+/*@}*/
+
 /*!
- * @brief Configures if the sample point for master devices is delayed.
+ * @name Bus Configuration
+ * Functions for configuring PCS polarity, pin routing, chip select
+ * selection, and sampling point.
+ * @{
+ */
+
+/*!
+ * @brief Set the polarity of a specific PCS signal.
  *
- * @param base Module base pointer of type SPI_Type.
- * @param isSamplingPointDelayed Configure if the sampling point is delayed for master devices
+ * @param[in] base         SPI peripheral base pointer.
+ * @param[in] whichPcs     PCS signal to configure.
+ * @param[in] pcsPolarity  Active-high or active-low polarity.
+ * @return STATUS_SUCCESS on success.
+ *
+ * @pre The SPI module must be disabled.
+ */
+status_t SPI_SetPcsPolarityMode(SPI_Type *base, spi_which_pcs_t whichPcs,
+                                spi_signal_polarity_t pcsPolarity);
+
+/*!
+ * @brief Configure the SDO/SDI pin routing and output behavior.
+ *
+ * Configures three aspects of the SPI pin behavior:
+ * - SDI/SDO pin direction (input/output assignment).
+ * - Data output state when PCS is de-asserted (retained or tri-state).
+ * - PCS[3:2] pin enable for 4-bit transfer support.
+ *
+ * @param[in] base            SPI peripheral base pointer.
+ * @param[in] pinCfg          SDO/SDI pin configuration.
+ * @param[in] dataOutConfig   Data output behavior after PCS de-assertion.
+ * @param[in] pcs3and2Enable  true to enable PCS[3:2] as chip selects,
+ *                            false to use them as data I/O for 4-bit mode.
+ * @return STATUS_SUCCESS on success.
+ *
+ * @pre The SPI module must be disabled.
+ */
+status_t SPI_SetPinConfigMode(SPI_Type *base,
+                              spi_pin_config_t pinCfg,
+                              spi_data_out_config_t dataOutConfig,
+                              bool pcs3and2Enable);
+
+/*!
+ * @brief Select the active chip select (PCS) signal.
+ *
+ * Updates the PCS field in the Transmit Command Register.
+ *
+ * @param[in] base      SPI peripheral base pointer.
+ * @param[in] whichPcs  Chip select signal to activate.
+ */
+void SPI_SetPcs(SPI_Type *base, spi_which_pcs_t whichPcs);
+
+/*!
+ * @brief Configure the sampling point for master mode.
+ *
+ * When enabled, the data sampling point is delayed by half a SCK
+ * cycle, which can help with signal integrity at higher frequencies.
+ *
+ * @param[in] base                   SPI peripheral base pointer.
+ * @param[in] isSamplingPointDelayed true to delay the sampling point.
  */
 static inline void SPI_SetSamplingPoint(SPI_Type *base, bool isSamplingPointDelayed)
 {
@@ -738,12 +603,183 @@ static inline void SPI_SetSamplingPoint(SPI_Type *base, bool isSamplingPointDela
     base->CTRL = spi_tmp;
 }
 
+/*@}*/
+
+/*!
+ * @name Transmit Command and Mask Control
+ * Functions for configuring the Transmit Command Register (TCR) and
+ * controlling TX/RX masking and continuous transfer mode bits.
+ * @{
+ */
+
+/*!
+ * @brief Write the full Transmit Command Register (TCR).
+ *
+ * Configures all TCR parameters including clock phase/polarity, PCS
+ * selection, frame size, prescaler, and mask/continuous bits. Writing
+ * to TCR pushes the entire register to the TX FIFO, so all fields
+ * must be set before calling this function.
+ *
+ * @param[in] base         SPI peripheral base pointer.
+ * @param[in] txCmdCfgSet  Pointer to the TCR configuration structure.
+ */
+void SPI_SetTxCommandReg(SPI_Type *base, const spi_tx_cmd_config_t *txCmdCfgSet);
+
+/*!
+ * @brief Clear the RX mask bit in the TCR (enable RX data storage).
+ *
+ * @param[in] base  SPI peripheral base pointer.
+ */
+static inline void SPI_ClearRxmaskBit(SPI_Type *base)
+{
+    (base->TXCFG) = ((base->TXCFG) & (~SPI_TXCFG_MSKRX_MASK));
+}
+
+/*!
+ * @brief Set the RX mask bit in the TCR (discard received data).
+ *
+ * @param[in] base  SPI peripheral base pointer.
+ */
+static inline void SPI_SetRxmskBit(SPI_Type *base)
+{
+    (base->TXCFG) = ((base->TXCFG) | (SPI_TXCFG_MSKRX_MASK));
+}
+
+/*!
+ * @brief Clear the TX mask bit in the TCR (enable normal TX).
+ *
+ * @param[in] base  SPI peripheral base pointer.
+ */
+static inline void SPI_ClearTxmaskBit(SPI_Type *base)
+{
+    (base->TXCFG) = ((base->TXCFG) & (~SPI_TXCFG_MSKTX_MASK));
+}
+
+/*!
+ * @brief Set the TX mask bit in the TCR (mask TX data output).
+ *
+ * @param[in] base  SPI peripheral base pointer.
+ */
+static inline void SPI_SetTxmskBit(SPI_Type *base)
+{
+    (base->TXCFG) = ((base->TXCFG) | (SPI_TXCFG_MSKTX_MASK));
+}
+
+/*!
+ * @brief Clear the CONT bit to end continuous PCS assertion.
+ *
+ * @param[in] base  SPI peripheral base pointer.
+ */
+static inline void SPI_ClearContBit(SPI_Type *base)
+{
+    (base->TXCFG) = ((base->TXCFG) & (~SPI_TXCFG_CONT_MASK));
+}
+
+/*!
+ * @brief Set the CONT bit for continuous PCS assertion.
+ *
+ * @param[in] base  SPI peripheral base pointer.
+ */
+static inline void SPI_SetContBit(SPI_Type *base)
+{
+    (base->TXCFG) = ((base->TXCFG) | (SPI_TXCFG_CONT_MASK));
+}
+
+#if !defined(FEATURE_SPI_LITE_VERSION)
+/*!
+ * @brief Clear the CONTC bit (disable command change in continuous mode).
+ *
+ * @param[in] base  SPI peripheral base pointer.
+ */
+static inline void SPI_ClearContCBit(SPI_Type *base)
+{
+    (base->TXCFG) = ((base->TXCFG) & (~SPI_TXCFG_CONTC_MASK));
+}
+
+/*!
+ * @brief Set the CONTC bit (enable command change in continuous mode).
+ *
+ * @param[in] base  SPI peripheral base pointer.
+ */
+static inline void SPI_SetContCBit(SPI_Type *base)
+{
+    (base->TXCFG) = ((base->TXCFG) | (SPI_TXCFG_CONTC_MASK));
+}
+#endif /* !FEATURE_SPI_LITE_VERSION */
+
+/*@}*/
+
+/*!
+ * @name Data Transfer
+ * Functions for writing data to the TX FIFO, reading data from the
+ * RX FIFO, and querying FIFO fill levels.
+ * @{
+ */
+
+/*!
+ * @brief Write a data word to the TX FIFO.
+ *
+ * The written word is immediately pushed into the TX FIFO. For frames
+ * exceeding 32 bits, data must be written one 32-bit word at a time.
+ *
+ * @param[in] base  SPI peripheral base pointer.
+ * @param[in] data  32-bit data word to transmit.
+ */
+static inline void SPI_WriteData(SPI_Type *base, uint32_t data)
+{
+    base->DATA = data;
+}
+
+/*!
+ * @brief Read a data word from the RX FIFO.
+ *
+ * @param[in] base  SPI peripheral base pointer.
+ * @return 32-bit data word received from the SPI bus.
+ */
+static inline uint32_t SPI_ReadData(const SPI_Type *base)
+{
+    return (uint32_t) base->DATA;
+}
+
+#if !defined(FEATURE_SPI_LITE_VERSION)
+/*!
+ * @brief Get the number of words currently in the TX FIFO.
+ *
+ * @param[in] base  SPI peripheral base pointer.
+ * @return TX FIFO word count.
+ */
+static inline uint32_t SPI_ReadTxCount(const SPI_Type *base)
+{
+    return (uint32_t) (((uint32_t) (base->TXFIFO & SPI_TXFIFO_COUNT_MASK)) >> SPI_TXFIFO_COUNT_SHIFT);
+}
+
+/*!
+ * @brief Get the number of words currently in the RX FIFO.
+ *
+ * @param[in] base  SPI peripheral base pointer.
+ * @return RX FIFO word count.
+ */
+static inline uint32_t SPI_ReadRxCount(const SPI_Type *base)
+{
+    return (uint32_t) ((((uint32_t) base->RXFIFO & (uint32_t) SPI_RXFIFO_COUNT_MASK))
+        >> (uint32_t) SPI_RXFIFO_COUNT_SHIFT);
+}
+#endif /* !defined(FEATURE_SPI_LITE_VERSION) */
+
+/*@}*/
+
 #ifdef SPI_CTRL_I2SMOD_MASK
 /*!
- * @brief Check if the I2S mode is enabled.
+ * @name I2S Mode
+ * Functions for querying and configuring I2S mode on supported devices.
+ * @{
+ */
+
+/*!
+ * @brief Check if I2S mode is enabled.
  *
- * @param base Module base pointer of type SPI_Type.
- * @return True if the I2S mode is enabled, false otherwise.
+ * @param[in] base  SPI peripheral base pointer.
+ * @return true if I2S mode is enabled, false otherwise.
  */
 static inline bool SPI_IsI2SMOD(const SPI_Type *base)
 {
@@ -751,10 +787,10 @@ static inline bool SPI_IsI2SMOD(const SPI_Type *base)
 }
 
 /*!
- * @brief Set the I2S mode.
+ * @brief Enable or disable I2S mode.
  *
- * @param base Module base pointer of type SPI_Type.
- * @param isI2SMOD True to enable the I2S mode, false to disable it.
+ * @param[in] base      SPI peripheral base pointer.
+ * @param[in] isI2SMOD  true to enable I2S mode, false to disable.
  */
 static inline void SPI_SetI2SMOD(SPI_Type *base, bool isI2SMOD)
 {
@@ -763,9 +799,9 @@ static inline void SPI_SetI2SMOD(SPI_Type *base, bool isI2SMOD)
     spi_tmp |= (isI2SMOD ? SPI_CTRL_I2SMOD(1U) : 0U);
     base->CTRL = spi_tmp;
 }
-#endif
 
 /*@}*/
+#endif
 
 #if defined(__cplusplus)
 }

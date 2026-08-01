@@ -8,6 +8,12 @@
 /*!
  * @file crc_hw_access.c
  * @version 1.4.1
+ *
+ * @brief CRC Hardware Access Layer — non-inline function implementations.
+ *
+ * This file contains functions that are too complex or have conditional
+ * compilation paths that prevent them from being declared as static inline
+ * in the header.
  */
 
 #include "crc_hw_access.h"
@@ -15,24 +21,28 @@
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
-/* Initial checksum */
+
+/*! @brief Default initial seed value used by CRC_Init(). */
 #define CRC_INITIAL_SEED        (0U)
 
 /*******************************************************************************
- * Code
+ * Initialization
  ******************************************************************************/
-/*FUNCTION**********************************************************************
+
+/*!
+ * @brief Initialize the CRC peripheral to its default configuration.
  *
- * Function Name : CRC_Init
- * Description   : This function initializes the module to default configuration
- * (Initial checksum: 0U,
- * Default polynomial: 0x1021U,
- * Type of read transpose: CRC_TRANSPOSE_NONE,
- * Type of write transpose: CRC_TRANSPOSE_NONE,
- * No complement of checksum read,
- * 32-bit CRC).
+ * Resets all CRC control fields to a known state:
+ *   - CRC width:           32-bit (CRC_BITS_32)
+ *   - Write transpose:     none (CRC_TRANSPOSE_NONE)
+ *   - Read transpose:      none (CRC_TRANSPOSE_NONE)
+ *   - Output XOR (INV):    disabled
+ *   - Seed (INIT):         0x00000000
  *
- *END**************************************************************************/
+ * @param[in] base  Pointer to the CRC peripheral base address (CRC_Type).
+ *
+ * @pre  The CRC peripheral clock must be enabled before calling this function.
+ */
 void CRC_Init(CRC_Type *const base)
 {
     /* Set CRC mode to 32-bit */
@@ -47,13 +57,27 @@ void CRC_Init(CRC_Type *const base)
     CRC_SetSeedReg(base, CRC_INITIAL_SEED);
 }
 
+/*******************************************************************************
+ * Result & Seed Access
+ ******************************************************************************/
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the CRC computation result, masked to the configured protocol width.
  *
- * Function Name : CRC_GetCrcResult
- * Description   : This function returns the current result of the CRC calculation.
+ * Returns the current CRC result from the RESULT register, truncated to
+ * the active protocol width:
+ *   - CRC_BITS_16: returns lower 16 bits (cast to uint16_t).
+ *   - CRC_BITS_32: returns full 32 bits.
+ *   - CRC_BITS_8 (if supported): returns lower 8 bits.
+ *   - CRC_BITS_4 (if supported): returns lower 8 bits (cast to uint8_t).
  *
- *END**************************************************************************/
+ * @param[in] base  Pointer to the CRC peripheral base address.
+ * @return  CRC result value, width-adjusted.
+ *
+ * @note If output complement (INV_OUT) is enabled, the returned value is
+ *       the complemented checksum. See CRC_SetFXorMode().
+ * @note FEATURE_CRC_SUPPORT_CRC4 controls whether 4-bit mode is available.
+ */
 uint32_t CRC_GetCrcResult(const CRC_Type *const base)
 {
     crc_bit_width_t width = CRC_GetProtocolWidth(base);
@@ -63,6 +87,12 @@ uint32_t CRC_GetCrcResult(const CRC_Type *const base)
     {
         result = (uint16_t)CRC_GetResultReg(base);
     }
+#if (FEATURE_CRC_SUPPORT_CRC8)
+    else if (width == CRC_BITS_8)
+    {
+        result = (uint8_t)CRC_GetResultReg(base);
+    }
+#endif /* FEATURE_CRC_SUPPORT_CRC8 */
 #if (FEATURE_CRC_SUPPORT_CRC4)
     else if (width == CRC_BITS_4)
     {

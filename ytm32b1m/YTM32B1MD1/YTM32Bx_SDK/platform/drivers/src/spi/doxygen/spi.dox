@@ -1,124 +1,404 @@
 /*!
-@defgroup spi Serial Peripheral Interface (SPI)
-@brief Serial Peripheral Interface (SPI) Peripheral Driver
-@details The SPI driver allows communication on an SPI bus using the SPI module.
+@defgroup spi
+@ingroup mod_communication Serial Peripheral Interface (SPI)
+@brief Full-duplex serial communication driver supporting master and slave modes.
 
-## Features ##
-- Interrupt based
-- Master or slave operation
-- Provides blocking and non-blocking transmit and receive functions
-- RX and TX hardware buffers (4 words)
-- 4 configurable chip select
-- Configurable baud rate
+@details
+The SPI module provides a full-duplex synchronous serial interface for
+communication between the MCU and external peripheral devices. It supports
+both master and slave operation modes with interrupt-driven and DMA-based
+transfer mechanisms.
 
+@section spi_features Key Features
+- Full-duplex, synchronous serial communication.
+- Master and slave mode operation.
+- Interrupt-driven and DMA-based transfer support.
+- Blocking, non-blocking, and polling transfer APIs.
+- Configurable baud rate with automatic prescaler calculation.
+- 4 configurable chip select (PCS) signals with programmable polarity.
+- Configurable frame size from 8 to 4096 bits.
+- Configurable clock phase and polarity (SPI modes 0–3).
+- MSB-first or LSB-first data ordering.
+- Continuous PCS assertion for multi-frame transfers.
+- RX and TX hardware FIFOs (4 words deep on standard variants).
+- Configurable FIFO watermarks.
+- Configurable SCK-to-PCS, PCS-to-SCK, and between-transfer delays.
+- Single, 2-bit, and 4-bit transfer width support.
+- Optional I2S mode on supported devices.
+- Asynchronous transfer completion via user callback.
 
-## How to integrate SPI in your application ##
+@section spi_modes Supported Modes
 
-In order to use the SPI driver it must be first initialized in either master or slave mode,using functions SPI_DRV_MasterInit() or SPI_DRV_SlaveInit(). Once initialized, it cannot be initialized again for the same SPI module instance until it is de-initialized, using SPI_DRV_MasterDeinit() or SPI_DRV_SlaveDeinit(). Different SPI module instances can function
-independently of each other.
+| Mode       | Transfer Mechanism | Blocking | API Function                          |
+|------------|-------------------|----------|---------------------------------------|
+| Master     | Polling           | Yes      | SPI_DRV_MasterTransferPolling()       |
+| Master     | Interrupt         | Yes      | SPI_DRV_MasterTransferBlocking()      |
+| Master     | Interrupt         | No       | SPI_DRV_MasterTransfer()              |
+| Master     | DMA               | No       | SPI_DRV_MasterTransfer()              |
+| Slave      | Interrupt         | Yes      | SPI_DRV_SlaveTransferBlocking()       |
+| Slave      | Interrupt         | No       | SPI_DRV_SlaveTransfer()               |
+| Slave      | DMA               | No       | SPI_DRV_SlaveTransfer()               |
 
-In each mode (master/slave) are available two types of transfers: blocking and non-blocking.The functions which initiate blocking transfers will configure the time out for transmission. If time expires SPI_MasterTransferBlocking/SPI_SlaveTransferBlocking will return error and the
-transmission will be aborted.
- 
-Depending on frame size receive and transmit buffers must be aligned as is presented in the next table:
-|Bits/frame|  less or equal with 8  |between 9 and 16 | more than 16 |
-|:---------:|:----------------------:|:---------------:|:------------:|
-| Alignment |         1 byte         |     2 bytes     |    4 bytes   |
-	 
-This alignment requirements should be taken into consideration when "transferByteCount" is configured. For a better understanding these are some examples of how to calculate the right value to "transferByteCount":
-|Bits/frame|  number of frames | bytes per frame | transferByteCount |
-|:--------:|:------------------:|:---------------:|:-----------------:|
-|   8     |         10        |     1           |    10             |
-|10    |         10        |     2           |    20             |
-|24    |         10        |     4           |    40             |
-|32    |         10        |     4           |    40             |
-|40    |         10        |     8           |    80             |
-|64    |         10        |     8           |    80             |
+The transfer type (interrupt or DMA) is selected via the `transferType`
+field in the master/slave configuration structure.
 
-If frame size is bigger than 32 bits MSB/LSB option is applicable for each uint32_t, not for the entire frame. The application should enssure the uint32_t order in buffers, depending on MSB/LSB configuration.
+@section spi_arch Module Architecture
 
-## Important Notes ##
+The SPI module is organized in a three-layer architecture:
 
-- The driver enables the interrupts for the corresponding SPI module,\n
-  but any interrupt priority setting must be done by the application.
-- The watermarks will be set by the application.
-- The driver will configure SCK to PCS delay, PCS to SCK delay, delay between transfers with default values. If your application needs other values for this parameters SPI_DRV_MasterSetDelay function can be used.
-- The driver cannot be used in the case SPI transfer in slave mode over DMA with invalid address of tx buffer, the driver will never finish the transfer.
-- The driver cannot be used with a configuration with bit/frame greater than 32 bits and MSB endianness in either slave or master mode.
-If you need a frame larger than 32 bits with MSB the application must handle the data positioning.
+@verbatim
+┌─────────────────────────────────────────────────────────┐
+│                    Application Code                     │
+│          (calls SPI_DRV_Master* / SPI_DRV_Slave*)       │
+├─────────────────────────────────────────────────────────┤
+│    SPI Master Driver           SPI Slave Driver         │
+│  (spi_master_driver.h/c)     (spi_slave_driver.h/c)     │
+│  ● Instance-based API         ● Instance-based API      │
+│  ● Blocking / non-blocking    ● Blocking / non-blocking │
+│  ● DMA support                ● DMA support             │
+├─────────────────────────────────────────────────────────┤
+│         SPI Shared Functions (spi_shared_function.h/c)  │
+│  ● IRQ dispatching (master/slave)                       │
+│  ● TX FIFO fill / RX FIFO read helpers                  │
+│  ● Global instance tables                               │
+├─────────────────────────────────────────────────────────┤
+│         SPI HW Access Layer (spi_hw_access.h/c)         │
+│  ● Direct register-level access                         │
+│  ● Mostly inline functions for performance              │
+│  ● Organized by: Module Control, FIFO, Status/IRQ,      │
+│    DMA, Clock, Bus Config, TX Command, Data Transfer    │
+├─────────────────────────────────────────────────────────┤
+│               SPI Peripheral Hardware                   │
+│      (CTRL, STS, INTE, CLK, TXCFG, DATA, FIFO regs)    │
+└─────────────────────────────────────────────────────────┘
+@endverbatim
 
-## Example code ##
+@section spi_config Configuration Parameters
 
-```c
-    const spi_master_config_t Send_MasterConfig0 = {
-        .bitsPerSec = 50000U,
-        .whichPcs = SPI_PCS0,
-        .pcsPolarity = SPI_ACTIVE_HIGH,
-        .isPcsContinuous = false,
-        .bitcount = 8U,
-        .spiSrcClk = 8000000U,
-        .clkPhase = SPI_CLOCK_PHASE_1ST_EDGE,
-        .clkPolarity = SPI_SCK_ACTIVE_HIGH,
-        .lsbFirst = false,
-        .transferType = SPI_USING_INTERRUPTS,
-    };
-    const spi_slave_config_t Receive_SlaveConfig0 = {
-        .pcsPolarity = SPI_ACTIVE_HIGH,
-        .bitcount = 8U,
-        .clkPhase = SPI_CLOCK_PHASE_1ST_EDGE,
-        .whichPcs = SPI_PCS0,
-        .clkPolarity = SPI_SCK_ACTIVE_HIGH,
-        .lsbFirst = false,
-        .transferType = SPI_USING_INTERRUPTS,
-    };
-    /* Initialize clock and pins */
-    SPI_DRV_MasterInit(0U, &masterState, &Send_MasterConfig0);
-    /* Set delay between transfer, PCStoSCK and SCKtoPCS to 10 microseconds. */
-    SPI_DRV_MasterSetDelay(0U, 10U, 10U, 10u);
-    /* Initialize SPI1 (Slave)*/
-    SPI_DRV_SlaveInit(1U, &slaveState, &Receive_SlaveConfig0);
-    /* Allocate memory */
-    masterDataSend = (uint8_t*)calloc(100, sizeof(uint8_t));
-    masterDataReceive = (uint8_t*)calloc(100, sizeof(uint8_t));
-    slaveDataSend = (uint8_t*)calloc(100, sizeof(uint8_t));
-    slaveDataReceive = (uint8_t*)calloc(100, sizeof(uint8_t));
-    bufferSize = 100U;
-    testStatus[0] = true;
-    SPI_DRV_SlaveTransfer(0U, slaveDataSend,
-                  slaveDataReceive, bufferSize);
-    SPI_DRV_MasterTransferBlocking(1U, &Send_MasterConfig0, masterDataSend,
-                  masterDataReceive, bufferSize, TIMEOUT);
+@subsection spi_config_master Master Configuration (spi_master_config_t)
 
-```
- 
-## Integration guideline ##
+| Field            | Type                   | Description                                                    | Default          |
+|------------------|------------------------|----------------------------------------------------------------|------------------|
+| bitsPerSec       | uint32_t               | Desired baud rate in bits per second.                          | 50000            |
+| whichPcs         | spi_which_pcs_t        | Chip select signal to use (PCS0–PCS3).                         | SPI_PCS0         |
+| pcsPolarity      | spi_signal_polarity_t  | Active-high or active-low PCS polarity.                        | SPI_ACTIVE_LOW   |
+| isPcsContinuous  | bool                   | Keep PCS asserted between frames in a transfer.                | false            |
+| bitcount         | uint16_t               | Number of bits per frame (8–4096).                             | 8                |
+| clkPhase         | spi_clock_phase_t      | Clock phase: capture on 1st or 2nd edge.                       | 1ST_EDGE         |
+| clkPolarity      | spi_sck_polarity_t     | Clock polarity: idle-low or idle-high.                         | ACTIVE_HIGH      |
+| lsbFirst         | bool                   | Transmit LSB first if true, MSB first if false.                | false            |
+| transferType     | spi_transfer_type      | Transfer mechanism: SPI_USING_INTERRUPTS or SPI_USING_DMA.     | INTERRUPTS       |
+| rxDMAChannel     | uint8_t                | DMA channel for RX (only when transferType = DMA).             | 0                |
+| txDMAChannel     | uint8_t                | DMA channel for TX (only when transferType = DMA).             | 0                |
+| callback         | spi_callback_t         | User callback invoked on transfer completion.                  | NULL             |
+| callbackParam    | void*                  | User-defined parameter passed to callback.                     | NULL             |
+| width            | spi_transfer_width_t   | Transfer width: single, 2-bit, or 4-bit.                       | SINGLE_BIT_XFER  |
 
-The following files need to be compiled in the project:
-```sh
-${SDK_PATH}\platform\drivers\src\spi\spi_irq.c
-${SDK_PATH}\platform\drivers\src\spi\spi_master_driver.c
-${SDK_PATH}\platform\drivers\src\spi\spi_shared_function.c
-${SDK_PATH}\platform\drivers\src\spi\spi_slave_driver.c
-${SDK_PATH}\platform\drivers\src\spi\spi_hw_access.c
-```
+@subsection spi_config_slave Slave Configuration (spi_slave_config_t)
 
-### Include path ###
+| Field            | Type                   | Description                                                    | Default          |
+|------------------|------------------------|----------------------------------------------------------------|------------------|
+| pcsPolarity      | spi_signal_polarity_t  | Active-high or active-low PCS polarity.                        | SPI_ACTIVE_LOW   |
+| bitcount         | uint16_t               | Number of bits per frame (8–4096).                             | 8                |
+| clkPhase         | spi_clock_phase_t      | Clock phase: capture on 1st or 2nd edge.                       | 1ST_EDGE         |
+| whichPcs         | spi_which_pcs_t        | Chip select signal to use.                                     | SPI_PCS0         |
+| clkPolarity      | spi_sck_polarity_t     | Clock polarity: idle-low or idle-high.                         | ACTIVE_HIGH      |
+| lsbFirst         | bool                   | Transmit LSB first if true.                                    | false            |
+| transferType     | spi_transfer_type      | Transfer mechanism: SPI_USING_INTERRUPTS or SPI_USING_DMA.     | INTERRUPTS       |
+| rxDMAChannel     | uint8_t                | DMA channel for RX (only when transferType = DMA).             | 0                |
+| txDMAChannel     | uint8_t                | DMA channel for TX (only when transferType = DMA).             | 0                |
+| callback         | spi_callback_t         | User callback invoked on transfer completion.                  | NULL             |
+| callbackParam    | void*                  | User-defined parameter passed to callback.                     | NULL             |
+| width            | spi_transfer_width_t   | Transfer width: single, 2-bit, or 4-bit.                       | SINGLE_BIT_XFER  |
 
-The following paths need to be added to the include path of the toolchain:
-```sh
-${SDK_PATH}\platform\drivers\inc
-${SDK_PATH}\platform\drivers\src\spi
-```
+@subsection spi_config_features Device Feature Macros
 
-### Compile symbols ###
+| Macro                              | Description                                                      |
+|------------------------------------|------------------------------------------------------------------|
+| FEATURE_SPI_HAS_DMA_ENABLE         | Set to 1 if the device supports DMA-based SPI transfers.         |
+| FEATURE_SPI_LITE_VERSION           | Defined if the device uses a simplified SPI (no FIFO, no DMA).   |
+| FEATURE_SPI_HAS_EXTERNAL_DEVICES_SELECTION | Number of external PCS signals (>4 enables PCS4–PCS7).  |
+| FEATURE_SPI_STATE_STRUCTURES_NULL  | Initializer for the state pointer array.                         |
+| FEATURE_SPI_CLOCKS_NAMES           | Clock name initializer for all SPI instances.                    |
 
-No special symbols are required for this component
+@section spi_buffer_alignment Buffer Alignment Requirements
 
-### Dependencies ###
+Depending on the frame size, transmit and receive buffers must be aligned
+as follows:
 
-- \ref clock_manager
-- \ref osif
-- \ref interrupt_manager
-- \ref dma_driver
+| Bits/Frame        | Alignment Required |
+|-------------------|--------------------|
+| ≤ 8               | 1 byte             |
+| 9 – 16            | 2 bytes            |
+| > 16              | 4 bytes            |
+
+The `transferByteCount` parameter must account for the bytes-per-frame.
+Examples:
+
+| Bits/Frame | Number of Frames | Bytes/Frame | transferByteCount |
+|:----------:|:----------------:|:-----------:|:-----------------:|
+| 8          | 10               | 1           | 10                |
+| 10         | 10               | 2           | 20                |
+| 24         | 10               | 4           | 40                |
+| 32         | 10               | 4           | 40                |
+| 40         | 10               | 8           | 80                |
+| 64         | 10               | 8           | 80                |
+
+@section spi_usage Usage Patterns
+
+@subsection spi_usage_master_basic Pattern 1: Basic Master Blocking Transfer
+
+Initialize the SPI in master mode, configure timing delays, and perform
+a blocking full-duplex transfer with timeout.
+
+@code{.c}
+#define SPI_MASTER_INST (0U)
+#define TIMEOUT_MS      (100U)
+
+spi_state_t masterState;
+spi_master_config_t masterConfig;
+uint8_t txBuf[16] = { 0x01, 0x02, 0x03, 0x04 };
+uint8_t rxBuf[16];
+
+/* Step 1: Get default configuration */
+SPI_DRV_MasterGetDefaultConfig(&masterConfig);
+masterConfig.bitsPerSec = 1000000U;   /* 1 MHz */
+masterConfig.bitcount   = 8U;
+
+/* Step 2: Initialize master */
+SPI_DRV_MasterInit(SPI_MASTER_INST, &masterState, &masterConfig);
+
+/* Step 3: Optionally set timing delays (in baud rate clock cycles) */
+SPI_DRV_MasterSetDelay(SPI_MASTER_INST, 10U, 10U, 10U);
+
+/* Step 4: Perform blocking transfer */
+status_t status = SPI_DRV_MasterTransferBlocking(
+    SPI_MASTER_INST, txBuf, rxBuf, 16U, TIMEOUT_MS);
+
+/* Step 5: De-initialize when done */
+SPI_DRV_MasterDeinit(SPI_MASTER_INST);
+@endcode
+
+@subsection spi_usage_master_nonblocking Pattern 2: Non-blocking Master Transfer with Callback
+
+Start a non-blocking transfer and handle completion asynchronously
+via a user callback.
+
+@code{.c}
+#define SPI_MASTER_INST (0U)
+
+volatile bool transferDone = false;
+
+void spiCallback(void *driverState, spi_event_t event, void *userData)
+{
+    if (event == SPI_EVENT_END_TRANSFER)
+    {
+        transferDone = true;
+    }
+}
+
+spi_state_t masterState;
+spi_master_config_t masterConfig;
+uint8_t txBuf[32];
+uint8_t rxBuf[32];
+
+SPI_DRV_MasterGetDefaultConfig(&masterConfig);
+masterConfig.bitsPerSec   = 500000U;
+masterConfig.callback     = spiCallback;
+masterConfig.callbackParam = NULL;
+
+SPI_DRV_MasterInit(SPI_MASTER_INST, &masterState, &masterConfig);
+
+/* Start non-blocking transfer */
+SPI_DRV_MasterTransfer(SPI_MASTER_INST, txBuf, rxBuf, 32U);
+
+/* Poll or wait for callback */
+while (!transferDone)
+{
+    /* Application can do other work here */
+}
+
+SPI_DRV_MasterDeinit(SPI_MASTER_INST);
+@endcode
+
+@subsection spi_usage_slave Pattern 3: Slave Blocking Transfer
+
+Initialize SPI in slave mode and perform a blocking transfer awaiting
+master activity.
+
+@code{.c}
+#define SPI_SLAVE_INST (1U)
+#define TIMEOUT_MS     (500U)
+
+spi_state_t slaveState;
+spi_slave_config_t slaveConfig;
+uint8_t slaveTx[16] = { 0xAA, 0xBB, 0xCC, 0xDD };
+uint8_t slaveRx[16];
+
+SPI_DRV_SlaveGetDefaultConfig(&slaveConfig);
+slaveConfig.bitcount = 8U;
+
+SPI_DRV_SlaveInit(SPI_SLAVE_INST, &slaveState, &slaveConfig);
+
+/* Blocking: waits until master drives the transfer or timeout */
+status_t status = SPI_DRV_SlaveTransferBlocking(
+    SPI_SLAVE_INST, slaveTx, slaveRx, 16U, TIMEOUT_MS);
+
+SPI_DRV_SlaveDeinit(SPI_SLAVE_INST);
+@endcode
+
+@subsection spi_usage_dma Pattern 4: DMA-based Master Transfer
+
+Use DMA channels for efficient data transfer, minimizing CPU
+involvement.
+
+@code{.c}
+#define SPI_MASTER_INST (0U)
+
+spi_state_t masterState;
+spi_master_config_t masterConfig;
+uint8_t txBuf[256];
+uint8_t rxBuf[256];
+
+SPI_DRV_MasterGetDefaultConfig(&masterConfig);
+masterConfig.bitsPerSec    = 2000000U;
+masterConfig.transferType  = SPI_USING_DMA;
+masterConfig.txDMAChannel  = 0U;
+masterConfig.rxDMAChannel  = 1U;
+
+SPI_DRV_MasterInit(SPI_MASTER_INST, &masterState, &masterConfig);
+
+/* Non-blocking DMA transfer */
+SPI_DRV_MasterTransfer(SPI_MASTER_INST, txBuf, rxBuf, 256U);
+
+/* Wait for transfer completion */
+uint32_t bytesRemaining;
+while (SPI_DRV_MasterGetTransferStatus(SPI_MASTER_INST, &bytesRemaining)
+       == STATUS_BUSY)
+{
+    /* Application can do other work here */
+}
+
+SPI_DRV_MasterDeinit(SPI_MASTER_INST);
+@endcode
+
+@section spi_api API Quick Reference
+
+@subsection spi_api_master_init Master Initialization
+| Function                          | Description                                        |
+|-----------------------------------|----------------------------------------------------|
+| SPI_DRV_MasterGetDefaultConfig()  | Fill master config with default values.             |
+| SPI_DRV_MasterInit()              | Initialize SPI instance in master mode.             |
+| SPI_DRV_MasterDeinit()            | De-initialize SPI master instance.                  |
+
+@subsection spi_api_master_config Master Bus Configuration
+| Function                          | Description                                        |
+|-----------------------------------|----------------------------------------------------|
+| SPI_DRV_MasterConfigureBus()      | Reconfigure bus parameters at runtime.              |
+| SPI_DRV_MasterSetDelay()          | Set SCK/PCS timing delays.                          |
+| SPI_DRV_SetPcs()                  | Select chip select signal and polarity.             |
+
+@subsection spi_api_master_xfer Master Data Transfer
+| Function                          | Description                                        |
+|-----------------------------------|----------------------------------------------------|
+| SPI_DRV_MasterTransferPolling()   | Polling (busy-wait) full-duplex transfer.           |
+| SPI_DRV_MasterTransferBlocking()  | Interrupt-driven blocking full-duplex transfer.     |
+| SPI_DRV_MasterTransfer()          | Interrupt/DMA non-blocking full-duplex transfer.    |
+
+@subsection spi_api_master_mgmt Master Transfer Management
+| Function                          | Description                                        |
+|-----------------------------------|----------------------------------------------------|
+| SPI_DRV_MasterGetTransferStatus() | Query status and remaining bytes of active transfer.|
+| SPI_DRV_MasterAbortTransfer()     | Abort an in-progress non-blocking transfer.         |
+
+@subsection spi_api_slave_init Slave Initialization
+| Function                          | Description                                        |
+|-----------------------------------|----------------------------------------------------|
+| SPI_DRV_SlaveGetDefaultConfig()   | Fill slave config with default values.              |
+| SPI_DRV_SlaveInit()               | Initialize SPI instance in slave mode.              |
+| SPI_DRV_SlaveDeinit()             | De-initialize SPI slave instance.                   |
+
+@subsection spi_api_slave_xfer Slave Data Transfer
+| Function                          | Description                                        |
+|-----------------------------------|----------------------------------------------------|
+| SPI_DRV_SlaveTransferBlocking()   | Interrupt-driven blocking transfer.                 |
+| SPI_DRV_SlaveTransfer()           | Interrupt/DMA non-blocking transfer.                |
+
+@subsection spi_api_slave_mgmt Slave Transfer Management
+| Function                          | Description                                        |
+|-----------------------------------|----------------------------------------------------|
+| SPI_DRV_SlaveGetTransferStatus()  | Query status and remaining bytes of active transfer.|
+| SPI_DRV_SlaveAbortTransfer()      | Abort an in-progress transfer.                      |
+
+@section spi_notes Important Notes
+
+@subsection spi_notes_clock Clock and Interrupt Setup
+@warning The SPI peripheral clock must be enabled via the @ref clock_manager
+**before** calling SPI_DRV_MasterInit() or SPI_DRV_SlaveInit(). The driver
+does not manage clocks internally.
+
+@note The driver enables the SPI module interrupt internally, but interrupt
+**priority** must be configured by the application via the NVIC.
+
+@subsection spi_notes_watermark FIFO Watermarks
+@note The TX and RX FIFO watermarks are set internally by the driver during
+transfer setup. If the application requires custom watermark values, they
+should be configured after init but before starting a transfer.
+
+@subsection spi_notes_delays Timing Delays
+@note Default delay values (SCK-to-PCS, PCS-to-SCK, between-transfer) are
+calculated automatically during SPI_DRV_MasterInit(). Use
+SPI_DRV_MasterSetDelay() to override them for slower peripheral devices.
+
+@subsection spi_notes_frame_size Frame Size Limitations
+@warning The driver cannot be used with a configuration of bits/frame
+greater than 32 bits and MSB endianness. If you need a frame larger than
+32 bits with MSB first, the application must handle the data positioning
+manually.
+
+@warning If the frame size exceeds 32 bits, the MSB/LSB option applies to
+each uint32_t independently, not to the entire frame. The application must
+ensure the uint32_t ordering in buffers matches the MSB/LSB configuration.
+
+@subsection spi_notes_slave_dma Slave DMA Restriction
+@warning In slave mode with DMA, do **not** initiate a transfer with a NULL
+TX buffer and continuous PCS mode. The driver will never complete the
+transfer in this configuration.
+
+@subsection spi_notes_reinit Re-Initialization
+@note Once initialized, the SPI module cannot be re-initialized for the
+same instance until it is de-initialized. Different SPI instances can
+operate independently.
+
+@section spi_integration Integration Guide
+
+@subsection spi_integration_files Compilation Units
+The following source files must be added to the project build:
+@verbatim
+${SDK_PATH}/platform/drivers/src/spi/spi_irq.c
+${SDK_PATH}/platform/drivers/src/spi/spi_master_driver.c
+${SDK_PATH}/platform/drivers/src/spi/spi_shared_function.c
+${SDK_PATH}/platform/drivers/src/spi/spi_slave_driver.c
+${SDK_PATH}/platform/drivers/src/spi/spi_hw_access.c
+@endverbatim
+
+@subsection spi_integration_include Include Paths
+Add the following directories to the toolchain include path:
+@verbatim
+${SDK_PATH}/platform/drivers/inc
+${SDK_PATH}/platform/drivers/src/spi
+@endverbatim
+
+@subsection spi_integration_symbols Compile Symbols
+No special compile-time symbols are required for this module. Device-specific
+feature macros (`FEATURE_SPI_*`) are automatically defined in the device
+features header.
+
+@subsection spi_integration_deps Dependencies
+- @ref clock_manager — Required for enabling the SPI peripheral clock.
+- @ref osif — Required for semaphore-based blocking transfers.
+- @ref interrupt_manager — Required for NVIC interrupt enable/disable.
+- @ref dma_driver — Required only when using DMA-based transfers
+  (`transferType = SPI_USING_DMA`).
 
 */

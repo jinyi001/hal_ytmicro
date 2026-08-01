@@ -1,22 +1,325 @@
 /*!
-@defgroup clock_manager Clock Manager
-@brief This module covers the clock management API and clock related functionality.
+@defgroup clock_manager
+@ingroup mod_system Clock Manager
+@brief System and peripheral clock configuration module for the YTMicro SDK.
 
-@details This section describes the programming interface of the clock_manager driver.
-Clock_manager achieves its functionality by configuring the hardware modules involved in clock distribution and management.
+@details
+The Clock Manager module provides a unified API for configuring and querying
+the entire clock distribution tree of YTMicro MCUs. It manages the System
+Clock Unit (SCU), the Inter-Peripheral Crossbar (IPC) peripheral clock gates,
+and the Clock Monitor Unit (CMU) for runtime clock integrity monitoring.
 
-## Driver consideration ##
+@section clock_features Key Features
+- Configurable system clock source: FIRC, FXOSC, SIRC, and PLL (device-dependent).
+- Independent dividers for Core, Fast Bus, Slow Bus, and Flash clocks.
+- Per-peripheral clock gating, source selection, and divider via the IPC subsystem.
+- Fast External Oscillator (FXOSC) with bypass mode, gain selection, and
+  automatic gain control (ALC) on supported devices.
+- Slow External Oscillator (SXOSC) support on select device families.
+- Phase-Locked Loop (PLL) with configurable reference divider and feedback
+  divider on supported devices.
+- Clock Monitor Unit (CMU) for runtime safety monitoring of clock sources
+  with configurable high/low thresholds and reset-on-error capability.
+- Clock output (CLKOUT) routing for external observation / debugging.
+- Clock Manager notification framework: register callbacks to be notified
+  before/after clock configuration changes (graceful or forceful policy).
+- Runtime clock frequency query for any named clock via CLOCK_DRV_GetFreq().
 
-The Clock Manager driver is developed on top of an appropriate hardware access layer.
-The Clock Manager provides API to handle the clock configuration.
-The Driver uses structures for configuration. The actual format of the structure is
-defined by the underlying device specific header file.
-The user application can use the default for most settings, changing only what is necessary.
+@section clock_arch Module Architecture
 
-This driver provides functions for initializing system clock and peripheral clock.
+The Clock Manager is organized in a multi-layer architecture that varies
+by device family. The YTM32B1Mx variant (representative) is shown below:
 
-All methods that access the hardware layer will return an error code to signal
-if the operation succeeded or failed. The values are defined by the
-status_t enumeration, and the possible values include: success, error.
+@verbatim
+┌──────────────────────────────────────────────────────────────┐
+│                    Application Code                          │
+│          (calls CLOCK_DRV_* / CLOCK_SYS_* functions)        │
+├──────────────────────────────────────────────────────────────┤
+│          Clock Driver Layer (clock.h / clock_manager.h)      │
+│  ● Common API: CLOCK_DRV_Init(), CLOCK_DRV_GetFreq()        │
+│  ● Clock Manager: CLOCK_SYS_Init(),                         │
+│    CLOCK_SYS_UpdateConfiguration() with callback support     │
+├───────────────────┬──────────────────┬───────────────────────┤
+│  SCU HW Access    │  IPC HW Access   │  CMU / CFMU HW Access│
+│  (scu_hw_access.h)│ (ipc_hw_access.h)│ (cmu_hw_access.h /   │
+│  Oscillators, PLL,│ Peripheral clock │  cfmu_hw_access.h)   │
+│  Dividers, ClkOut │ gate & source    │ Clock monitoring     │
+├───────────────────┴──────────────────┴───────────────────────┤
+│                  Clock Hardware (SCU, IPC, CMU)               │
+│          (FXOSC, SXOSC, FIRC, SIRC, PLL, Dividers)          │
+└──────────────────────────────────────────────────────────────┘
+@endverbatim
+
+@subsection clock_arch_driver Driver Layer (clock.h / clock_manager.h)
+Application code should use the `CLOCK_DRV_*` functions for basic initialization
+and frequency queries. For multi-configuration systems with callback support,
+use the `CLOCK_SYS_*` API (init configuration table, update configuration by
+index with graceful/forceful policy).
+
+@subsection clock_arch_hw HW Access Layer
+This internal layer provides low-level inline register accessors organized
+by hardware sub-block:
+- **SCU** — System clock source selection, divider configuration, oscillator
+  control (FXOSC/SXOSC), PLL configuration, and clock output routing.
+- **IPC** — Peripheral clock gate enable/disable, clock source selection,
+  and divider configuration per peripheral.
+- **CMU / CFMU** — Clock Monitor Unit channel enable, reference clock
+  selection, threshold configuration, and frequency measurement (CFMU).
+
+@section clock_config Configuration Parameters
+
+@subsection clock_config_scu scu_config_t Fields (System Clock Configuration)
+| Field              | Type                    | Description                                                           |
+|--------------------|-------------------------|-----------------------------------------------------------------------|
+| sircDeepSleepEnable| bool                    | Keep SIRC running in deep-sleep mode.                                 |
+| sircStandbyEnable  | bool                    | Keep SIRC running in standby mode.                                    |
+| sircPowerDownEnable| bool                    | Keep SIRC running in power-down mode (device-dependent).              |
+| fircEnable         | bool                    | Enable the Fast Internal RC oscillator (48 MHz).                      |
+| fircDeepSleepEnable| bool                    | Keep FIRC running in deep-sleep mode.                                 |
+| sysClkSrc          | scu_system_clock_src_t  | System clock source: FIRC / PLL / FXOSC / SIRC.                      |
+| fxoscConfig        | scu_fxosc_config_t      | Fast external oscillator configuration.                               |
+| sxoscConfig        | scu_sxosc_config_t      | Slow external oscillator configuration (if FEATURE_SCU_SUPPORT_SXOSC).|
+| pllConfig          | scu_pll_config_t        | PLL configuration (if FEATURE_SCU_SUPPORT_PLL).                       |
+| sysDiv             | uint8_t                 | System (core) clock divider (0 = /1, 1 = /2, ... 15 = /16).          |
+| fastBusDiv         | uint8_t                 | Fast bus clock divider.                                               |
+| slowBusDiv         | uint8_t                 | Slow bus clock divider.                                               |
+| flashDiv           | uint8_t                 | Flash clock divider (EFM RWS).                                       |
+| flashPrs           | uint8_t                 | Flash clock prescaler.                                                |
+| clockOutConfig     | scu_clock_out_config_t  | Clock output pin configuration (source, divider, enable).             |
+
+@subsection clock_config_pll scu_pll_config_t Fields
+| Field          | Type               | Description                                                |
+|----------------|--------------------|------------------------------------------------------------|
+| enable         | bool               | Enable PLL.                                                |
+| pllRefClock    | scu_pll_ref_clk_t  | PLL reference: SCU_PLL_REF_FXOSC_CLK or SCU_PLL_REF_FIRC_CLK. |
+| pllFeedBackDiv | uint8_t            | PLL feedback divider (Ndiv). Fout = Fref * Ndiv / (2 * Npre). |
+| pllRefClkDiv   | uint8_t            | PLL reference clock divider (Npre).                        |
+
+@subsection clock_config_ipc peripheral_clock_config_t Fields
+| Field    | Type                        | Description                                          |
+|----------|-----------------------------|------------------------------------------------------|
+| clkName  | clock_names_t               | Peripheral clock name (e.g., IPC_SPI0_CLOCK).        |
+| clkGate  | bool                        | Enable (true) or disable (false) the peripheral clock.|
+| clkSrc   | peripheral_clock_source_t   | Clock source: FIRC / SIRC / FXOSC / PLL / etc.       |
+| divider  | peripheral_clock_divider_t  | Divider value (DIV_BY_1 ... DIV_BY_16).              |
+
+@subsection clock_config_cmu cmu_ch_config_t Fields
+| Field       | Type         | Description                                                      |
+|-------------|--------------|------------------------------------------------------------------|
+| enable      | bool         | Enable this CMU monitoring channel.                              |
+| resetEnable | bool         | Generate system reset on clock error detection.                  |
+| refClock    | cmu_refclk_t | Reference clock: CMU_REF_SIRC_CLOCK or CMU_REF_FXOSC_CLOCK.     |
+| compareHigh | uint16_t     | Upper frequency threshold (counter compare value).               |
+| compareLow  | uint16_t     | Lower frequency threshold (counter compare value).               |
+
+@subsection clock_config_features Device Feature Macros
+| Macro                          | Description                                               |
+|--------------------------------|-----------------------------------------------------------|
+| FEATURE_SCU_FIRC_FREQ          | FIRC frequency in Hz (typically 48 MHz).                  |
+| FEATURE_SCU_SIRC_FREQ          | SIRC frequency in Hz (typically 8 MHz).                   |
+| FEATURE_SCU_SUPPORT_PLL        | Set to 1 if device supports PLL.                          |
+| FEATURE_SCU_SUPPORT_SXOSC      | Set to 1 if device supports slow external oscillator.     |
+| FEATURE_SCU_SUPPORT_LPO        | Set to 1 if device supports low-power oscillator.         |
+| FEATURE_CLOCK_TIMEOUT_LOOP_CNT | Timeout loop count for clock switch / PLL lock wait.      |
+
+@section clock_usage Usage Patterns
+
+@subsection clock_usage_basic Pattern 1: Basic Clock Initialization
+The most common usage: configure system clock source, dividers, and peripheral
+clocks, then call CLOCK_DRV_Init().
+
+@code{.c}
+/* Clock configuration (typically generated by config tool) */
+const scu_config_t scuConfig = {
+    .sircDeepSleepEnable = true,
+    .sircStandbyEnable   = false,
+    .fircEnable          = true,
+    .fircDeepSleepEnable = false,
+    .sysClkSrc           = SCU_SYSTEM_CLOCK_SRC_FIRC,
+    .fxoscConfig = {
+        .enable    = true,
+        .bypassMode = false,
+        .frequency = 8000000U,  /* 8 MHz crystal */
+    },
+    .sysDiv     = 0U,   /* Core = SysClkSrc / 1 */
+    .fastBusDiv = 0U,   /* Fast bus = Core / 1 */
+    .slowBusDiv = 1U,   /* Slow bus = Fast bus / 2 */
+    .flashDiv   = 1U,
+    .clockOutConfig = { .enable = false },
+};
+
+const peripheral_clock_config_t periClocks[] = {
+    { .clkName = IPC_SPI0_CLOCK, .clkGate = true,
+      .clkSrc = CLK_SRC_FIRC,   .divider = DIV_BY_1 },
+    { .clkName = IPC_UART0_CLOCK, .clkGate = true,
+      .clkSrc = CLK_SRC_FIRC,    .divider = DIV_BY_2 },
+};
+
+const ipc_config_t ipcConfig = {
+    .count = 2U,
+    .peripheralClocks = periClocks,
+};
+
+const clock_user_config_t clockConfig = {
+    .scuConfigPtr = &scuConfig,
+    .cmuConfigPtr = NULL,   /* Use default CMU settings */
+    .ipcConfig    = ipcConfig,
+};
+
+/* Initialize clocks */
+status_t status = CLOCK_DRV_Init(&clockConfig);
+@endcode
+
+@subsection clock_usage_manager Pattern 2: Multi-Configuration with Clock Manager
+Use the Clock Manager framework for systems that switch between multiple clock
+configurations at runtime, with callback notifications.
+
+@code{.c}
+/* Pre-defined clock configurations (e.g., RUN and LOW_POWER) */
+const clock_user_config_t *g_clockConfigs[] = {
+    &clockConfig_RUN,
+    &clockConfig_LOW_POWER,
+};
+#define CLOCK_CONFIG_COUNT  2U
+
+/* Callback configuration */
+clock_manager_callback_user_config_t *g_clockCallbacks[] = { NULL };
+
+/* Step 1: Install configuration table */
+CLOCK_SYS_Init(g_clockConfigs, CLOCK_CONFIG_COUNT,
+               g_clockCallbacks, 0U);
+
+/* Step 2: Apply first configuration (RUN mode) */
+CLOCK_SYS_UpdateConfiguration(0U, CLOCK_MANAGER_POLICY_FORCIBLE);
+
+/* Step 3: Later, switch to LOW_POWER configuration */
+CLOCK_SYS_UpdateConfiguration(1U, CLOCK_MANAGER_POLICY_AGREEMENT);
+@endcode
+
+@subsection clock_usage_freq Pattern 3: Query Clock Frequency
+Retrieve the current frequency of any named clock at runtime.
+
+@code{.c}
+uint32_t coreFreq, spiFreq;
+
+/* Get core clock frequency */
+CLOCK_DRV_GetFreq(CORE_CLK, &coreFreq);
+
+/* Get SPI0 peripheral clock frequency */
+CLOCK_DRV_GetFreq(IPC_SPI0_CLOCK, &spiFreq);
+@endcode
+
+@subsection clock_usage_peri Pattern 4: Dynamic Peripheral Clock Control
+Change a single peripheral's clock source and divider at runtime without
+re-initializing the entire clock tree.
+
+@code{.c}
+/* Reconfigure UART0 clock: switch to FXOSC, divider /4 */
+CLOCK_DRV_SetModuleClock(IPC_UART0_CLOCK, true,
+                         (uint32_t)CLK_SRC_FXOSC,
+                         (uint32_t)DIV_BY_4);
+
+/* Reset UART0 module after clock change */
+CLOCK_DRV_ResetModule(IPC_UART0_CLOCK);
+@endcode
+
+@section clock_api API Quick Reference
+
+@subsection clock_api_init Initialization
+| Function                         | Description                                                         |
+|----------------------------------|---------------------------------------------------------------------|
+| CLOCK_DRV_Init()                 | Initialize system and peripheral clocks from configuration struct.  |
+| CLOCK_SYS_Init()                 | Install clock configuration table and callbacks for Clock Manager.  |
+
+@subsection clock_api_config Configuration & Switching
+| Function                         | Description                                                         |
+|----------------------------------|---------------------------------------------------------------------|
+| CLOCK_SYS_UpdateConfiguration()  | Switch to a pre-defined clock configuration by index with policy.   |
+| CLOCK_SYS_SetConfiguration()     | Apply a clock configuration struct directly (wrapper of CLOCK_DRV_Init). |
+| CLOCK_DRV_SetModuleClock()       | Set individual peripheral clock gate, source, and divider.          |
+| CLOCK_DRV_ResetModule()          | Assert and de-assert software reset for a peripheral via IPC.       |
+
+@subsection clock_api_query Frequency Query & Status
+| Function                            | Description                                               |
+|-------------------------------------|-----------------------------------------------------------|
+| CLOCK_DRV_GetFreq()                 | Get clock frequency in Hz for any named clock.            |
+| CLOCK_SYS_GetFreq()                 | Wrapper of CLOCK_DRV_GetFreq() (legacy API).              |
+| CLOCK_SYS_GetCurrentConfiguration() | Get index of the currently active clock configuration.    |
+| CLOCK_SYS_GetErrorCallback()        | Get the callback that returned error during last switch.  |
+| CLOCK_SYS_WaitFXOSCValid()          | Wait for FXOSC startup to complete (with gain sweep).     |
+
+@subsection clock_api_measure Clock Measurement (Device-Dependent)
+| Function                         | Description                                                         |
+|----------------------------------|---------------------------------------------------------------------|
+| CLOCK_SYS_MeasureClkFreq()       | Measure frequency of a specified clock source via CFMU hardware.    |
+
+@section clock_notes Important Notes
+
+@subsection clock_notes_order Initialization Order
+@warning The clock module must be initialized **before** any peripheral driver
+that depends on a peripheral clock. Call CLOCK_DRV_Init() at the very
+beginning of the application startup, before initializing SPI, UART, CRC, etc.
+
+@subsection clock_notes_fxosc FXOSC Startup
+@note When FXOSC is enabled, the driver performs an automatic gain sweep and
+waits for the oscillator valid flag. If the FXOSC crystal does not start
+within FEATURE_CLOCK_TIMEOUT_LOOP_CNT iterations, STATUS_SCU_FXOSC_READY_TIMEOUT
+is returned.
+
+@subsection clock_notes_pll PLL Lock
+@warning When PLL is enabled, the driver waits for PLL lock with a periodic
+toggle recovery mechanism. If lock is not achieved within the timeout,
+STATUS_SCU_PLL_LOCK_TIMEOUT is returned and the system clock remains on SIRC.
+
+@subsection clock_notes_switch Clock Switching Sequence
+The driver internally follows this sequence during CLOCK_DRV_Init():
+1. Configure peripheral clocks (IPC) — set gates and sources.
+2. Switch system clock to SIRC as a safe intermediate source.
+3. Configure oscillators (FXOSC, SXOSC) and PLL.
+4. Set system dividers and wait for divider stability.
+5. Switch to the target system clock source.
+6. Configure CMU monitoring channels.
+7. Update SystemCoreClock and flash prescaler.
+
+@note Do **not** disable the clock source that is currently selected as the
+system clock. The driver handles the SIRC fallback automatically.
+
+@subsection clock_notes_cmu CMU Default Configuration
+When `cmuConfigPtr` is NULL, the driver enables CMU with a ±25% tolerance
+around the expected clock frequency, using SIRC as the reference clock.
+To disable CMU entirely, define `CMU_DEFAULT_OFF` before including the
+clock headers.
+
+@subsection clock_notes_callbacks Callback Notifications
+When using CLOCK_SYS_UpdateConfiguration() with CLOCK_MANAGER_POLICY_AGREEMENT,
+all registered BEFORE callbacks must return STATUS_SUCCESS for the switch to
+proceed. If any callback returns an error, the switch is aborted and
+STATUS_MCU_NOTIFY_BEFORE_ERROR is returned. Use CLOCK_SYS_GetErrorCallback()
+to identify which callback failed.
+
+@section clock_integration Integration Guide
+
+@subsection clock_integration_files Compilation Units
+The following source file must be added to the project build (example for YTM32B1Mx):
+@verbatim
+${SDK_PATH}/platform/drivers/src/clock/YTM32B1Mx/clock_YTM32B1Mx.c
+@endverbatim
+
+@subsection clock_integration_include Include Paths
+Add the following directories to the toolchain include path:
+@verbatim
+${SDK_PATH}/platform/drivers/inc/
+${SDK_PATH}/platform/drivers/src/clock/
+${SDK_PATH}/platform/drivers/src/clock/YTM32B1Mx/   (device-specific)
+@endverbatim
+
+@subsection clock_integration_symbols Compile Symbols
+| Symbol              | Description                                             |
+|---------------------|---------------------------------------------------------|
+| CMU_DEFAULT_OFF     | Define to disable automatic CMU configuration.          |
+| CPU / SERIES macros | Device-specific macro (e.g., YTM32B1M_SERIES) to select clock implementation. |
+
+@subsection clock_integration_deps Dependencies
+- @ref interrupt_manager — Required for disabling/enabling global interrupts during clock transitions.
 
 */

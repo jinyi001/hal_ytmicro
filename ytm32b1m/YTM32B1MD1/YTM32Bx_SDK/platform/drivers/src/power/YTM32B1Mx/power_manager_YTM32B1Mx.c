@@ -8,12 +8,18 @@
 /*!
  * @file power_manager_YTM32B1Mx.c
  * @version 1.4.1
+ *
+ * @brief Power Manager — YTM32B1Mx platform-specific implementation.
+ *
+ * This file implements the platform-specific POWER_SYS_Do* functions
+ * for the YTM32B1M series MCUs. It handles ARM SCB, PCU, CMU, and
+ * SysTick register manipulation for power mode transitions.
  */
 
 #include "power_manager.h"
 #include "clock_manager.h"
 
-/*! @brief Power manager internal structure. */
+/*! @brief Power manager internal state instance. */
 power_manager_state_t gPowerManagerState;
 
 /*******************************************************************************
@@ -22,46 +28,40 @@ power_manager_state_t gPowerManagerState;
 static void POWER_SYS_SwitchToLowPowerMode(const power_manager_user_config_t * const configPtr);
 
 /*******************************************************************************
- * Code
+ * Platform Initialization
  ******************************************************************************/
 
-/*******************************************************************************
+/*!
+ * @brief Perform platform-specific power manager initialization.
  *
- * The following is an example of how to set up two power modes and one
- * callback, and initialize the Power manager with structures containing their settings.
- * The example shows two possible ways the configuration structures can be stored
- * (ROM or RAM), although it is expected that they will be placed in the read-only
- * memory to save the RAM space. (Note: In the example it is assumed that the programmed chip
- * doesn't support any optional power options described in the power_manager_user_config_t)
- * :
- * @code
+ * @code{.c}
  *
- *  power_manager_user_config_t sleepConfig = {   sleep power mode configuration
+ *  power_manager_user_config_t sleepConfig = {
  *     .powerMode = POWER_MANAGER_SLEEP,
  *     .sleepOnExitValue = false,
  *  };
  *
- *  power_manager_user_config_t deepsleepConfig = {   deepsleep power mode configuration
+ *  power_manager_user_config_t deepsleepConfig = {
  *     .powerMode = POWER_MANAGER_DEEPSLEEP,
  *     .sleepOnExitValue = false,
  *  };
  *
- *  power_manager_user_config_t const * powerConfigsArr[] = {    Power mode configurations array
+ *  power_manager_user_config_t const * powerConfigsArr[] = {
  *     &sleepConfig,
  *     &deepsleepConfig
  *  };
  *
- *  power_manager_callback_user_config_t callbackCfg0 = {  Callback configuration structure callbackCfg0
+ *  power_manager_callback_user_config_t callbackCfg0 = {
  *     .callbackFunction                     = &callback0,
  *     .callbackType                         = POWER_MANAGER_CALLBACK_BEFORE_AFTER,
  *     .callbackData                         = (void *)0,
  *  };
  *
- *  power_manager_callback_user_config_t const * callbacksConfigsArr[] = {  Callback configuration structures array
+ *  power_manager_callback_user_config_t const * callbacksConfigsArr[] = {
  *     &callbackCfg0
  *  };
  *
- *  status_t callback0(power_manager_notify_struct_t * notify,   Definition of power manager callback
+ *  status_t callback0(power_manager_notify_struct_t * notify,
  *                                      power_manager_callback_data_t * dataPtr)
  *  {
  *   status_t ret = STATUS_SUCCESS;
@@ -69,14 +69,12 @@ static void POWER_SYS_SwitchToLowPowerMode(const power_manager_user_config_t * c
  *   return ret;
  *  }
  *
- *  int main(void) Main function
+ *  int main(void)
  *  {
  *   status_t ret = STATUS_SUCCESS;
  *
- *   Calling of init method
  *   POWER_SYS_Init(&powerConfigsArr, 2U, &powerStaticCallbacksConfigsArr, 1U);
  *
- *   Switch to DEEPSLEEP mode
  *   ret = POWER_SYS_SetMode(MODE_DEEPSLEEP,POWER_MANAGER_POLICY_AGREEMENT);
  *
  *   if (ret != STATUS_SUCCESS)
@@ -87,20 +85,15 @@ static void POWER_SYS_SwitchToLowPowerMode(const power_manager_user_config_t * c
  *  }
  *
  * @endcode
- *
- *END**************************************************************************/
+ */
 status_t POWER_SYS_DoInit(void)
 {
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : POWER_SYS_DoDeinit
- * Description   : This function performs the actual implementation-specific de-initialization.
- *
- *
- *END**************************************************************************/
+/*!
+ * @brief Perform platform-specific power manager de-initialization.
+ */
 status_t POWER_SYS_DoDeinit(void)
 {
     /* Biasing disabled, core logic can run in full performance */
@@ -109,14 +102,13 @@ status_t POWER_SYS_DoDeinit(void)
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : POWER_SYS_DoSetMode
- * Description   : This function performs the actual implementation-specific logic to switch
- * to one of the defined power modes.
- *
- *
- *END**************************************************************************/
+/*******************************************************************************
+ * Platform Mode Control
+ ******************************************************************************/
+
+/*!
+ * @brief Perform platform-specific power mode switch.
+ */
 status_t POWER_SYS_DoSetMode(const power_manager_user_config_t * const configPtr)
 {
     status_t returnCode = STATUS_SUCCESS; /* Function return */
@@ -126,14 +118,9 @@ status_t POWER_SYS_DoSetMode(const power_manager_user_config_t * const configPtr
     return returnCode;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : POWER_SYS_GetCurrentMode
- * Description   : Returns currently running power mode.
- *
- * Implements POWER_SYS_GetCurrentMode_Activity
- *
- *END**************************************************************************/
+/*!
+ * @brief Get the currently active hardware power mode.
+ */
 power_mode_stat_t POWER_SYS_GetCurrentMode(power_manager_user_config_t *configPtr)
 {
     power_mode_stat_t retVal;
@@ -160,14 +147,16 @@ power_mode_stat_t POWER_SYS_GetCurrentMode(power_manager_user_config_t *configPt
     return retVal;
 }
 
+/*******************************************************************************
+ * Internal: Low-Power Mode Switch
+ ******************************************************************************/
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Switch to a low-power mode by configuring SCB, PCU, and executing WFI.
  *
- * Function Name : POWER_SYS_SwitchToSleepingPowerMode
- * Description   :Internal function used by POWER_SYS_SetMode function to switch to a sleeping power mode
- * configPtr   pointer to the requested user-defined power mode configuration
- *
- *END**************************************************************************/
+ * Handles CMU disable/restore, SysTick disable/restore, cache management,
+ * flash idle wait (errata workaround), and FXOSC wait-for-valid after wakeup.
+ */
 static void POWER_SYS_SwitchToLowPowerMode(const power_manager_user_config_t * const configPtr)
 {
     uint32_t systickCSR;
@@ -324,7 +313,6 @@ static void POWER_SYS_SwitchToLowPowerMode(const power_manager_user_config_t * c
     }
 }
 
-/*! @}*/
 /*******************************************************************************
  * EOF
  ******************************************************************************/

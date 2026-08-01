@@ -8,6 +8,25 @@
 /*!
  * @file flexcan_hw_access.h
  * @version 1.4.1
+ *
+ * @brief FlexCAN Hardware Access Layer — register-level API declarations.
+ *
+ * This internal header provides low-level register access functions for
+ * the FlexCAN peripheral. Most functions are declared inline for
+ * performance. Application code should use the higher-level
+ * FLEXCAN_DRV_* API from flexcan_driver.h instead.
+ *
+ * The functions are organized into the following groups:
+ *   - Module Enable & Mode Control
+ *   - Clock & Bit Timing
+ *   - FD Configuration
+ *   - Message Buffer Configuration
+ *   - Transmit / Receive Operations
+ *   - Rx FIFO and Enhanced Rx FIFO
+ *   - Rx Mask Configuration
+ *   - Interrupt Control & Status
+ *   - Pretended Networking & Self Wake-Up
+ *   - DMA Support
  */
 
 #ifndef FLEXCAN_HW_ACCESS_H
@@ -639,13 +658,14 @@ status_t FLEXCAN_SetTxMsgBuff(
 void FLEXCAN_AbortTxMsgBuff(CAN_Type * base, uint32_t msgBuffIdx);
 
 /*!
- * @brief   : Writes the Inactive Rx code into the CODE field of the requested
- * Rx message buffer the MB to active Rx. This will force even the unlock of the RxMB.
+ * @brief Write the Inactive Rx code into a message buffer.
  *
- * @param   base  The FlexCAN base address
- * @param   msgBuffIdx Index of the message buffer
+ * Forces the specified Rx MB to inactive state, which also unlocks
+ * the MB if it was previously locked by a read.
  *
- *END**************************************************************************/
+ * @param[in] base        Pointer to the FlexCAN base address.
+ * @param[in] msgBuffIdx  Message buffer index.
+ */
 void FLEXCAN_ResetRxMsgBuff(CAN_Type * base, uint32_t msgBuffIdx);
 
 /*!
@@ -1667,7 +1687,7 @@ static inline uint8_t FLEXCAN_GetWAKINT(const CAN_Type * base)
  */
 static inline void FLEXCAN_ClearWAKINT(CAN_Type * base)
 {
-    base->ESR1 |= CAN_ESR1_WAKINT_MASK;
+    base->ESR1 = CAN_ESR1_WAKINT_MASK;
 }
 
 #endif /* FEATURE_CAN_HAS_SELF_WAKE_UP */

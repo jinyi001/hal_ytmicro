@@ -1,110 +1,308 @@
 /*!
-@defgroup ee_emulation EEPROM (Flash Emulation EEPROM)
-@brief EEPROM Module provides the general EEPROM APIs
+@defgroup ee_emulation
+@ingroup mod_flash EEPROM Emulation
+@brief Flash-backed fixed-size EEPROM emulation module for the YTMicro SDK.
+
 @details
+The EEPROM Emulation module stores fixed-size logical records inside a
+round-robin pool of Flash sectors. It reconstructs the active-sector window at
+startup, writes updated records by appending new copies, and retires sectors
+that cannot be recovered during erase or program flows. This approach provides
+non-volatile parameter storage on devices that do not include native EEPROM.
 
-EEPROM (electrically erasable programmable read only memory), which can be byte or word programmed
-and erased, is often used in automotive electronic control units (ECUs). This flexibility for
-program and erase operations makes it suitable for data storage of application variables that
-must be maintained when power is removed and need to be updated individually during run-time.
-For the devices without EEPROM memory, the sector-erasable Flash memory can be used to emulate
-the EEPROM through EEPROM emulation software.
-The EEPROM emulation driver implements the fix-length data record scheme.
-Several sectors shall be involved in emulation with a round robin scheduling scheme. The EEPROM
-functionalities to be emulated include initializing, de-initializing, reading, writing records.
+@section ee_emulation_features Key Features
+- Flash-backed emulation of fixed-size EEPROM records.
+- Round-robin active and ready sector pool with sector-swap recovery.
+- Automatic reconstruction of active-sector state during initialization.
+- Optional cache table for accelerating record lookups.
+- Optional callback service while long Flash commands are pending.
+- Retry-and-retire policy for failed erase, program, or sector-state updates.
+- Compatible with data-Flash or main-array Flash devices through
+  `FEATURE_EFM_*` feature macros.
 
-## Emulated EEPROM Driver
+@section ee_emulation_operations Supported Operations
 
-The Emulation Driver provides the following features:
-1. User configurable emulated EEPROM size.
-2. Larger life for the flash memory used for EEPROM emulation.
-3. Unique feature of Cache Table which makes data retrieval fast.
-4. If any operation fails during EEPROM emulation, the driver will try to repeat that operation
-    until successfully for several times (which is defined by user). If that operation still fails,
-     the driver will make the related sector to DEAD to eliminate it from round robin sequence
-     and continue other tasks without stopping driver.
-5. Concurrency support via callback.
+| Operation | Primary APIs | Description |
+|-----------|--------------|-------------|
+| Pool initialization | Eed_InitEeprom() | Removes dead sectors, repairs incomplete swap state, initializes missing sector headers, and rebuilds the optional cache. |
+| Record write | Eed_WriteEeprom() | Appends a new record image and performs a sector swap when the current active write sector is full. |
+| Record read | Eed_ReadEeprom() | Returns the newest valid copy of one logical record. |
+| Pool erase | Eed_DeinitEeprom() | Erases every sector assigned to the emulation pool. |
+| Internal swap support | Eed_CopyData(), Eed_ValidateActIndicator(), Eed_SyncValidateSector() | Moves live records into the ready sector and finalizes sector-state transitions. |
+| Low-level Flash access | Eed_FlashErase(), Eed_FlashEraseVerify(), Eed_FlashProgram() | Issues erase and program commands and verifies the result. |
 
-## Integration guideline ##
- 
-### Compilation units ###
+@section ee_emulation_arch Module Architecture
 
-The following files need to be compiled in the project:
-\verbatim
-${SDK_PATH}\platform\drivers\src\ee_emulation\ee_high_level.c
-${SDK_PATH}\platform\drivers\src\ee_emulation\ee_middle_level.c
-${SDK_PATH}\platform\drivers\src\ee_emulation\ee_low_level.c
-\endverbatim
+The EEPROM Emulation module uses a layered architecture:
 
-### Include path ###
+@verbatim
+┌────────────────────────────────────────────────────────────┐
+│                      Application Code                     │
+│          (calls Eed_InitEeprom / Read / Write / Deinit)   │
+├────────────────────────────────────────────────────────────┤
+│        High-Level Service Layer (ee_emulation.h/c)        │
+│  ● Pool lifecycle management                              │
+│  ● Public read / write record services                    │
+├────────────────────────────────────────────────────────────┤
+│        Middle-Level Runtime Layer (ee_hardware.h/c)       │
+│  ● Record copy and append helpers                         │
+│  ● Sector recovery, cache rebuild, ordering maintenance   │
+├────────────────────────────────────────────────────────────┤
+│        Low-Level Flash Access Layer (ee_low_level.c)      │
+│  ● EFM erase / program command launch                     │
+│  ● Read-back verification                                 │
+├────────────────────────────────────────────────────────────┤
+│                  Flash / EFM Hardware                     │
+│    (sector erase, write-unit program, status polling)     │
+└────────────────────────────────────────────────────────────┘
+@endverbatim
 
-The following paths need to be added to the include path of the toolchain:
-\verbatim
-${SDK_PATH}\platform\drivers\inc\
-${SDK_PATH}\platform\drivers\src\ee_emulation\
-\endverbatim
+@subsection ee_emulation_arch_public Public Driver Layer
+Application code should include `ee_emulation.h` and use only the public
+high-level services. The application supplies the sector map through
+`eeprom_config_t::startSecAddr` and the compile-time configuration through
+`ee_user_config.h`.
 
-### Compile symbols ###
+@subsection ee_emulation_arch_internal Internal Helper Layers
+The middle-level helpers maintain sector order, cache state, and sector-swap
+recovery. The low-level helpers issue EFM erase or program commands and verify
+the resulting Flash contents.
 
-|  Micro Define     | Typical Value| Description|
-|:-----------------|:---------|:---------|
-|EE_EEPROM_SIZE    |-|The total raw data user wants to emulate in byte. |
-|EE_DATA_VALUE_SIZE |-|The length of raw data for each record in byte.|
-|EE_EXTRA_READY_SECTORS|1|Number of extra alternative sectors used for DEAD sector. This is maximum DEAD sector allowed within this driver. |
-|EE_SYS_GLOBAL_IRQ_DISABLE|true|If auto disable global interrupt enabled, for chips have real data flash, set this micro to false|
-|EE_EXTRA_ACTIVE_SECTORS|1|User can allocate more sectors as active than required by using this macro. The required active sector number, which is minimum active sectors for emulation, is calculated based on EE_EEPROM_SIZE and EE_DATA_VALUE_SIZE values. |
-|EE_CALLBACK_ENABLE|false|Enable call back function support, if enabled, make sure callback function is in RAM.|
-|EE_CACHE_TABLE_MAX_ENTRY|1|Record counts cached in RAM, used to speed up record search|
-|EE_REERASE_NUM|    3      |The number of times to do re-erase operation if this operation fails. |
-|EE_REPROGRAM_NUM|    3      |The number of times to do re-program operation if this operation fails. |
+@section ee_emulation_config Configuration Parameters
 
-### Dependencies ###
+@subsection ee_emulation_config_state eeprom_config_t Fields
+| Field | Type | Description | Filled By |
+|-------|------|-------------|-----------|
+| startSecAddr | `uint32_t[EE_ALLOCATED_SECTORS]` | Base address of every Flash sector assigned to EEPROM emulation. | Application |
+| blankSpace | `uint32_t` | Address of the next writable record slot in the youngest active sector. | Driver |
+| eraseCycValue | `uint32_t` | Erase-cycle value tracked for the current write sector. | Driver |
+| maxValidIndex | `uint32_t` | Highest live sector index after dead sectors are removed from the round-robin list. | Driver |
 
-## Example code ##
+@subsection ee_emulation_config_user User Configuration Macros
+The following macros are expected from `ee_user_config.h`:
 
-When data flash region is already erased, user could un-comment <tt>Eed_DeinitEeprom<tt> API.
+| Macro | Description | Typical Value |
+|-------|-------------|---------------|
+| EE_EEPROM_SIZE | Total logical EEPROM size to emulate, in bytes. | Application-specific |
+| EE_DATA_VALUE_SIZE | Payload size of one logical record, in bytes. | Application-specific |
+| EE_EXTRA_READY_SECTORS | Additional ready-sector budget reserved for retiring failed sectors. | `0x0U` or `0x1U` |
+| EE_EXTRA_ACTIVE_SECTORS | Additional active-sector budget reserved beyond the minimum required capacity. | `0x0U` or `0x2U` |
+| EE_SYS_GLOBAL_IRQ_DISABLE | Controls whether the RAM-resident Flash command launcher masks global interrupts internally. | `false` |
+| EE_CALLBACK_ENABLE | Enables the optional callback service. | `false` |
+| EE_CALLBACK_COUNTER | Number of polling iterations between callback invocations when callbacks are enabled. | `0x4U` |
+| EE_CACHE_TABLE_MAX_ENTRY | Number of record identifiers cached in RAM for faster lookup. | `0x1U` |
+| EE_REERASE_NUM | Additional erase retries before a sector is retired. | `0x0U` to `0x3U` |
+| EE_REPROGRAM_NUM | Additional indicator-program retries before a sector is retired. | `0x0U` to `0x3U` |
+| EE_START_ADDRESS | Base Flash address used by the application when it builds `startSecAddr`. | Application-specific |
 
-~~~~~{.c}
-//
-    #include "ee_emulation.h"
+@subsection ee_emulation_config_features Device Feature Macros
+| Macro | Description |
+|-------|-------------|
+| FEATURE_EFM_WRITE_UNIT_SIZE | Flash write granularity used for record headers and sector-state indicators. |
+| FEATURE_EFM_HAS_DATA_FLASH | Selects whether EEPROM emulation uses dedicated data Flash or the main Flash array. |
+| FEATURE_EFM_DATA_ARRAY_SECTOR_SIZE | Physical data-Flash sector size when data Flash is present. |
+| FEATURE_EFM_MAIN_ARRAY_SECTOR_SIZE | Physical main-array sector size when main Flash is used for emulation. |
+| FEATURE_EFM_ERASE_SECTOR_CMD_CODE | EFM command code used to erase one sector. |
+| FEATURE_EFM_PROGRAM_CMD_CODE | EFM command code used to program one write unit. |
+| FEATURE_EFM_CMD_STS_CLEAR_MASK | Status-mask value used to clear stale EFM command flags. |
+| FEATURE_EFM_CMD_ERROR_MASK | Status-mask value used to detect EFM command errors. |
 
-    status_t eeprom_demo()
+@section ee_emulation_usage Usage Patterns
+
+@subsection ee_emulation_usage_init Pattern 1: Build the Sector Map and Initialize the Pool
+This pattern prepares the runtime state, maps every allocated Flash sector, and
+reconstructs the EEPROM emulation pool.
+
+@code{.c}
+#include "ee_emulation.h"
+
+status_t EepromPool_Init(void)
+{
+    status_t status;
+    uint32_t i;
+    eeprom_config_t eepromConfig;
+
+    for (i = 0U; i < EE_ALLOCATED_SECTORS; i++)
     {
-        status_t status = STATUS_SUCCESS;
-        uint8_t  data[EE_DATA_VALUE_SIZE];
-        uint8_t  rdata[EE_DATA_VALUE_SIZE];
-        uint32_t i;
-        eeprom_config_t eepromConfig;
-        for (i = 0; i < EE_DATA_VALUE_SIZE; i++) {
-            /* Setup data */
-            data[i] = i;
-        }
-        /* Init eeprom config */
-        for (i = 0; i < EE_ALLOCATED_SECTORS; i++)
+        eepromConfig.startSecAddr[i] = EE_START_ADDRESS + (i * EE_SECTOR_SIZE);
+    }
+
+    status = Eed_InitEeprom(&eepromConfig);
+    return status;
+}
+@endcode
+
+@subsection ee_emulation_usage_rw Pattern 2: Write and Read One Record
+This pattern initializes the pool, writes one record, and reads the same record
+back for verification.
+
+@code{.c}
+#include "ee_emulation.h"
+
+status_t EepromRecord_WriteAndRead(void)
+{
+    status_t status;
+    uint32_t i;
+    uint8_t writeData[EE_DATA_VALUE_SIZE];
+    uint8_t readData[EE_DATA_VALUE_SIZE];
+    eeprom_config_t eepromConfig;
+
+    for (i = 0U; i < EE_ALLOCATED_SECTORS; i++)
+    {
+        eepromConfig.startSecAddr[i] = EE_START_ADDRESS + (i * EE_SECTOR_SIZE);
+    }
+
+    for (i = 0U; i < EE_DATA_VALUE_SIZE; i++)
+    {
+        writeData[i] = (uint8_t)i;
+    }
+
+    status = Eed_InitEeprom(&eepromConfig);
+    status |= Eed_WriteEeprom(&eepromConfig, 0U, writeData);
+    status |= Eed_ReadEeprom(&eepromConfig, 0U, readData);
+
+    if (status == STATUS_SUCCESS)
+    {
+        for (i = 0U; i < EE_DATA_VALUE_SIZE; i++)
         {
-            /* allocate eeprom sector */
-            /* Here we simply use continuous memory space */
-            eepromConfig.startSecAddr[i] = EE_START_ADDRESS + i * EE_SECTOR_SIZE;
-        }
-        /* Only if EEPROM sectors are not erased */
-        status = Eed_DeinitEeprom(&eepromConfig);
-        status |= Eed_InitEeprom(&eepromConfig);
-        /* Write data to address 0 */
-        status |= Eed_WriteEeprom(&eepromConfig, 0, data);
-        /* Read data from address 0 */
-        status |= Eed_ReadEeprom(&eepromConfig, 0, rdata);
-        if (status == STATUS_SUCCESS) {
-            /* Compare data */
-            for (i = 0; i < EE_DATA_VALUE_SIZE; i++) {
-                if (data[i] != rdata[i]) {
-                    status = STATUS_ERROR;
-                    break;
-                }
+            if (writeData[i] != readData[i])
+            {
+                status = STATUS_ERROR;
+                break;
             }
         }
-        return status;
     }
-~~~~~
 
+    return status;
+}
+@endcode
 
-@}*/
+@subsection ee_emulation_usage_reinit Pattern 3: Erase the Pool Before a Fresh Start
+This pattern is useful during bring-up when the selected Flash region contains
+old test data and the application wants to force a clean initialization.
+
+@code{.c}
+#include "ee_emulation.h"
+
+status_t EepromPool_Reinitialize(void)
+{
+    status_t status;
+    uint32_t i;
+    eeprom_config_t eepromConfig;
+
+    for (i = 0U; i < EE_ALLOCATED_SECTORS; i++)
+    {
+        eepromConfig.startSecAddr[i] = EE_START_ADDRESS + (i * EE_SECTOR_SIZE);
+    }
+
+    status = Eed_DeinitEeprom(&eepromConfig);
+    if (status == STATUS_SUCCESS)
+    {
+        status = Eed_InitEeprom(&eepromConfig);
+    }
+
+    return status;
+}
+@endcode
+
+@section ee_emulation_api API Quick Reference
+
+@subsection ee_emulation_api_public Public Driver Layer
+| Function | Description |
+|----------|-------------|
+| Eed_InitEeprom() | Discover live sectors, repair incomplete sector state, and rebuild the runtime cache. |
+| Eed_WriteEeprom() | Append a new logical record and perform a sector swap when required. |
+| Eed_ReadEeprom() | Read the newest valid copy of one logical record. |
+| Eed_DeinitEeprom() | Erase every sector assigned to the EEPROM emulation pool. |
+
+@subsection ee_emulation_api_runtime Internal Runtime Helpers
+| Function | Description |
+|----------|-------------|
+| Eed_CopyData() | Copy the newest valid records from the oldest active sector into the ready swap sector. |
+| Eed_WriteRecord() | Program one record payload and header into the current blank slot. |
+| Eed_SearchBlankSpace() | Locate the first blank record slot in one active sector. |
+| Eed_SearchInAllActives() | Search all active sectors from newest to oldest for one record ID. |
+| Eed_SearchLoop() | Search the optional cache first and then fall back to an active-sector scan. |
+| Eed_CallBack() | Invoke the registered callback after the configured polling interval. |
+| Eed_ValidateDeadIndicator() | Mark one sector as dead and compact the live sector list. |
+| Eed_SyncValidateSector() | Erase and reinitialize one sector, retiring it on repeated failure. |
+| Eed_ValidateActIndicator() | Program the active indicator for one sector. |
+| Eed_OverProgram() | Retry one sector-state write until it reads back or the retry limit is exhausted. |
+| Eed_InitAllSectors() | Reconstruct active and ready sector state during initialization. |
+| Eed_ShiftIdxToBase() | Rotate the sector-address array so a selected sector becomes the base active position. |
+| Eed_RemoveDeadSector() | Compact dead sectors out of the live round-robin window. |
+| Eed_UpdateCacheTable() | Clear or rebuild cached record locations. |
+
+@subsection ee_emulation_api_flash Internal Flash Access Helpers
+| Function | Description |
+|----------|-------------|
+| Eed_FlashErase() | Erase one Flash sector and verify that it is blank. |
+| Eed_FlashEraseVerify() | Verify that a Flash region contains only erased long words. |
+| Eed_FlashProgram() | Program one Flash region and verify the written data. |
+
+@section ee_emulation_notes Important Notes
+
+@subsection ee_emulation_notes_flash Dedicated Flash Region Required
+The sector list supplied through `startSecAddr` must reference a Flash region
+reserved exclusively for EEPROM emulation. Reusing those sectors for code,
+calibration tables, or other data will corrupt the emulated EEPROM contents.
+
+@subsection ee_emulation_notes_record Fixed Record Size
+Every record uses the compile-time payload length `EE_DATA_VALUE_SIZE`.
+Applications must provide exactly that many readable bytes for writes and
+writable bytes for reads.
+
+@subsection ee_emulation_notes_recovery Swap Recovery Behavior
+The module appends new records and then swaps sectors when the youngest active
+sector becomes full. Initialization reconstructs interrupted swap state and can
+retire sectors that fail erase, program, or indicator validation.
+
+@warning If the module runs out of ready sectors because too many sectors were
+retired, initialization or write flows can fail with
+`STATUS_EdPROM_MAKE_DEAD_ERROR`.
+
+@subsection ee_emulation_notes_callback Callback Execution Requirements
+When `EE_CALLBACK_ENABLE` is enabled, the callback is invoked from inside the
+Flash-command polling flow. The callback implementation must be safe to execute
+while Flash is busy, and platforms that require RAM execution for such code
+must place the callback in RAM.
+
+@subsection ee_emulation_notes_interrupt Interrupt Masking
+The low-level Flash launcher can mask global interrupts when
+`EE_SYS_GLOBAL_IRQ_DISABLE` is enabled. Choose this setting according to the
+target device Flash-access restrictions and the application's interrupt
+latency budget.
+
+@section ee_emulation_integration Integration Guide
+
+@subsection ee_emulation_integration_files Compilation Units
+The following source files must be added to the project build:
+@verbatim
+${SDK_PATH}/platform/drivers/src/ee_emulation/ee_high_level.c
+${SDK_PATH}/platform/drivers/src/ee_emulation/ee_middle_level.c
+${SDK_PATH}/platform/drivers/src/ee_emulation/ee_low_level.c
+@endverbatim
+
+@subsection ee_emulation_integration_include Include Paths
+Add the following directories to the toolchain include path:
+@verbatim
+${SDK_PATH}/platform/drivers/inc/
+${SDK_PATH}/platform/drivers/src/ee_emulation/
+@endverbatim
+
+The project-specific directory that contains `ee_user_config.h` must also be
+added to the include path.
+
+@subsection ee_emulation_integration_symbols Compile Symbols
+No extra compiler `-D` symbols are required when the project already provides
+`ee_user_config.h`. All module-specific configuration is expected to come from
+that header.
+
+@subsection ee_emulation_integration_deps Dependencies
+- `ee_user_config.h` - Application-provided compile-time configuration.
+- `device_registers.h` - Device register definitions and `FEATURE_EFM_*`
+  capability macros.
+- `interrupt_manager.h` - Global interrupt control used during Flash erase and
+  program sequences.
+
+*/

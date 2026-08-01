@@ -7,7 +7,12 @@
 
 /*!
  * @file linflexd_lin_driver.h
- * @version 1.4.1
+ * @brief LINFlexD LIN driver public API.
+ *
+ * This header defines the public interface for the LINFlexD peripheral
+ * operating in LIN mode. It provides APIs for master/slave initialization,
+ * frame transfer (blocking and non-blocking), callback installation,
+ * node state management, and LIN protocol utilities.
  */
 
 #ifndef LINFlexD_DRIVER_LIN_H
@@ -34,40 +39,24 @@
 #define MAKE_PARITY  0U
 #define CHECK_PARITY 1U
 
-/*!
- * @brief Callback function to get time interval in nanoseconds
- *
- * Implements : linflexd_timer_get_time_interval_t_Class
- */
+/*! @brief Callback function type for getting time interval in nanoseconds. */
 typedef uint32_t (*linflexd_timer_get_time_interval_t)(uint32_t *nanoSeconds);
 
-/*!
- * @brief The node function for LINFlexD mode
- *
- * Implements : linflexd_node_function_t_Class
- */
+/*! @brief LIN node function (master or slave). */
 typedef enum
 {
     LINFlexD_SLAVE = 0U,        /*!< Node acts as a slave in LINFlexD mode */
     LINFlexD_MASTER = 1U,       /*!< Node acts as a master in LINFlexD mode */
 } linflexd_node_function_t;
 
-/*!
- * @brief The checksum type for LINFlexD
- *
- * Implements : linflexd_cs_t_Class
- */
+/*! @brief LIN checksum type selection. */
 typedef enum
 {
     LIN_ENHANCED_CHECKSUM = 0,    /*!< LINFlexD enhanced checksum method */
     LIN_CLASSIC_CHECKSUM = 1     /*!< LINFlexD classical checksum method */
 } linflexd_cs_t;
 
-/*!
- * @brief Response type for LINFlexD
- *
- * Implements : linflexd_response_t_Class
- */
+/*! @brief LIN response type for frame transfers. */
 typedef enum
 {
     LIN_MASTER_RESPONSE = 0,    /*!< LIN master send response, slave receive */
@@ -76,22 +65,14 @@ typedef enum
                                         Master only send out header */
 } linflexd_response_t;
 
-/*! 
- * @brief LINFlexD direction: for BIDR register
- *
- * Implements : linflexd_direction_t_Class
- */
+/*! @brief LIN transfer direction (Tx/Rx) for the BIDR register. */
 typedef enum
 {
     LINFlexD_RX = 0U,        /*!< Receive frames in LIN */
     LINFlexD_TX = 1U         /*!< Transmit frames in LIN */
 } linflexd_direction_t;
 
-/*!
- * @brief LIN hardware id filter configuration structure
- *
- * Implements : linflexd_id_filter_config_t_Class
- */
+/*! @brief LIN hardware ID filter configuration structure. */
 typedef struct
 {
     bool filterEnable;                      /*!< Enable the id filters */
@@ -103,11 +84,7 @@ typedef struct
     uint8_t data[8];                        /*!< LIN Data pointer */
 } linflexd_id_filter_config_t;
 
-/*!
- * @brief LIN frame data structure
- *
- * Implements : linflexd_frame_t_Class
- */
+/*! @brief LIN frame data structure for master/slave transfers. */
 typedef struct
 {
     uint8_t id;                                 /*!< LIN ID */
@@ -117,11 +94,7 @@ typedef struct
     uint8_t data[8];                            /*!< LIN Data pointer */
 } linflexd_frame_t;
 
-/*!
- * @brief Defines types for an enumerating event related to an Identifier.
- *
- * Implements : linflexd_event_id_t_Class
- */
+/*! @brief LIN event identifiers for callback notifications. */
 typedef enum
 {
     LINFlexD_NO_EVENT = 0x00U,    /*!< No event yet */
@@ -144,11 +117,7 @@ typedef enum
     LINFlexD_RECEIVE_EDGE_DETECTION_EVENT = 0x15U    /*!< Receive edge detection event  */
 } linflexd_event_id_t;
 
-/*!
- * @brief Define type for an enumerating LIN Node state.
- *
- * Implements : linflexd_node_state_t_Class
- */
+/*! @brief LIN node state enumeration. */
 typedef enum
 {
     LINFlexD_NODE_STATE_SLEEP_MODE = 0x00U,    /*!< Sleep mode state */
@@ -164,11 +133,7 @@ typedef enum
     LINFlexD_NODE_STATE_UNINIT = 0xFFU     /*!< Uninitialized state */
 } linflexd_node_state_t;
 
-/*!
- * @brief Define type for an enumerating LIN break size.
- *
- * Implements : linflexd_break_length_t_Class
- */
+/*! @brief LIN break field length in bits. */
 typedef enum
 {
     LINFlexD_BREAK_10_BIT = 0x00U,    /*!< LIN break 10 bits */
@@ -189,20 +154,13 @@ typedef enum
     LINFlexD_BREAK_50_BIT = 0x0FU,    /*!< LIN break 50 bits */
 } linflexd_break_length_t;
 
-/*!
- * @brief LIN Driver callback function type
- *
- * Implements : linflexd_callback_t_Class
- */
+/*! @brief LIN driver callback function type. */
 typedef void (*linflexd_callback_t)(uint32_t instance, void *linState);
 
-/*!
- * @brief Runtime state of the LIN driver.
+/*! @brief LIN driver runtime state structure.
  *
- * Note that the caller provides memory for the driver state structures during
- * initialization because the driver does not statically allocate memory.
- *
- * Implements : linflexd_state_t_Class
+ * The caller provides memory for the driver state structures during
+ * initialization. The driver does not statically allocate memory.
  */
 typedef struct
 {
@@ -218,11 +176,7 @@ typedef struct
     semaphore_t completed;                          /*!< Used to wait for LIN interface ISR to complete transmission.*/
 } linflexd_state_t;
 
-/*!
- * @brief LIN hardware configuration structure
- *
- * Implements : linflexd_user_config_t_Class
- */
+/*! @brief LIN user configuration structure. */
 typedef struct
 {
     uint32_t baudRate;                              /*!< baudrate of LIN Hardware Interface to configure */
@@ -246,10 +200,8 @@ typedef struct
 extern "C" {
 #endif
 
-/*!
- * @name LIN DRIVER
- * @{
- */
+/*! @name Initialization / Deinitialization */
+/*! @{ */
 
 /*!
  * @brief Initializes an instance LIN Hardware Interface for LIN Network.
@@ -304,6 +256,11 @@ status_t LINFlexD_DRV_SetBaudRate(uint32_t instance, uint32_t baudrate);
 void LINFlexD_DRV_GetDefaultConfig(bool isMaster,
                                    linflexd_user_config_t *linUserConfig);
 
+/*! @} */
+
+/*! @name Callback Installation */
+/*! @{ */
+
 /*!
  * @brief Installs callback function that is used for LINFlexD_DRV_IRQHandler.
  *
@@ -316,6 +273,11 @@ void LINFlexD_DRV_GetDefaultConfig(bool isMaster,
  */
 linflexd_callback_t LINFlexD_DRV_InstallCallback(uint32_t instance,
                                                  linflexd_callback_t function);
+
+/*! @} */
+
+/*! @name Master Transfer */
+/*! @{ */
 
 /*!
  * @brief Sends Frame out through the LIN Hardware Interface using blocking method.
@@ -352,6 +314,11 @@ status_t LINFlexD_DRV_MasterTransferBlocking(uint32_t instance, linflexd_frame_t
  */
 status_t LINFlexD_DRV_MasterTransfer(uint32_t instance, linflexd_frame_t *frame);
 
+/*! @} */
+
+/*! @name Slave Response */
+/*! @{ */
+
 /*!
  * @brief LIN Slave send/receive frame after header is received.
  *        This function should be called in LIN callbacks to process lin header
@@ -386,6 +353,11 @@ status_t LINFlexD_DRV_DataDiscard(uint32_t instance);
  * @return function always return STATUS_SUCCESS
  */
 status_t LINFlexD_DRV_AbortTransferData(uint32_t instance);
+
+/*! @} */
+
+/*! @name State Management */
+/*! @{ */
 
 /*!
  * @brief Puts current LIN node to sleep mode
@@ -468,6 +440,11 @@ status_t LINFlexD_DRV_DisableIRQ(uint32_t instance);
  */
 void LINFlexD_DRV_IRQHandler(uint32_t instance);
 
+/*! @} */
+
+/*! @name Utility */
+/*! @{ */
+
 /*!
  * @brief Handle ID filter for auto transmission.
  *
@@ -509,7 +486,7 @@ linflexd_cs_t LINFlexD_DRV_GetChecksumType(uint32_t instance, uint8_t ID);
  */
 uint8_t LINFlexD_DRV_ProcessParity(uint8_t PID, uint8_t typeAction);
 
-/* @} */
+/*! @} */
 
 #if defined(__cplusplus)
 }

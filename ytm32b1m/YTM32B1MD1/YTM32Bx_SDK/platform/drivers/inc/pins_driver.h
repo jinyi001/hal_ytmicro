@@ -8,6 +8,22 @@
 /*!
  * @file pins_driver.h
  * @version 1.4.1
+ *
+ * @brief PINS Driver — public API for pin mux, GPIO, and pin interrupt control.
+ *
+ * This header defines the application-level interface for configuring pad mux,
+ * electrical attributes, GPIO direction and data, and per-pin interrupt or
+ * DMA trigger settings. The driver wraps the lower-level PCTRL and GPIO
+ * hardware access helpers found in the internal pins source directory.
+ *
+ * The APIs are organized into five categories:
+ *   - **Initialization**: Apply one or more pin configuration records.
+ *   - **Port Control**: Update mux selection and pin electrical settings.
+ *   - **Interrupt & Digital Filter Control**: Manage per-pin interrupt
+ *     routing, status flags, and optional digital filters.
+ *   - **GPIO Direction Control**: Configure input/output direction and input
+ *     disable state when supported by the device.
+ *   - **GPIO Data Access**: Read, write, set, clear, and toggle GPIO pins.
  */
 
 #ifndef PINS_DRIVER_H
@@ -18,582 +34,604 @@
 #include "status.h"
 
 /*!
- * @defgroup pins_driver PINS Driver
- * @ingroup pins
- * @details This section describes the programming interface of the PINS driver.
+ * @addtogroup pins
+ * @brief Pin control and GPIO driver — public API.
+ * @details Provides the configuration structures and helper functions used to
+ *          initialize pads, select alternate functions, configure GPIO
+ *          direction, and manage pin interrupt behavior.
  * @{
  */
 
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
+
 /*!
- * @brief Type of a GPIO channel representation
- * Implements : pins_channel_type_t_Class
+ * @brief Bit-mask type used for GPIO port channels.
+ *
+ * Each bit in this type corresponds to one pin in a GPIO port:
+ *   - bit value `0` clears or reports a low/input-disabled state
+ *   - bit value `1` sets or reports a high/enabled state
  */
 typedef uint32_t pins_channel_type_t;
 
 /*!
- * @brief Type of a port levels representation.
- * Implements : pins_level_type_t_Class
+ * @brief Logic level type used for single-pin read and write operations.
+ *
+ * The driver interprets `0U` as logic low and `1U` as logic high.
  */
 typedef uint8_t pins_level_type_t;
 
 /*!
- * @brief Configures the port data direction
- * Implements : pin_direction_t_Class
+ * @brief GPIO direction selection.
+ *
+ * | Value                        | Description                                           |
+ * |-----------------------------|-------------------------------------------------------|
+ * | GPIO_INPUT_DIRECTION        | Configure the pin as a GPIO input.                    |
+ * | GPIO_OUTPUT_DIRECTION       | Configure the pin as a GPIO output.                   |
+ * | GPIO_UNSPECIFIED_DIRECTION  | Placeholder used when GPIO direction is not updated.  |
+ *
+ * @note `GPIO_UNSPECIFIED_DIRECTION` is only meaningful in configuration
+ *       records for non-GPIO mux selections. Do not pass it to runtime GPIO
+ *       direction APIs.
  */
 typedef enum
 {
-    GPIO_INPUT_DIRECTION = 0x0U,  /*!< General purpose input direction.       */
-    GPIO_OUTPUT_DIRECTION = 0x1U,  /*!< General purpose output direction.      */
-    GPIO_UNSPECIFIED_DIRECTION = 0x2U   /*!< General purpose unspecified direction. */
+    GPIO_INPUT_DIRECTION = 0x0U,          /*!< Configure the pin as a GPIO input. */
+    GPIO_OUTPUT_DIRECTION = 0x1U,         /*!< Configure the pin as a GPIO output. */
+    GPIO_UNSPECIFIED_DIRECTION = 0x2U     /*!< Leave GPIO direction unspecified. */
 } pin_direction_t;
 
 #if FEATURE_PINS_HAS_PULL_SELECTION
 /*!
- * @brief Internal resistor pull feature selection
- * Implements : port_pull_config_t_Class
+ * @brief Internal pull resistor selection.
+ *
+ * Selects whether the internal pull network for a digital pin is disabled,
+ * driven low, or driven high.
  */
 typedef enum
 {
-    PCTRL_INTERNAL_PULL_NOT_ENABLED = 0U,  /*!< internal pull-down or pull-up resistor is not enabled.           */
-    PCTRL_INTERNAL_PULL_DOWN_ENABLED = 1U,  /*!< internal pull-down resistor is enabled. */
-    PCTRL_INTERNAL_PULL_UP_ENABLED = 2U   /*!< internal pull-up resistor is enabled.     */
+    PCTRL_INTERNAL_PULL_NOT_ENABLED = 0U,     /*!< Disable the internal pull resistor. */
+    PCTRL_INTERNAL_PULL_DOWN_ENABLED = 1U,    /*!< Enable the internal pull-down resistor. */
+    PCTRL_INTERNAL_PULL_UP_ENABLED = 2U       /*!< Enable the internal pull-up resistor. */
 } port_pull_config_t;
 #endif /* FEATURE_PINS_HAS_PULL_SELECTION */
 
 #if FEATURE_PINS_HAS_OPEN_DRAIN
 /*!
- * @brief Configures the Open Drain Enable field.
- * Implements : port_open_drain_t_Class
+ * @brief Output stage selection for pins that support open-drain mode.
  */
 typedef enum
 {
-    PCTRL_OPEN_DRAIN_DISABLED  = 0U, /*!< Output is CMOS       */
-    PCTRL_OPEN_DRAIN_ENABLED   = 1U  /*!< Output is open drain */
+    PCTRL_OPEN_DRAIN_DISABLED = 0U,       /*!< Use the normal CMOS output driver. */
+    PCTRL_OPEN_DRAIN_ENABLED = 1U         /*!< Use open-drain output behavior. */
 } port_open_drain_t;
 #endif /* FEATURE_PINS_HAS_OPEN_DRAIN */
 
 #if FEATURE_PINS_HAS_FILTER_CLOCK_SEL
 /*!
- * @brief Configures the Open Drain Enable field.
- * Implements : port_open_drain_t_Class
+ * @brief Digital filter clock source selector.
  */
 typedef enum
 {
-    PIN_FILETER_USE_BUS_CLOCK = 0U, /*!< Filter clock is GPIO bus clock */
-    PIN_FILTER_USE_FUNCTION_CLOCK = 1U  /*!< Filter clock is GPIO function clock */
+    PIN_FILETER_USE_BUS_CLOCK = 0U,       /*!< Clock the filter from the GPIO bus clock. */
+    PIN_FILTER_USE_FUNCTION_CLOCK = 1U    /*!< Clock the filter from the GPIO function clock. */
 } pin_filter_clock_sel_t;
 #endif /* FEATURE_PINS_HAS_FILTER_CLOCK_SEL */
 
 #if FEATURE_PINS_HAS_DRIVE_STRENGTH
 /*!
- * @brief Configures the drive strength.
- * Implements : port_drive_strength_t_Class
+ * @brief Output drive strength selection.
  */
 typedef enum
 {
-    PCTRL_LOW_DRIVE_STRENGTH = 0U,    /*!< low drive strength is configured.   */
-    PCTRL_HIGH_DRIVE_STRENGTH = 1U     /*!< high drive strength is configured. */
+    PCTRL_LOW_DRIVE_STRENGTH = 0U,        /*!< Select low drive strength. */
+    PCTRL_HIGH_DRIVE_STRENGTH = 1U        /*!< Select high drive strength. */
 } port_drive_strength_t;
 #endif /* FEATURE_PINS_HAS_DRIVE_STRENGTH */
 
 /*!
- * @brief Configures the Pin mux selection
- * Implements : port_mux_t_Class
+ * @brief Pin mux selection.
+ *
+ * Selects whether a pad is routed to analog mode, GPIO mode, or one of the
+ * chip-specific alternate functions exposed by the device.
  */
 typedef enum
 {
-    PCTRL_PIN_DISABLED = 0U,  /*!< corresponding pin is disabled, but is used as an analog pin       */
-    PCTRL_MUX_AS_GPIO = 1U,  /*!< corresponding pin is configured as GPIO                           */
-    PCTRL_MUX_ALT2 = 2U,  /*!< chip-specific                                                     */
-    PCTRL_MUX_ALT3 = 3U,  /*!< chip-specific                                                     */
-    PCTRL_MUX_ALT4 = 4U,  /*!< chip-specific                                                     */
-    PCTRL_MUX_ALT5 = 5U,  /*!< chip-specific                                                     */
-    PCTRL_MUX_ALT6 = 6U,  /*!< chip-specific                                                     */
-    PCTRL_MUX_ALT7 = 7U,  /*!< chip-specific                                                     */
+    PCTRL_PIN_DISABLED = 0U,      /*!< Disable the digital path and use the pin as analog. */
+    PCTRL_MUX_AS_GPIO = 1U,       /*!< Route the pin to the GPIO peripheral. */
+    PCTRL_MUX_ALT2 = 2U,          /*!< Route the pin to alternate function 2. */
+    PCTRL_MUX_ALT3 = 3U,          /*!< Route the pin to alternate function 3. */
+    PCTRL_MUX_ALT4 = 4U,          /*!< Route the pin to alternate function 4. */
+    PCTRL_MUX_ALT5 = 5U,          /*!< Route the pin to alternate function 5. */
+    PCTRL_MUX_ALT6 = 6U,          /*!< Route the pin to alternate function 6. */
+    PCTRL_MUX_ALT7 = 7U,          /*!< Route the pin to alternate function 7. */
 #if defined(FEATURE_PCTRL_HAS_ALT_15) && (FEATURE_PCTRL_HAS_ALT_15 == 1)
-    PCTRL_MUX_ALT8 = 8U,  /*!< chip-specific                                                     */
-    PCTRL_MUX_ALT9 = 9U,  /*!< chip-specific                                                     */
-    PCTRL_MUX_ALT10 = 10U,  /*!< chip-specific                                                     */
-    PCTRL_MUX_ALT11 = 11U,  /*!< chip-specific                                                     */
-    PCTRL_MUX_ALT12 = 12U,  /*!< chip-specific                                                     */
-    PCTRL_MUX_ALT13 = 13U,  /*!< chip-specific                                                     */
-    PCTRL_MUX_ALT14 = 14U,  /*!< chip-specific                                                     */
-    PCTRL_MUX_ALT15 = 15U  /*!< chip-specific                                                     */
+    PCTRL_MUX_ALT8 = 8U,          /*!< Route the pin to alternate function 8. */
+    PCTRL_MUX_ALT9 = 9U,          /*!< Route the pin to alternate function 9. */
+    PCTRL_MUX_ALT10 = 10U,        /*!< Route the pin to alternate function 10. */
+    PCTRL_MUX_ALT11 = 11U,        /*!< Route the pin to alternate function 11. */
+    PCTRL_MUX_ALT12 = 12U,        /*!< Route the pin to alternate function 12. */
+    PCTRL_MUX_ALT13 = 13U,        /*!< Route the pin to alternate function 13. */
+    PCTRL_MUX_ALT14 = 14U,        /*!< Route the pin to alternate function 14. */
+    PCTRL_MUX_ALT15 = 15U         /*!< Route the pin to alternate function 15. */
 #endif
 } port_mux_t;
 
 /*!
- * @brief Configures the interrupt generation condition.
- * Implements : port_interrupt_config_t_Class
+ * @brief Interrupt or DMA trigger selection for a GPIO pin.
+ *
+ * The available trigger encodings depend on device feature macros. This
+ * enumeration covers DMA trigger modes, interrupt modes, and optional
+ * flag-only or trigger-out modes when implemented by the target device.
  */
 typedef enum
 {
-    PCTRL_DMA_INT_DISABLED = 0x0U,  /*!< Interrupt/DMA request is disabled.                   */
-    PCTRL_DMA_RISING_EDGE = 0x1U,  /*!< DMA request on rising edge.                          */
-    PCTRL_DMA_FALLING_EDGE = 0x2U,  /*!< DMA request on falling edge.                         */
-    PCTRL_DMA_EITHER_EDGE = 0x3U,  /*!< DMA request on either edge.                          */
+    PCTRL_DMA_INT_DISABLED = 0x0U,    /*!< Disable pin interrupt and DMA trigger generation. */
+    PCTRL_DMA_RISING_EDGE = 0x1U,     /*!< Generate a DMA request on a rising edge. */
+    PCTRL_DMA_FALLING_EDGE = 0x2U,    /*!< Generate a DMA request on a falling edge. */
+    PCTRL_DMA_EITHER_EDGE = 0x3U,     /*!< Generate a DMA request on either edge. */
 #if FEATURE_PINS_HAS_FLAG_SET_ONLY
-    PCTRL_FLAG_RISING_EDGE  = 0x5U,  /*!< Flag sets on rising edge, no interrupt is generated. */
-    PCTRL_FLAG_FALLING_EDGE = 0x6U,  /*!< Flag sets on falling edge, no interrupt is generated.*/
-    PCTRL_FLAG_EITHER_EDGE  = 0x7U,  /*!< Flag sets on either edge, no interrupt is generated. */
+    PCTRL_FLAG_RISING_EDGE = 0x5U,    /*!< Set the interrupt flag on a rising edge only. */
+    PCTRL_FLAG_FALLING_EDGE = 0x6U,   /*!< Set the interrupt flag on a falling edge only. */
+    PCTRL_FLAG_EITHER_EDGE = 0x7U,    /*!< Set the interrupt flag on either edge only. */
 #endif /* FEATURE_PINS_HAS_FLAG_SET_ONLY */
-    PCTRL_INT_LOGIC_ZERO = 0x8U,  /*!< Interrupt when logic 0.                              */
-    PCTRL_INT_RISING_EDGE = 0x9U,  /*!< Interrupt on rising edge.                            */
-    PCTRL_INT_FALLING_EDGE = 0xAU,  /*!< Interrupt on falling edge.                           */
-    PCTRL_INT_EITHER_EDGE = 0xBU,  /*!< Interrupt on either edge.                            */
-    PCTRL_INT_LOGIC_ONE = 0xCU,  /*!< Interrupt when logic 1.                              */
+    PCTRL_INT_LOGIC_ZERO = 0x8U,      /*!< Generate an interrupt while the pin is at logic 0. */
+    PCTRL_INT_RISING_EDGE = 0x9U,     /*!< Generate an interrupt on a rising edge. */
+    PCTRL_INT_FALLING_EDGE = 0xAU,    /*!< Generate an interrupt on a falling edge. */
+    PCTRL_INT_EITHER_EDGE = 0xBU,     /*!< Generate an interrupt on either edge. */
+    PCTRL_INT_LOGIC_ONE = 0xCU,       /*!< Generate an interrupt while the pin is at logic 1. */
 #if FEATURE_PINS_HAS_TRIGGER_OUT
-    PCTRL_HIGH_TRIGGER_OUT = 0xDU,  /*!< Enable active high trigger output, flag is disabled. */
-    PCTRL_LOW_TRIGGER_OUT = 0xEU   /*!< Enable active low trigger output, flag is disabled.  */
+    PCTRL_HIGH_TRIGGER_OUT = 0xDU,    /*!< Enable active-high trigger output without a flag. */
+    PCTRL_LOW_TRIGGER_OUT = 0xEU      /*!< Enable active-low trigger output without a flag. */
 #endif /* FEATURE_PINS_HAS_TRIGGER_OUT */
 } gpio_interrupt_config_t;
 
 #if FEATURE_PINS_HAS_SLEW_RATE
 /*!
- * @brief Configures the Slew Rate field.
- * Implements : port_slew_rate_t_Class
+ * @brief Output slew rate selection.
  */
 typedef enum
 {
-    PCTRL_FAST_SLEW_RATE = 0U,   /*!< fast slew rate is configured.  */
-    PCTRL_SLOW_SLEW_RATE = 1U    /*!< slow slew rate is configured.  */
+    PCTRL_FAST_SLEW_RATE = 0U,        /*!< Use the fast output slew rate. */
+    PCTRL_SLOW_SLEW_RATE = 1U         /*!< Use the slow output slew rate. */
 } port_slew_rate_t;
 #endif /* FEATURE_PINS_HAS_SLEW_RATE */
 
 #if defined(FEATURE_PINS_HAS_FILTER_CLOCK_SELECTION) && (FEATURE_PINS_HAS_FILTER_CLOCK_SELECTION == 1)
 /*!
- * @brief Clock source for the digital input filters
- * Implements : port_digital_filter_clock_t_Class
+ * @brief Clock source selection for the GPIO digital filter.
  */
 typedef enum
 {
-    PCTRL_DIGITAL_FILTER_BUS_CLOCK  = 0U, /*!< Digital filters are clocked by the bus clock.  */
-    PCTRL_DIGITAL_FILTER_LPO_CLOCK  = 1U  /*!< Digital filters are clocked by the LPO clock.  */
+    PCTRL_DIGITAL_FILTER_BUS_CLOCK = 0U,  /*!< Clock the digital filter from the bus clock. */
+    PCTRL_DIGITAL_FILTER_LPO_CLOCK = 1U   /*!< Clock the digital filter from the LPO clock. */
 } port_digital_filter_clock_t;
 #endif
+
 /*!
- * @brief The digital filter configuration
- * Implements : port_digital_filter_config_t_Class
+ * @brief Digital filter configuration.
+ *
+ * Describes the optional debounce / glitch-filter configuration that can be
+ * applied to a pin when the device exposes a digital filter block.
  */
 typedef struct
 {
 #if defined(FEATURE_PINS_HAS_FILTER_CLOCK_SELECTION) && (FEATURE_PINS_HAS_FILTER_CLOCK_SELECTION == 1)
-    port_digital_filter_clock_t clock;  /*!< The digital filter clock for port */
+    port_digital_filter_clock_t clock;    /*!< Clock source used by the digital filter. */
 #endif
-    uint8_t width;  /*!< The digital filter width value */
+    uint8_t width;                        /*!< Filter width programmed into the hardware. */
 } gpio_digital_filter_config_t;
 
-
 /*!
- * @brief Defines the converter configuration
+ * @brief Pin initialization record used by PINS_DRV_Init().
  *
- * This structure is used to configure the pins
- * Implements : pin_settings_config_t_Class
+ * Each array entry describes one pad and its optional GPIO behavior. Fields
+ * guarded by `FEATURE_*` macros are only present on devices that support the
+ * corresponding hardware capability.
+ *
+ * | Field         | Description |
+ * |---------------|-------------|
+ * | base          | PCTRL instance that owns the pad control register. |
+ * | pinPortIdx    | Zero-based pin index inside the port instance. |
+ * | mux           | Pad mux selection written to the PCR register. |
+ * | intConfig     | Interrupt or DMA trigger mode programmed for the pin. |
+ * | clearIntFlag  | Clears a pending interrupt flag after configuration when true. |
+ * | digitalFilter | Enables the digital input filter after configuration when true. |
+ * | filterConfig  | Filter width and optional clock source, when filter support exists. |
+ * | gpioBase      | GPIO instance associated with the same pad. |
+ * | direction     | GPIO direction used when `mux == PCTRL_MUX_AS_GPIO`. |
+ * | initValue     | Initial output level written before enabling GPIO output. |
  */
 typedef struct
 {
-    PCTRL_Type *base;              /*!< Port base pointer.                        */
-    uint32_t pinPortIdx;        /*!< Port pin number.                          */
+    PCTRL_Type *base;                        /*!< Port control base pointer. */
+    uint32_t pinPortIdx;                     /*!< Pin index inside the selected port. */
 #if FEATURE_PINS_HAS_PULL_SELECTION
-    port_pull_config_t pullConfig;        /*!< Internal resistor pull feature selection. */
+    port_pull_config_t pullConfig;           /*!< Internal pull resistor selection. */
 #endif
 #if FEATURE_PINS_HAS_SLEW_RATE
-    port_slew_rate_t rateSelect;        /*!< Slew rate selection.                      */
+    port_slew_rate_t rateSelect;             /*!< Slew rate selection. */
 #endif
 #if FEATURE_PINS_HAS_PASSIVE_FILTER
-    bool passiveFilter;     /*!< Passive filter configuration.             */
+    bool passiveFilter;                      /*!< Passive input filter enable state. */
 #endif
 #if FEATURE_PINS_HAS_OPEN_DRAIN
-    port_open_drain_t           openDrain;         /*!< Configures open drain.                    */
+    port_open_drain_t openDrain;             /*!< Open-drain output enable state. */
 #endif
 #if FEATURE_PINS_HAS_DRIVE_STRENGTH
-    port_drive_strength_t driveSelect;       /*!< @brief Configures the drive strength.     */
+    port_drive_strength_t driveSelect;       /*!< Output drive strength selection. */
 #endif
-    port_mux_t mux;               /*!< @brief Pin (C55: Out) mux selection.      */
+    port_mux_t mux;                          /*!< Pin mux selection. */
 #if FEATURE_PCTRL_HAS_PIN_CONTROL_LOCK
-    bool                        pinLock;           /*!< Lock pin control register or not.         */
+    bool pinLock;                            /*!< Lock the PCR register after configuration. */
 #endif
-    gpio_interrupt_config_t intConfig;         /*!< Interrupt generation condition.           */
-    bool clearIntFlag;      /*!< Clears the interrupt status flag.         */
-    bool digitalFilter;     /*!< Enables digital filter.                   */
+    gpio_interrupt_config_t intConfig;       /*!< Interrupt or DMA trigger configuration. */
+    bool clearIntFlag;                       /*!< Clear the pin interrupt flag after setup. */
+    bool digitalFilter;                      /*!< Enable the digital filter after setup. */
 #if (FEATURE_PINS_HAS_DIGITAL_FILTER) || (FEATURE_PCTRL_HAS_DIGITAL_FILTER)
-    gpio_digital_filter_config_t filterConfig;     /*!< Digital filter configuration.             */
+    gpio_digital_filter_config_t filterConfig; /*!< Digital filter configuration. */
 #endif /* FEATURE_PINS_HAS_DIGITAL_FILTER || FEATURE_PCTRL_HAS_DIGITAL_FILTER */
-    GPIO_Type *gpioBase;          /*!< GPIO base pointer.                        */
-    pin_direction_t direction;         /*!< Configures the port data direction.       */
-    pins_level_type_t initValue;         /*!< Initial value                             */
+    GPIO_Type *gpioBase;                     /*!< GPIO base pointer associated with the pin. */
+    pin_direction_t direction;               /*!< GPIO direction used in GPIO mux mode. */
+    pins_level_type_t initValue;             /*!< Initial GPIO output level. */
 } pin_settings_config_t;
 
 /*******************************************************************************
  * API
  ******************************************************************************/
-/*!
- * @name PINS DRIVER API.
- * @{
- */
 
 #if defined(__cplusplus)
 extern "C" {
 #endif
 
+/*******************************************************************************
+ * Initialization
+ ******************************************************************************/
+/*!
+ * @name Initialization
+ * @brief Functions for applying one or more pin configuration records.
+ * @{
+ */
 
 /*!
- * @brief Initializes the pins with the given configuration structure
+ * @brief Initialize a list of pins from an array of configuration records.
  *
- * This function configures the pins with the options provided in the
- * provided structure.
+ * Applies each entry in the `config` array in order by calling the internal
+ * hardware access layer. A single record may configure mux selection,
+ * electrical attributes, interrupt mode, GPIO direction, initial output level,
+ * and optional digital filter behavior.
  *
- * @param[in] pinCount The number of configured pins in structure
- * @param[in] config The configuration structure
- * @return The status of the operation
+ * @param[in] pinCount  Number of entries in the configuration array.
+ * @param[in] config    Pointer to the first configuration record.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS  All pin configurations were applied.
+ *
+ * @pre Each array entry must provide valid `base`, `gpioBase`, and pin index
+ *      values compatible with the selected device.
+ * @note When `mux` is `PCTRL_MUX_AS_GPIO`, `direction` must be either
+ *       `GPIO_INPUT_DIRECTION` or `GPIO_OUTPUT_DIRECTION`.
  */
 status_t PINS_DRV_Init(uint32_t pinCount,
                        const pin_settings_config_t config[]);
 
-#if FEATURE_PINS_HAS_PULL_SELECTION
+/*! @} */ /* End of Initialization */
 
+/*******************************************************************************
+ * Port Control
+ ******************************************************************************/
 /*!
- * @brief Configures the internal resistor.
+ * @name Port Control
+ * @brief Functions for updating pad mux and electrical attributes.
+ * @{
+ */
+
+#if FEATURE_PINS_HAS_PULL_SELECTION
+/*!
+ * @brief Configure the internal pull resistor for a pin.
  *
- * This function configures the internal resistor.
+ * Updates the pull-enable and pull-select bits of the selected PCR register.
+ * The setting is meaningful for digital pin mux modes.
  *
- * @param[in] base Port base pointer (PORTA, PORTB, PORTC, etc.)
- * @param[in] pin Port pin number
- * @param[in] pullConfig The pull configuration
+ * @param[in] base        Port control base pointer.
+ * @param[in] pin         Zero-based pin index inside the port.
+ * @param[in] pullConfig  Internal pull resistor selection.
  */
 void PINS_DRV_SetPullSel(PCTRL_Type *const base,
                          uint32_t pin,
                          port_pull_config_t pullConfig);
-
 #endif /* FEATURE_PINS_HAS_PULL_SELECTION */
 
 /*!
- * @brief Configures the pin muxing.
+ * @brief Select the mux mode for a pin.
  *
- * This function configures the pin muxing.
+ * Writes the mux field of the selected PCR register without changing the other
+ * pin-control options already stored in that register.
  *
- * @param[in] base Port base pointer (PORTA, PORTB, PORTC, etc.)
- * @param[in] pin Port pin number
- * @param[in] mux Pin muxing slot selection
+ * @param[in] base  Port control base pointer.
+ * @param[in] pin   Zero-based pin index inside the port.
+ * @param[in] mux   Mux selection to apply.
  */
 void PINS_DRV_SetMuxModeSel(PCTRL_Type *const base,
                             uint32_t pin,
                             port_mux_t mux);
 
+/*! @} */ /* End of Port Control */
+
+/*******************************************************************************
+ * Interrupt & Digital Filter Control
+ ******************************************************************************/
 /*!
- * @brief Configures the port pin interrupt/DMA request.
+ * @name Interrupt & Digital Filter Control
+ * @brief Functions for configuring pin interrupt routing, flags, and optional
+ *        digital filters.
+ * @{
+ */
+
+/*!
+ * @brief Configure the interrupt or DMA trigger mode of a pin.
  *
- * This function configures the port pin interrupt/DMA request.
+ * Programs the interrupt-control field associated with the selected pin.
  *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @param[in] pin GPIO pin number
- * @param[in] intConfig  Interrupt configuration
+ * @param[in] base       GPIO base pointer.
+ * @param[in] pin        Zero-based pin index inside the port.
+ * @param[in] intConfig  Interrupt or DMA trigger configuration.
  */
 void PINS_DRV_SetPinIntSel(GPIO_Type *const base,
                            uint32_t pin,
                            gpio_interrupt_config_t intConfig);
 
 /*!
- * @brief Gets the current gpio pin interrupt/DMA request configuration.
+ * @brief Read the current interrupt or DMA trigger configuration of a pin.
  *
- * This function gets the current gpio pin interrupt/DMA request configuration.
- *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @param[in] pin GPIO pin number
- * @return Interrupt configuration
+ * @param[in] base  GPIO base pointer.
+ * @param[in] pin   Zero-based pin index inside the port.
+ * @return Current interrupt or DMA trigger configuration.
  */
 gpio_interrupt_config_t PINS_DRV_GetPinIntSel(const GPIO_Type *const base,
                                               uint32_t pin);
 
 /*!
- * @brief Clears the individual pin-interrupt status flag.
+ * @brief Clear the interrupt status flag of one pin.
  *
- * This function clears the individual pin-interrupt status flag.
- *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @param[in] pin GPIO pin number
+ * @param[in] base  GPIO base pointer.
+ * @param[in] pin   Zero-based pin index inside the port.
  */
 void PINS_DRV_ClearPinIntFlagCmd(GPIO_Type *const base,
                                  uint32_t pin);
 
 /*!
- * @brief Enables digital filter for digital pin muxing
+ * @brief Enable the digital filter for one pin.
  *
- * This function enables digital filter feature for digital pin muxing
+ * @param[in] base  GPIO base pointer.
+ * @param[in] pin   Zero-based pin index inside the port.
  *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @param[in] pin GPIO pin number
+ * @note This API is only meaningful on devices that implement a GPIO digital
+ *       filter block.
  */
 void PINS_DRV_EnableDigitalFilter(GPIO_Type *const base,
                                   uint32_t pin);
 
 /*!
- * @brief Disables digital filter for digital pin muxing
+ * @brief Disable the digital filter for one pin.
  *
- * This function disables digital filter feature for digital pin muxing
- *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @param[in] pin GPIO pin number
+ * @param[in] base  GPIO base pointer.
+ * @param[in] pin   Zero-based pin index inside the port.
  */
 void PINS_DRV_DisableDigitalFilter(GPIO_Type *const base,
                                    uint32_t pin);
 
 /*!
- * @brief Configures digital filter for gpio with given configuration
+ * @brief Program the digital filter settings for one pin.
  *
- * This function configures digital filter for gpio with given configuration
+ * Updates the filter width and, when supported, the filter clock source of
+ * the selected pin.
  *
- * Note: Updating the filter configuration must be done only after all filters are disabled.
+ * @param[in] base    GPIO base pointer.
+ * @param[in] config  Pointer to the digital filter configuration structure.
+ * @param[in] pin     Zero-based pin index inside the port.
  *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @param[in] config the digital filter configuration struct
+ * @note Update the filter parameters only while the corresponding filter is
+ *       disabled.
  */
 void PINS_DRV_ConfigDigitalFilter(GPIO_Type *const base,
                                   const gpio_digital_filter_config_t *const config,
                                   uint32_t pin);
 
 /*!
- * @brief Reads the entire port interrupt status flag
+ * @brief Read the interrupt status flags for an entire GPIO port.
  *
- * This function reads the entire gpio interrupt status flag.
- *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @return All 32 pin interrupt status flags
+ * @param[in] base  GPIO base pointer.
+ * @return Bit mask of pending interrupt flags for all pins in the port.
  */
 uint32_t PINS_DRV_GetPortIntFlag(const GPIO_Type *const base);
 
 /*!
- * @brief Clears the entire gpio interrupt status flag.
+ * @brief Clear all interrupt status flags for a GPIO port.
  *
- * This function clears the entire port interrupt status flag.
- *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
+ * @param[in] base  GPIO base pointer.
  */
 void PINS_DRV_ClearPortIntFlagCmd(GPIO_Type *const base);
 
+/*! @} */ /* End of Interrupt & Digital Filter Control */
+
+/*******************************************************************************
+ * GPIO Direction Control
+ ******************************************************************************/
+/*!
+ * @name GPIO Direction Control
+ * @brief Functions for managing GPIO direction and optional input-disable
+ *        behavior.
+ * @{
+ */
 
 /*!
- * @brief Get the pins directions configuration for a port
+ * @brief Read the current direction mask of a GPIO port.
  *
- * This function returns the current pins directions for a port. Pins
- * corresponding to bits with value of '1' are configured as output and
- * pins corresponding to bits with value of '0' are configured as input.
+ * Each bit in the returned value corresponds to one pin:
+ *   - `0`: pin is configured as input
+ *   - `1`: pin is configured as output
  *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @return GPIO directions. Each bit represents one pin (LSB is pin 0, MSB is
- * pin 31). For each bit:
- *        - 0: corresponding pin is set to input
- *        - 1: corresponding pin is set to output
+ * @param[in] base  GPIO base pointer.
+ * @return Current direction mask for the entire port.
  */
 pins_channel_type_t PINS_DRV_GetPinsDirection(const GPIO_Type *const base);
 
 /*!
- * @brief Configure the direction for a certain pin from a port
+ * @brief Set the direction of one GPIO pin.
  *
- * This function configures the direction for the given pin, with the
- * given value('1' for pin to be configured as output and '0' for pin to
- * be configured as input)
+ * @param[in] base       GPIO base pointer.
+ * @param[in] pin        Zero-based pin index inside the port.
+ * @param[in] direction  Direction to apply to the selected pin.
  *
- * Note: With some platforms when you want to set a pin as output only and disable
- * input completely, it is required to call PINS_DRV_SetPortInputDisable if platform
- * has this feature.
- *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @param[in] pin The pin number for which to configure the direction
- * @param[in] direction The pin direction:
- *        - 0: corresponding pin is set to input
- *        - 1: corresponding pin is set to output
+ * @note On devices that support input-disable control, call
+ *       PINS_DRV_SetPortInputDisable() separately when output-only behavior is
+ *       required.
  */
 void PINS_DRV_SetPinDirection(GPIO_Type *const base,
                               pins_channel_type_t pin,
                               pin_direction_t direction);
 
 /*!
- * @brief Set the pins directions configuration for a port
+ * @brief Set the direction mask of an entire GPIO port.
  *
- * This function sets the direction configuration for all pins
- * in a port. Pins corresponding to bits with value of '1' will be configured as
- * output and pins corresponding to bits with value of '0' will be configured as
- * input.
+ * Each bit in `pins` corresponds to one pin:
+ *   - `0`: configure as input
+ *   - `1`: configure as output
  *
- * Note: With some platforms when you want to set a pin as output only and disable
- * input completely, it is required to call PINS_DRV_SetPortInputDisable if platform
- * has this feature.
- *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @param[in] pins Pin mask where each bit represents one pin (LSB
- * is pin 0, MSB is pin 31). For each bit:
- *        - 0: corresponding pin is set to input
- *        - 1: corresponding pin is set to output
+ * @param[in] base  GPIO base pointer.
+ * @param[in] pins  Direction mask to write to the port.
  */
 void PINS_DRV_SetPinsDirection(GPIO_Type *const base,
                                pins_channel_type_t pins);
 
 #if FEATURE_PINS_HAS_INPUT_DISABLE
-
 /*!
- * @brief Set the pins input disable state for a port
+ * @brief Enable or disable the input path for selected pins.
  *
- * This function sets the pins input state for a port.
- * Pins corresponding to bits with value of '1' will not be configured
- * as input and pins corresponding to bits with value of '0' will be configured
- * as input.
+ * Each bit in `pins` corresponds to one pin:
+ *   - `0`: input path remains enabled
+ *   - `1`: input path is disabled
  *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @param[in] pins Pin mask where each bit represents one pin (LSB is pin 0, MSB is
- * pin 31). For each bit:
- *        - 0: corresponding pin is set to input
- *        - 1: corresponding pin is not set to input
+ * @param[in] base  GPIO base pointer.
+ * @param[in] pins  Input-disable mask.
  */
 void PINS_DRV_SetPortInputDisable(GPIO_Type *const base,
                                   pins_channel_type_t pins);
 
 /*!
- * @brief Get the pins input disable state for a port
+ * @brief Read the input-disable mask of a GPIO port.
  *
- * This function returns the current pins input state for a port. Pins
- * corresponding to bits with value of '1' are not configured as input and
- * pins corresponding to bits with value of '0' are configured as input.
- *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @return GPIO input state. Each bit represents one pin (LSB is pin 0, MSB is
- * pin 31). For each bit:
- *        - 0: corresponding pin is set to input
- *        - 1: corresponding pin is not set to input
+ * @param[in] base  GPIO base pointer.
+ * @return Current input-disable mask for the port.
  */
 pins_channel_type_t PINS_DRV_GetPortInputDisable(const GPIO_Type *const base);
-
 #endif /* FEATURE_PINS_HAS_INPUT_DISABLE */
 
+/*! @} */ /* End of GPIO Direction Control */
+
+/*******************************************************************************
+ * GPIO Data Access
+ ******************************************************************************/
+/*!
+ * @name GPIO Data Access
+ * @brief Functions for reading and driving GPIO output values.
+ * @{
+ */
 
 /*!
- * @brief Write a pin of a port with a given value
+ * @brief Write one GPIO pin with a logic level.
  *
- * This function writes the given pin from a port, with the given value
- * ('0' represents LOW, '1' represents HIGH).
- *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @param[in] pin Pin number to be written
- * @param[in] value Pin value to be written
- *        - 0: corresponding pin is set to LOW
- *        - 1: corresponding pin is set to HIGH
+ * @param[in] base   GPIO base pointer.
+ * @param[in] pin    Zero-based pin index inside the port.
+ * @param[in] value  Logic level to drive on the selected pin.
  */
 void PINS_DRV_WritePin(GPIO_Type *const base,
                        pins_channel_type_t pin,
                        pins_level_type_t value);
 
 /*!
- * @brief Write all pins of a port
+ * @brief Write the output register of an entire GPIO port.
  *
- * This function writes all pins configured as output with the values given in
- * the parameter pins. '0' represents LOW, '1' represents HIGH.
+ * Each bit in `pins` corresponds to one GPIO output:
+ *   - `0`: drive logic low
+ *   - `1`: drive logic high
  *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @param[in] pins Pin mask to be written
- *        - 0: corresponding pin is set to LOW
- *        - 1: corresponding pin is set to HIGH
+ * @param[in] base  GPIO base pointer.
+ * @param[in] pins  Output value mask to write.
  */
 void PINS_DRV_WritePins(GPIO_Type *const base,
                         pins_channel_type_t pins);
 
 /*!
- * @brief Get the current output from a port
+ * @brief Read the current output register value of a GPIO port.
  *
- * This function returns the current output that is written to a port. Only pins
- * that are configured as output will have meaningful values.
- *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @return GPIO outputs. Each bit represents one pin (LSB is pin 0, MSB is pin
- * 31). For each bit:
- *        - 0: corresponding pin is set to LOW
- *        - 1: corresponding pin is set to HIGH
+ * @param[in] base  GPIO base pointer.
+ * @return Current output latch value for the port.
  */
 pins_channel_type_t PINS_DRV_GetPinsOutput(const GPIO_Type *const base);
 
 /*!
- * @brief Write pins with 'Set' value
+ * @brief Set selected GPIO output pins to logic high.
  *
- * This function configures output pins listed in parameter pins (bits that are
- * '1') to have a value of 'set' (HIGH). Pins corresponding to '0' will be
- * unaffected.
+ * Bits set to `1` in `pins` are driven high. Bits cleared to `0` are left
+ * unchanged.
  *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @param[in] pins Pin mask of bits to be set. Each bit represents one pin (LSB is
- * pin 0, MSB is pin 31). For each bit:
- *        - 0: corresponding pin is unaffected
- *        - 1: corresponding pin is set to HIGH
+ * @param[in] base  GPIO base pointer.
+ * @param[in] pins  Mask of pins to set.
  */
 void PINS_DRV_SetPins(GPIO_Type *const base,
                       pins_channel_type_t pins);
 
 /*!
- * @brief Write pins to 'Clear' value
+ * @brief Clear selected GPIO output pins to logic low.
  *
- * This function configures output pins listed in parameter pins (bits that are
- * '1') to have a 'cleared' value (LOW). Pins corresponding to '0' will be
- * unaffected.
+ * Bits set to `1` in `pins` are driven low. Bits cleared to `0` are left
+ * unchanged.
  *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @param[in] pins Pin mask of bits to be cleared. Each bit represents one pin (LSB
- * is pin 0, MSB is pin 31). For each bit:
- *        - 0: corresponding pin is unaffected
- *        - 1: corresponding pin is cleared(set to LOW)
+ * @param[in] base  GPIO base pointer.
+ * @param[in] pins  Mask of pins to clear.
  */
 void PINS_DRV_ClearPins(GPIO_Type *const base,
                         pins_channel_type_t pins);
 
 /*!
- * @brief Toggle pins value
+ * @brief Toggle selected GPIO output pins.
  *
- * This function toggles output pins listed in parameter pins (bits that are
- * '1'). Pins corresponding to '0' will be unaffected.
+ * Bits set to `1` in `pins` are toggled. Bits cleared to `0` are left
+ * unchanged.
  *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @param[in] pins Pin mask of bits to be toggled.  Each bit represents one pin (LSB
- * is pin 0, MSB is pin 31). For each bit:
- *        - 0: corresponding pin is unaffected
- *        - 1: corresponding pin is toggled
+ * @param[in] base  GPIO base pointer.
+ * @param[in] pins  Mask of pins to toggle.
  */
 void PINS_DRV_TogglePins(GPIO_Type *const base,
                          pins_channel_type_t pins);
 
 /*!
- * @brief Read input pins
+ * @brief Read the input value of an entire GPIO port.
  *
- * This function returns the current input values from a port. Only pins
- * configured as input will have meaningful values.
- *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @return GPIO inputs. Each bit represents one pin (LSB is pin 0, MSB is pin
- * 31). For each bit:
- *        - 0: corresponding pin is read as LOW
- *        - 1: corresponding pin is read as HIGH
+ * @param[in] base  GPIO base pointer.
+ * @return Current sampled input levels for the port.
  */
 pins_channel_type_t PINS_DRV_ReadPins(const GPIO_Type *const base);
 
 /*!
- * @brief Read input pin
+ * @brief Read the input value of one GPIO pin.
  *
- * This function returns the current input values from a pin. Only pins
- * configured as input will have meaningful values.
- *
- * @param[in] base GPIO base pointer (GPIOA, GPIOB, GPIOC, etc.)
- * @param[in] pin Port pin number
- * @return GPIO inputs:
- *        - 0: corresponding pin is read as LOW
- *        - 1: corresponding pin is read as HIGH
+ * @param[in] base  GPIO base pointer.
+ * @param[in] pin   Zero-based pin index inside the port.
+ * @return Logic level sampled on the selected pin.
  */
-pins_level_type_t PINS_DRV_ReadPin(const GPIO_Type * const base, pins_channel_type_t pin);
-/*! @} */
+pins_level_type_t PINS_DRV_ReadPin(const GPIO_Type * const base,
+                                   pins_channel_type_t pin);
+
+/*! @} */ /* End of GPIO Data Access */
 
 #if defined(__cplusplus)
 }
 #endif
 
-/*! @} */
+/*! @} */ /* End of pins group */
 
 #endif /* PINS_DRIVER_H */
 /*******************************************************************************

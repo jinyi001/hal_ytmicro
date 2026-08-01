@@ -7,6 +7,12 @@
 
 /*!
  * @file flexcan_driver.c
+ * @version 1.4.1
+ *
+ * @brief FlexCAN Driver — implementation of the public API.
+ *
+ * This file implements all FLEXCAN_DRV_* functions declared in
+ * flexcan_driver.h plus the internal helpers used by the driver.
  */
 
 /*!
@@ -123,16 +129,9 @@ static uint8_t FLEXCAN_UseEnhanceRxFifoComputePayloadSize(uint8_t dlcValue);
  * Code
  ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_SetBitrate
- * Description   : Set FlexCAN baudrate.
- * This function will set up all the time segment values for classical frames or the
- * extended time segments for the arbitration phase of FD frames. Those time segment
- * values are passed in by the user and are based on the required baudrate.
- *
- * Implements    : FLEXCAN_DRV_SetBitrate_Activity
- *END**************************************************************************/
+/*!
+ * @brief Set FlexCAN baudrate. This function will set up all the time segment values for classical frames or the extended time segments for the arbitration phase of FD frames. Those time segment values are passed in by the user and are based on the required baudrate.
+ */
 void FLEXCAN_DRV_SetBitrate(uint8_t instance, const flexcan_time_segment_t *bitrate)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -168,16 +167,9 @@ void FLEXCAN_DRV_SetBitrate(uint8_t instance, const flexcan_time_segment_t *bitr
 }
 
 #if FEATURE_CAN_HAS_FD
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_SetBitrateCbt
- * Description   : Set FlexCAN bitrate.
- * This function will set up all the time segment values for the data phase of
- * FD frames. Those time segment values are passed in by the user and are based
- * on the required baudrate.
- *
- * Implements    : FLEXCAN_DRV_SetBitrateCbt_Activity
- *END**************************************************************************/
+/*!
+ * @brief Set FlexCAN bitrate. This function will set up all the time segment values for the data phase of FD frames. Those time segment values are passed in by the user and are based on the required baudrate.
+ */
 void FLEXCAN_DRV_SetBitrateCbt(uint8_t instance, const flexcan_time_segment_t *bitrate)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -201,15 +193,9 @@ void FLEXCAN_DRV_SetBitrateCbt(uint8_t instance, const flexcan_time_segment_t *b
 }
 #endif
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_GetBitrate
- * Description   : Get FlexCAN baudrate.
- * This function will be return the current bit rate settings for classical frames
- * or the arbitration phase of FD frames.
- *
- * Implements    : FLEXCAN_DRV_GetBitrate_Activity
- *END**************************************************************************/
+/*!
+ * @brief Get FlexCAN baudrate. This function will be return the current bit rate settings for classical frames or the arbitration phase of FD frames.
+ */
 void  FLEXCAN_DRV_GetBitrate(uint8_t instance, flexcan_time_segment_t *bitrate)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -231,15 +217,9 @@ void  FLEXCAN_DRV_GetBitrate(uint8_t instance, flexcan_time_segment_t *bitrate)
 }
 
 #if FEATURE_CAN_HAS_FD
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_GetBitrateFD
- * Description   : Get FlexCAN baudrate.
- * This function will be return the current bit rate settings for the data phase
- * of FD frames.
- *
- * Implements    : FLEXCAN_DRV_GetBitrateFD_Activity
- *END**************************************************************************/
+/*!
+ * @brief Get FlexCAN baudrate. This function will be return the current bit rate settings for the data phase of FD frames.
+ */
 void  FLEXCAN_DRV_GetBitrateFD(uint8_t instance, flexcan_time_segment_t *bitrate)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -253,15 +233,9 @@ void  FLEXCAN_DRV_GetBitrateFD(uint8_t instance, flexcan_time_segment_t *bitrate
 }
 #endif
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_SetMasktype
- * Description   : Set RX masking type.
- * This function will set RX masking type as RX global mask or RX individual
- * mask.
- *
- * Implements    : FLEXCAN_DRV_SetRxMaskType_Activity
- *END**************************************************************************/
+/*!
+ * @brief Set RX masking type. This function will set RX masking type as RX global mask or RX individual mask.
+ */
 void  FLEXCAN_DRV_SetRxMaskType(uint8_t instance, flexcan_rx_mask_type_t type)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -283,14 +257,9 @@ void  FLEXCAN_DRV_SetRxMaskType(uint8_t instance, flexcan_rx_mask_type_t type)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_SetRxFifoGlobalMask
- * Description   : Set Rx FIFO global mask as the 11-bit standard mask or the
- * 29-bit extended mask.
- *
- * Implements    : FLEXCAN_DRV_SetRxFifoGlobalMask_Activity
- *END**************************************************************************/
+/*!
+ * @brief Set Rx FIFO global mask as the 11-bit standard mask or the 29-bit extended mask.
+ */
 void FLEXCAN_DRV_SetRxFifoGlobalMask(
     uint8_t instance,
     flexcan_msgbuff_id_type_t id_type,
@@ -338,14 +307,9 @@ void FLEXCAN_DRV_SetRxFifoGlobalMask(
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_SetRxMbGlobalMask
- * Description   : Set Rx Message Buffer global mask as the 11-bit standard mask
- * or the 29-bit extended mask.
- *
- * Implements    : FLEXCAN_DRV_SetRxMbGlobalMask_Activity
- *END**************************************************************************/
+/*!
+ * @brief Set Rx Message Buffer global mask as the 11-bit standard mask or the 29-bit extended mask.
+ */
 void FLEXCAN_DRV_SetRxMbGlobalMask(
     uint8_t instance,
     flexcan_msgbuff_id_type_t id_type,
@@ -382,14 +346,9 @@ void FLEXCAN_DRV_SetRxMbGlobalMask(
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_SetRxMb14Mask
- * Description   : Set Rx Message Buffer 14 mask as the 11-bit standard mask
- * or the 29-bit extended mask.
- *
- * Implements    : FLEXCAN_DRV_SetRxMb14Mask_Activity
- *END**************************************************************************/
+/*!
+ * @brief Set Rx Message Buffer 14 mask as the 11-bit standard mask or the 29-bit extended mask.
+ */
 void FLEXCAN_DRV_SetRxMb14Mask(
     uint8_t instance,
     flexcan_msgbuff_id_type_t id_type,
@@ -426,14 +385,9 @@ void FLEXCAN_DRV_SetRxMb14Mask(
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_SetRxMb15Mask
- * Description   : Set Rx Message Buffer 15 mask as the 11-bit standard mask
- * or the 29-bit extended mask.
- *
- * Implements    : FLEXCAN_DRV_SetRxMb15Mask_Activity
- *END**************************************************************************/
+/*!
+ * @brief Set Rx Message Buffer 15 mask as the 11-bit standard mask or the 29-bit extended mask.
+ */
 void FLEXCAN_DRV_SetRxMb15Mask(
     uint8_t instance,
     flexcan_msgbuff_id_type_t id_type,
@@ -470,14 +424,9 @@ void FLEXCAN_DRV_SetRxMb15Mask(
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_SetRxIndividualMask
- * Description   : Set Rx individual mask as the 11-bit standard mask or the
- * 29-bit extended mask.
- *
- * Implements    : FLEXCAN_DRV_SetRxIndividualMask_Activity
- *END**************************************************************************/
+/*!
+ * @brief Set Rx individual mask as the 11-bit standard mask or the 29-bit extended mask.
+ */
 status_t FLEXCAN_DRV_SetRxIndividualMask(
     uint8_t instance,
     flexcan_msgbuff_id_type_t id_type,
@@ -588,14 +537,9 @@ status_t FLEXCAN_DRV_SetRxIndividualMask(
     return ReturnStatus;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_SetRxFifoGlobalMask
- * Description   : Set Raw global mask Value in FIFO mode. Customer must 
- *                 calculate the mask value based on the reference manual.
- *
- * Implements    : FLEXCAN_DRV_SetRawRxFifoGlobalMask_Activity
- *END**************************************************************************/
+/*!
+ * @brief Set Raw global mask Value in FIFO mode. Customer must calculate the mask value based on the reference manual.
+ */
 void FLEXCAN_DRV_SetRawRxFifoGlobalMask(
     uint8_t instance,
     uint32_t mask)
@@ -621,14 +565,9 @@ void FLEXCAN_DRV_SetRawRxFifoGlobalMask(
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_SetRxIndividualMask
- * Description   : Set Raw individual mask Value in FIFO mode. Customer must 
- *                 calculate the mask value based on the reference manual.
- *
- * Implements    : FLEXCAN_DRV_SetRawRxIndividualMask_Activity
- *END**************************************************************************/
+/*!
+ * @brief Set Raw individual mask Value in FIFO mode. Customer must calculate the mask value based on the reference manual.
+ */
 status_t FLEXCAN_DRV_SetRawRxIndividualMask(
     uint8_t instance,
     uint8_t mb_idx,
@@ -664,13 +603,9 @@ status_t FLEXCAN_DRV_SetRawRxIndividualMask(
     return ReturnStatus;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_UseEnhanceRxFifoComputePayloadSize
- * Description   : Computes the maximum payload size (in bytes), given a DLC
- * field value.
- *
- *END**************************************************************************/
+/*!
+ * @brief Computes the maximum payload size (in bytes), given a DLC field value.
+ */
 #if FEATURE_CAN_HAS_ENHANCE_RX_FIFO
 static uint8_t FLEXCAN_UseEnhanceRxFifoComputePayloadSize(
     uint8_t dlcValue)
@@ -714,12 +649,9 @@ static uint8_t FLEXCAN_UseEnhanceRxFifoComputePayloadSize(
     return ret;
 }
 #endif
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_EnableIRQs
- * Description   : This function enable FLEXCAN instance Interrupts
- *
- *END**************************************************************************/
+/*!
+ * @brief This function enable FLEXCAN instance Interrupts.
+ */
 static inline void FLEXCAN_EnableIRQs(uint8_t instance)
 {
     uint8_t i;
@@ -742,12 +674,9 @@ static inline void FLEXCAN_EnableIRQs(uint8_t instance)
 
 #ifdef ERRATA_E10368
 #if FEATURE_CAN_HAS_FD
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_Errata10368
- * Description   : Implements errata 10368. This errata applies to mask 0N78S for MPC5748G CPU.
- *
- *END**************************************************************************/
+/*!
+ * @brief Implements errata 10368. This errata applies to mask 0N78S for MPC5748G CPU.
+ */
 static inline void FLEXCAN_Errata10368(uint8_t instance,
                                        const flexcan_user_config_t *data)
 {
@@ -779,26 +708,18 @@ static inline void FLEXCAN_Errata10368(uint8_t instance,
         FLEXCAN_SetFDTimeSegments(base, &bitrate);
         FLEXCAN_ExitFreezeMode(base);
         /* Wait transmission of MB0 to complete */
-        while((base->IFLAG1 & 0x1U) != 0x1U) {};
+        while((base->IFLAG1 & CAN_IFLAG1_BUF0I_MASK) != CAN_IFLAG1_BUF0I_MASK) {};
         /* Clear Transmission Complete */
-        base->IFLAG1 = base->IFLAG1 | 0x1U;
+        base->IFLAG1 = CAN_IFLAG1_BUF0I_MASK;
         FLEXCAN_EnterFreezeMode(base);
     }
 }
 #endif /* FEATURE_CAN_HAS_FD */
 #endif /* ERRATA_E10368 */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_Init
- * Description   : Initialize FlexCAN driver.
- * This function will select a source clock, reset FlexCAN module, set maximum
- * number of message buffers, initialize all message buffers as inactive, enable
- * RX FIFO if needed, mask all mask bits, disable all MB interrupts, enable
- * FlexCAN normal mode, and enable all the error interrupts if needed.
- *
- * Implements    : FLEXCAN_DRV_Init_Activity
- *END**************************************************************************/
+/*!
+ * @brief Initialize FlexCAN driver. This function will select a source clock, reset FlexCAN module, set maximum number of message buffers, initialize all message buffers as inactive, enable RX FIFO if needed, mask all mask bits, disable all MB interrupts, enable FlexCAN normal mode, and enable all the error interrupts if needed.
+ */
 status_t FLEXCAN_DRV_Init(
    uint8_t instance,
    flexcan_state_t *state,
@@ -1070,18 +991,9 @@ status_t FLEXCAN_DRV_Init(
     return result;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_ConfigTxMb
- * Description   : Configure a Tx message buffer.
- * This function will first check if RX FIFO is enabled. If RX FIFO is enabled,
- * the function will make sure if the MB requested is not occupied by RX FIFO
- * and ID filter table. Then this function will set up the message buffer fields,
- * configure the message buffer code for Tx buffer as INACTIVE, and enable the
- * Message Buffer interrupt.
- *
- * Implements    : FLEXCAN_DRV_ConfigTxMb_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configure a Tx message buffer. This function will first check if RX FIFO is enabled. If RX FIFO is enabled, the function will make sure if the MB requested is not occupied by RX FIFO and ID filter table. Then this function will set up the message buffer fields, configure the message buffer code for Tx buffer as INACTIVE, and enable the Message Buffer interrupt.
+ */
 status_t FLEXCAN_DRV_ConfigTxMb(
     uint8_t instance,
     uint8_t mb_idx,
@@ -1116,18 +1028,9 @@ status_t FLEXCAN_DRV_ConfigTxMb(
     }
     return result;
 }
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_ConfigRemoteResponseMb
- * Description   : Configures a transmit message buffer for remote frame
- * response. This function will first check if RX FIFO is enabled. If RX FIFO is
- * enabled, the function will make sure if the MB requested is not occupied by
- * the RX FIFO and ID filter table. Then this function will set up the message
- * buffer fields, configure the message buffer code for Tx buffer as RX_RANSWER,
- * and enable the Message Buffer interrupt.
- *
- * Implements    : FLEXCAN_DRV_ConfigRemoteResponseMb_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configures a transmit message buffer for remote frame response. This function will first check if RX FIFO is enabled. If RX FIFO is enabled, the function will make sure if the MB requested is not occupied by the RX FIFO and ID filter table. Then this function will set up the message buffer fields, configure the message buffer code for Tx buffer as RX_RANSWER, and enable the Message Buffer interrupt.
+ */
 status_t FLEXCAN_DRV_ConfigRemoteResponseMb(
     uint8_t instance,
     uint8_t mb_idx,
@@ -1162,15 +1065,9 @@ status_t FLEXCAN_DRV_ConfigRemoteResponseMb(
     return result;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_SendBlocking
- * Description   : This function sends a CAN frame using a configured message
- * buffer. The function blocks until either the frame was sent, or the specified
- * timeout expired.
- *
- * Implements    : FLEXCAN_DRV_SendBlocking_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function sends a CAN frame using a configured message buffer. The function blocks until either the frame was sent, or the specified timeout expired.
+ */
 status_t FLEXCAN_DRV_SendBlocking(
     uint8_t instance,
     uint8_t mb_idx,
@@ -1266,15 +1163,9 @@ status_t FLEXCAN_DRV_SendBlocking(
     return result;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_Send
- * Description   : This function sends a CAN frame using a configured message
- * buffer. The function returns immediately. If a callback is installed, it will
- * be invoked after the frame was sent.
- *
- * Implements    : FLEXCAN_DRV_Send_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function sends a CAN frame using a configured message buffer. The function returns immediately. If a callback is installed, it will be invoked after the frame was sent.
+ */
 status_t FLEXCAN_DRV_Send(
     uint8_t instance,
     uint8_t mb_idx,
@@ -1305,20 +1196,9 @@ status_t FLEXCAN_DRV_Send(
     return result;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_ConfigMb
- * Description   : Configure a Rx message buffer.
- * This function will first check if RX FIFO is enabled. If RX FIFO is enabled,
- * the function will make sure if the MB requested is not occupied by RX FIFO
- * and ID filter table. Then this function will set up the message buffer fields,
- * configure the message buffer code for Rx message buffer as NOT_USED, enable
- * the Message Buffer interrupt, configure the message buffer code for Rx
- * message buffer as INACTIVE, copy user's buffer into the message buffer data
- * area, and configure the message buffer code for Rx message buffer as EMPTY.
- *
- * Implements    : FLEXCAN_DRV_ConfigRxMb_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configure a Rx message buffer. This function will first check if RX FIFO is enabled. If RX FIFO is enabled, the function will make sure if the MB requested is not occupied by RX FIFO and ID filter table. Then this function will set up the message buffer fields, configure the message buffer code for Rx message buffer as NOT_USED, enable the Message Buffer interrupt, configure the message buffer code for Rx message buffer as INACTIVE, copy user's buffer into the message buffer data area, and configure the message buffer code for Rx message buffer as EMPTY.
+ */
 status_t FLEXCAN_DRV_ConfigRxMb(
     uint8_t instance,
     uint8_t mb_idx,
@@ -1374,15 +1254,9 @@ status_t FLEXCAN_DRV_ConfigRxMb(
     return result;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_ConfigRxFifo
- * Description   : Confgure RX FIFO ID filter table elements.
- * This function will confgure RX FIFO ID filter table elements, and enable RX
- * FIFO interrupts.
- *
- * Implements    : FLEXCAN_DRV_ConfigRxFifo_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configure RX FIFO ID filter table elements. This function will configure RX FIFO ID filter table elements, and enable RX FIFO interrupts.
+ */
 void FLEXCAN_DRV_ConfigRxFifo(
     uint8_t instance,
     flexcan_rx_fifo_id_element_format_t id_format,
@@ -1409,15 +1283,9 @@ void FLEXCAN_DRV_ConfigRxFifo(
 }
 
 #if FEATURE_CAN_HAS_ENHANCE_RX_FIFO
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_ConfigEnhanceRxFifo
- * Description   : Confgure enhanced RX FIFO ID filter table elements.
- * This function will confgure enhanced RX FIFO ID filter table elements, and enable RX
- * FIFO interrupts.
- *
- * Implements    : FLEXCAN_DRV_ConfigEnhanceRxFifo_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configure enhanced RX FIFO ID filter table elements. This function will configure enhanced RX FIFO ID filter table elements, and enable RX FIFO interrupts.
+ */
 void FLEXCAN_DRV_ConfigEnhanceRxFifo(
     uint8_t instance,
     const flexcan_enhance_rx_fifo_filter_table_t *id_filter_table,
@@ -1444,15 +1312,9 @@ void FLEXCAN_DRV_ConfigEnhanceRxFifo(
 }
 #endif /* FEATURE_CAN_HAS_ENHANCE_RX_FIFO */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_ReceiveBlocking
- * Description   : This function receives a CAN frame into a configured message
- * buffer. The function blocks until either a frame was received, or the
- * specified timeout expired.
- *
- * Implements    : FLEXCAN_DRV_ReceiveBlocking_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function receives a CAN frame into a configured message buffer. The function blocks until either a frame was received, or the specified timeout expired.
+ */
 status_t FLEXCAN_DRV_ReceiveBlocking(
     uint8_t instance,
     uint8_t mb_idx,
@@ -1504,15 +1366,9 @@ status_t FLEXCAN_DRV_ReceiveBlocking(
     return result;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_Receive
- * Description   : This function receives a CAN frame into a configured message
- * buffer. The function returns immediately. If a callback is installed, it will
- * be invoked after the frame was received and read into the specified buffer.
- *
- * Implements    : FLEXCAN_DRV_Receive_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function receives a CAN frame into a configured message buffer. The function returns immediately. If a callback is installed, it will be invoked after the frame was received and read into the specified buffer.
+ */
 status_t FLEXCAN_DRV_Receive(
     uint8_t instance,
     uint8_t mb_idx,
@@ -1535,15 +1391,9 @@ status_t FLEXCAN_DRV_Receive(
     return result;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_RxFifoBlocking
- * Description   : This function receives a CAN frame using the Rx FIFO. The
- * function blocks until either a frame was received, or the specified timeout
- * expired.
- *
- * Implements    : FLEXCAN_DRV_RxFifoBlocking_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function receives a CAN frame using the Rx FIFO. The function blocks until either a frame was received, or the specified timeout expired.
+ */
 status_t FLEXCAN_DRV_RxFifoBlocking(
     uint8_t instance,
     flexcan_msgbuff_t *data,
@@ -1576,6 +1426,14 @@ status_t FLEXCAN_DRV_RxFifoBlocking(
         }
 #endif
 
+#if FEATURE_CAN_HAS_DMA_ENABLE
+        if (state->mbs[FLEXCAN_MB_HANDLE_RXFIFO].state == FLEXCAN_MB_DMA_ERROR)
+        {
+            result = STATUS_ERROR;
+            state->mbs[FLEXCAN_MB_HANDLE_RXFIFO].state = FLEXCAN_MB_IDLE;
+        }
+        else
+#endif
         if (result == STATUS_TIMEOUT)
         {
              /* If the status is updated reception successful else report TimeOut */
@@ -1595,15 +1453,9 @@ status_t FLEXCAN_DRV_RxFifoBlocking(
     return result;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_RxFifo
- * Description   : This function receives a CAN frame using the Rx FIFO. The
- * function returns immediately. If a callback is installed, it will be invoked
- * after the frame was received and read into the specified buffer.
- *
- * Implements    : FLEXCAN_DRV_RxFifo_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function receives a CAN frame using the Rx FIFO. The function returns immediately. If a callback is installed, it will be invoked after the frame was received and read into the specified buffer.
+ */
 status_t FLEXCAN_DRV_RxFifo(
     uint8_t instance,
     flexcan_msgbuff_t *data)
@@ -1618,14 +1470,9 @@ status_t FLEXCAN_DRV_RxFifo(
 }
 
 #if FEATURE_CAN_HAS_ENHANCE_RX_FIFO
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_EnhanceRxFifo
- * Description   : This function receives a CAN frame using the enhcanded Rx FIFO.
- * The function returns immediately. If a callback is installed, it will be invoked
- * after the frame was received and read into the specified buffer.
- * Implements    : FLEXCAN_DRV_EnhanceRxFifo_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function receives a CAN frame using the enhcanded Rx FIFO. The function returns immediately. If a callback is installed, it will be invoked after the frame was received and read into the specified buffer.
+ */
 status_t FLEXCAN_DRV_EnhanceRxFifo(
     uint8_t instance,
     flexcan_msgbuff_t *data)
@@ -1641,14 +1488,9 @@ status_t FLEXCAN_DRV_EnhanceRxFifo(
 #endif /* FEATURE_CAN_HAS_ENHANCE_RX_FIFO */
 
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_Deinit
- * Description   : Shutdown a FlexCAN module.
- * This function will disable all FlexCAN interrupts, and disable the FlexCAN.
- *
- * Implements    : FLEXCAN_DRV_Deinit_Activity
- *END**************************************************************************/
+/*!
+ * @brief Shutdown a FlexCAN module. This function will disable all FlexCAN interrupts, and disable the FlexCAN.
+ */
 status_t FLEXCAN_DRV_Deinit(uint8_t instance)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -1718,14 +1560,9 @@ status_t FLEXCAN_DRV_Deinit(uint8_t instance)
 }
 
 #if FEATURE_CAN_HAS_FD
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_SetTDCOffset
- * Description   : Enables/Disables the Transceiver Delay Compensation feature and sets
- * the Transceiver Delay Compensation Offset.
- *
- * Implements    : FLEXCAN_DRV_SetTDCOffset_Activity
- *END**************************************************************************/
+/*!
+ * @brief Enables/Disables the Transceiver Delay Compensation feature and sets the Transceiver Delay Compensation Offset.
+ */
 void FLEXCAN_DRV_SetTDCOffset(uint8_t instance, bool enable, uint8_t offset)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -1748,13 +1585,9 @@ void FLEXCAN_DRV_SetTDCOffset(uint8_t instance, bool enable, uint8_t offset)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_GetTDCValue
- * Description   : Gets the value of the Transceiver Delay Compensation.
- *
- * Implements    : FLEXCAN_DRV_GetTDCValue_Activity
- *END**************************************************************************/
+/*!
+ * @brief Gets the value of the Transceiver Delay Compensation.
+ */
 uint8_t FLEXCAN_DRV_GetTDCValue(uint8_t instance)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -1770,13 +1603,9 @@ uint8_t FLEXCAN_DRV_GetTDCValue(uint8_t instance)
     return result;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_GetTDCFail
- * Description   : Gets the value of the TDC Fail flag.
- *
- * Implements    : FLEXCAN_DRV_GetTDCFail_Activity
- *END**************************************************************************/
+/*!
+ * @brief Gets the value of the TDC Fail flag.
+ */
 bool FLEXCAN_DRV_GetTDCFail(uint8_t instance)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -1792,13 +1621,9 @@ bool FLEXCAN_DRV_GetTDCFail(uint8_t instance)
     return result;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_ClearTDCFail
- * Description   : Clears the TDC Fail flag.
- *
- * Implements    : FLEXCAN_DRV_ClearTDCFail_Activity
- *END**************************************************************************/
+/*!
+ * @brief Clears the TDC Fail flag.
+ */
 void FLEXCAN_DRV_ClearTDCFail(uint8_t instance)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -1812,13 +1637,9 @@ void FLEXCAN_DRV_ClearTDCFail(uint8_t instance)
 }
 #endif
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_IRQHandlerRxFIFO
- * Description   : Process IRQHandler in case of RxFIFO mode selection for CAN interface.
- *
- * Implements    : FLEXCAN_IRQHandlerRxFIFO_Activity
- *END**************************************************************************/
+/*!
+ * @brief Process IRQHandler in case of RxFIFO mode selection for CAN interface.
+ */
 static inline void FLEXCAN_IRQHandlerRxFIFO(uint8_t instance, uint32_t mb_idx)
 {
     CAN_Type * base = g_flexcanBase[instance];
@@ -1884,15 +1705,9 @@ static inline void FLEXCAN_IRQHandlerRxFIFO(uint8_t instance, uint32_t mb_idx)
 
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_IRQHandlerRxMB
- * Description   : Process IRQHandler in case of Rx MessageBuffer selection
- * for CAN interface.
- *
- * This is not a public API as it is called whenever an interrupt and receive
- * individual MB occurs
- *END**************************************************************************/
+/*!
+ * @brief Process IRQHandler in case of Rx MessageBuffer selection for CAN interface.
+ */
 static void FLEXCAN_IRQHandlerRxMB(uint8_t instance, uint32_t mb_idx)
 {
      CAN_Type * base = g_flexcanBase[instance];
@@ -1936,15 +1751,9 @@ static void FLEXCAN_IRQHandlerRxMB(uint8_t instance, uint32_t mb_idx)
      }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_ORed_IRQHandler
- * Description   : BusOff and Tx/Rx Warning interrupt handler for FLEXCAN.
- * This handler only provides a error status report and invokes the user callback,
- * and then clears the interrupt flags.
- * This is not a public API as it is called whenever an interrupt occurs.
- *
- *END**************************************************************************/
+/*!
+ * @brief BusOff and Tx/Rx Warning interrupt handler for FLEXCAN. This handler only provides a error status report and invokes the user callback, and then clears the interrupt flags. This is not a public API as it is called whenever an interrupt occurs.
+ */
 void FLEXCAN_ORed_IRQHandler(uint8_t instance)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -1977,14 +1786,9 @@ void FLEXCAN_ORed_IRQHandler(uint8_t instance)
     FLEXCAN_ClearBusOffIntStatusFlag(base);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_IRQHandler
- * Description   : Interrupt handler for FLEXCAN.
- * This handler read data from MB or FIFO, and then clear the interrupt flags.
- * This is not a public API as it is called whenever an interrupt occurs.
- *
- *END**************************************************************************/
+/*!
+ * @brief Interrupt handler for FLEXCAN. This handler read data from MB or FIFO, and then clear the interrupt flags. This is not a public API as it is called whenever an interrupt occurs.
+ */
 void FLEXCAN_IRQHandler(uint8_t instance, uint8_t mb_idx_start, uint8_t mb_idx_end)  /* PRQA S 4700 */
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -2187,14 +1991,9 @@ void FLEXCAN_EnhanceRxFifo_IRQHandler(uint8_t instance)
 #endif /* FEATURE_CAN_HAS_ENHANCE_RX_FIFO */
 
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_Error_IRQHandler
- * Description   : Error interrupt handler for FLEXCAN.
- * This handler read data from MB or FIFO, and then clear the interrupt flags.
- * This is not a public API as it is called whenever an interrupt occurs.
- *
- *END**************************************************************************/
+/*!
+ * @brief Error interrupt handler for FLEXCAN. This handler read data from MB or FIFO, and then clear the interrupt flags. This is not a public API as it is called whenever an interrupt occurs.
+ */
 void FLEXCAN_Error_IRQHandler(uint8_t instance)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -2255,12 +2054,9 @@ void FLEXCAN_Error_IRQHandler(uint8_t instance)
 
 #if FEATURE_CAN_HAS_WAKE_UP_IRQ
 #if FEATURE_CAN_HAS_SELF_WAKE_UP
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_EnableSelfWakeUp
- * Description   : Enable self wake up
- *
- *END**************************************************************************/
+/*!
+ * @brief Enable self wake up
+ */
 void FLEXCAN_DRV_EnableSelfWakeUp(uint8_t instance)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -2270,12 +2066,9 @@ void FLEXCAN_DRV_EnableSelfWakeUp(uint8_t instance)
      (void)FLEXCAN_SetSelfWakeUp(base,true);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_DisableSelfWakeUp
- * Description   : Disable self wake up
- *
- *END**************************************************************************/
+/*!
+ * @brief Disable self wake up
+ */
 void FLEXCAN_DRV_DisableSelfWakeUp(uint8_t instance)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -2286,15 +2079,9 @@ void FLEXCAN_DRV_DisableSelfWakeUp(uint8_t instance)
 }
 #endif
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_WakeUpHandler
- * Description   : Wake up handler for FLEXCAN.
- * This handler verifies the event which caused the wake up and invokes the
- * user callback, if configured.
- * This is not a public API as it is called whenever an wake up event occurs.
- *
- *END**************************************************************************/
+/*!
+ * @brief Wake up handler for FLEXCAN. This handler verifies the event which caused the wake up and invokes the user callback, if configured. This is not a public API as it is called whenever an wake up event occurs.
+ */
 void FLEXCAN_WakeUpHandler(uint8_t instance)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -2339,17 +2126,9 @@ void FLEXCAN_WakeUpHandler(uint8_t instance)
 }
 #endif /* FEATURE_CAN_HAS_WAKE_UP_IRQ */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_GetTransferStatus
- * Description   : This function returns whether the previous FLEXCAN receive is
- *                 completed.
- * When performing a non-blocking receive, the user can call this function to
- * ascertain the state of the current receive progress: in progress (or busy)
- * or complete (success).
- *
- * Implements    : FLEXCAN_DRV_GetTransferStatus_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function returns whether the previous FLEXCAN receive is completed. When performing a non-blocking receive, the user can call this function to ascertain the state of the current receive progress: in progress (or busy) or complete (success).
+ */
 status_t FLEXCAN_DRV_GetTransferStatus(uint8_t instance, uint8_t mb_idx)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -2387,14 +2166,9 @@ status_t FLEXCAN_DRV_GetTransferStatus(uint8_t instance, uint8_t mb_idx)
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_GetErrorStatus
- * Description   : Reports various error conditions detected in the reception and
- *                 transmission of a CAN frame and some general status of the device.
- *
- * Implements    : FLEXCAN_DRV_GetErrorStatus_Activity
- *END**************************************************************************/
+/*!
+ * @brief Reports various error conditions detected in the reception and transmission of a CAN frame and some general status of the device.
+ */
 uint32_t FLEXCAN_DRV_GetErrorStatus(uint8_t instance)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -2404,16 +2178,9 @@ uint32_t FLEXCAN_DRV_GetErrorStatus(uint8_t instance)
     return ((uint32_t)(base->ESR1));
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_AbortTransfer
- * Description   : This function shuts down the FLEXCAN by disabling interrupts and
- *                 the transmitter/receiver.
- * This function disables the FLEXCAN interrupts, disables the transmitter and
- * receiver.
- *
- * Implements    : FLEXCAN_DRV_AbortTransfer_Activity
- *END**************************************************************************/
+/*!
+ * @brief Abort an ongoing transfer on the specified message buffer.
+ */
 status_t FLEXCAN_DRV_AbortTransfer(uint8_t instance, uint8_t mb_idx)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -2528,14 +2295,9 @@ status_t FLEXCAN_DRV_AbortTransfer(uint8_t instance, uint8_t mb_idx)
     return result;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_StartSendData
- * Description   : Initiate (start) a transmit by beginning the process of
- * sending data.
- * This is not a public API as it is called from other driver functions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Initiate (start) a transmit by beginning the process of sending data. This is not a public API as it is called from other driver functions.
+ */
 static status_t FLEXCAN_StartSendData(
                     uint8_t instance,
                     uint8_t mb_idx,
@@ -2597,14 +2359,9 @@ static status_t FLEXCAN_StartSendData(
     return result;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_StartRxMessageBufferData
- * Description   : Initiate (start) a receive by beginning the process of
- * receiving data and enabling the interrupt.
- * This is not a public API as it is called from other driver functions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Initiate (start) a receive by beginning the process of receiving data and enabling the interrupt. This is not a public API as it is called from other driver functions.
+ */
 static status_t FLEXCAN_StartRxMessageBufferData(
                     uint8_t instance,
                     uint8_t mb_idx,
@@ -2673,14 +2430,9 @@ static status_t FLEXCAN_StartRxMessageBufferData(
 }
 
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_StartRxMessageFifoData
- * Description   : Initiate (start) a receive by beginning the process of
- * receiving data and enabling the interrupt.
- * This is not a public API as it is called from other driver functions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Initiate (start) a receive by beginning the process of receiving data and enabling the interrupt. This is not a public API as it is called from other driver functions.
+ */
 static status_t FLEXCAN_StartRxMessageFifoData(
                     uint8_t instance,
                     flexcan_msgbuff_t *data,
@@ -2884,14 +2636,9 @@ static status_t FLEXCAN_StartRxMessageEnhanceFifoData(
 #endif /* FEATURE_CAN_HAS_ENHANCE_RX_FIFO */
 
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_CompleteTransfer
- * Description   : Finish up a transmit by completing the process of sending
- * data and disabling the interrupt.
- * This is not a public API as it is called from other driver functions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Finish up a transmit by completing the process of sending data and disabling the interrupt. This is not a public API as it is called from other driver functions.
+ */
 static void FLEXCAN_CompleteTransfer(uint8_t instance, uint32_t mb_idx)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -2911,18 +2658,13 @@ static void FLEXCAN_CompleteTransfer(uint8_t instance, uint32_t mb_idx)
 }
 
 #if FEATURE_CAN_HAS_DMA_ENABLE
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_CompleteRxFifoDataDMA
- * Description   : Finish up a DMA transfer (this is just a wrapper over
- * FLEXCAN_DRV_CompleteRxMessageFifoData).
- * This is not a public API as it is called from other driver functions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Finish up a DMA transfer (this is just a wrapper over FLEXCAN_DRV_CompleteRxMessageFifoData). This is not a public API as it is called from other driver functions.
+ */
 static void FLEXCAN_CompleteRxFifoDataDMA(void *parameter, dma_chn_status_t status)
 {
     uint32_t instance = (uint32_t)parameter;/* PRQA S 0326 */
-
+    
     if(status == DMA_CHN_ERROR)
     {
         flexcan_state_t * state = g_flexcanStatePtr[instance];
@@ -2948,13 +2690,13 @@ static void FLEXCAN_CompleteRxEnhanceFifoDataDMA(void *parameter, dma_chn_status
     if(status == DMA_CHN_ERROR)
     {
         flexcan_state_t * state = g_flexcanStatePtr[instance];
-        state->mbs[FLEXCAN_MB_HANDLE_RXFIFO].state = FLEXCAN_MB_DMA_ERROR;
+        state->enhanceRxFifoState.state = FLEXCAN_MB_DMA_ERROR;
 
         if  (state->callback != NULL)
         {
             state->callback((uint8_t)instance,
                             FLEXCAN_EVENT_DMA_ERROR,
-                            FLEXCAN_MB_HANDLE_RXFIFO,
+                            FLEXCAN_MB_HANDLE_ENHANCE_RXFIFO,
                             state);
         }
     }
@@ -2963,14 +2705,9 @@ static void FLEXCAN_CompleteRxEnhanceFifoDataDMA(void *parameter, dma_chn_status
 #endif /* FEATURE_CAN_HAS_DMA_ENABLE */
 #endif
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_CompleteRxMessageFifoData
- * Description   : Finish up a receive by completing the process of receiving
- * data and disabling the interrupt.
- * This is not a public API as it is called from other driver functions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Finish up a receive by completing the process of receiving data and disabling the interrupt. This is not a public API as it is called from other driver functions.
+ */
 static void FLEXCAN_CompleteRxMessageFifoData(uint8_t instance)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -3029,7 +2766,11 @@ static void FLEXCAN_CompleteRxMessageFifoData(uint8_t instance)
     /* Update status for receive by using fifo*/
     if (state->mbs[FLEXCAN_MB_HANDLE_RXFIFO].isBlocking == true)
     {
-        if (state->mbs[FLEXCAN_MB_HANDLE_RXFIFO].state == FLEXCAN_MB_IDLE)
+        if ((state->mbs[FLEXCAN_MB_HANDLE_RXFIFO].state == FLEXCAN_MB_IDLE)
+#if FEATURE_CAN_HAS_DMA_ENABLE
+            || (state->mbs[FLEXCAN_MB_HANDLE_RXFIFO].state == FLEXCAN_MB_DMA_ERROR)
+#endif
+           )
         {
             status_t status = OSIF_SemaPost(&state->mbs[FLEXCAN_MB_HANDLE_RXFIFO].mbSema);
             DEV_ASSERT(status == STATUS_SUCCESS);
@@ -3040,14 +2781,9 @@ static void FLEXCAN_CompleteRxMessageFifoData(uint8_t instance)
 
 
 #if FEATURE_CAN_HAS_ENHANCE_RX_FIFO
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_CompleteRxMessageEnhanceFifoData
- * Description   : Finish up a receive by completing the process of receiving
- * data and disabling the interrupt.
- * This is not a public API as it is called from other driver functions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Finish up a receive by completing the process of receiving data and disabling the interrupt. This is not a public API as it is called from other driver functions.
+ */
 static void FLEXCAN_CompleteRxMessageEnhanceFifoData(uint8_t instance)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -3103,7 +2839,7 @@ static void FLEXCAN_CompleteRxMessageEnhanceFifoData(uint8_t instance)
         {
             state->callback(instance,
                             FLEXCAN_EVENT_DMA_COMPLETE,
-                            FLEXCAN_MB_HANDLE_RXFIFO,
+                            FLEXCAN_MB_HANDLE_ENHANCE_RXFIFO,
                             state);
         }
     }
@@ -3124,13 +2860,9 @@ static void FLEXCAN_CompleteRxMessageEnhanceFifoData(uint8_t instance)
 }
 #endif /* FEATURE_CAN_HAS_ENHANCE_RX_FIFO */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_InstallEventCallback
- * Description   : Installs a callback function for the IRQ handler.
- *
- * Implements    : FLEXCAN_DRV_InstallEventCallback_Activity
- *END**************************************************************************/
+/*!
+ * @brief Installs a callback function for the IRQ handler.
+ */
 void FLEXCAN_DRV_InstallEventCallback(uint8_t instance,
                                       flexcan_callback_t callback,
                                       void *callbackParam)
@@ -3143,14 +2875,9 @@ void FLEXCAN_DRV_InstallEventCallback(uint8_t instance,
     state->callbackParam = callbackParam;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_InstallErrorCallback
- * Description   : Installs an error callback function for the IRQ handler and enables/disables
- *                 error interrupts.
- *
- * Implements    : FLEXCAN_DRV_InstallErrorCallback_Activity
- *END**************************************************************************/
+/*!
+ * @brief Installs an error callback function for the IRQ handler and enables/disables error interrupts.
+ */
 void FLEXCAN_DRV_InstallErrorCallback(uint8_t instance,
                                       flexcan_error_callback_t callback,
                                       void *callbackParam)
@@ -3192,13 +2919,9 @@ void FLEXCAN_DRV_InstallErrorCallback(uint8_t instance,
 
 #if FEATURE_CAN_HAS_PRETENDED_NETWORKING
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_ConfigPN
- * Description   : Configures Pretended Networking settings.
- *
- * Implements    : FLEXCAN_DRV_ConfigPN_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configures Pretended Networking settings.
+ */
 void FLEXCAN_DRV_ConfigPN(uint8_t instance, bool enable, const flexcan_pn_config_t *pnConfig)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -3228,13 +2951,9 @@ void FLEXCAN_DRV_ConfigPN(uint8_t instance, bool enable, const flexcan_pn_config
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_GetWMB
- * Description   : Extracts one of the frames which triggered the wake up event.
- *
- * Implements    : FLEXCAN_DRV_GetWMB_Activity
- *END**************************************************************************/
+/*!
+ * @brief Extracts one of the frames which triggered the wake up event.
+ */
 void FLEXCAN_DRV_GetWMB(uint8_t instance, uint8_t wmbIndex, flexcan_msgbuff_t *wmb)
 {
     DEV_ASSERT(instance < CAN_INSTANCE_COUNT);
@@ -3266,12 +2985,9 @@ void FLEXCAN_DRV_GetWMB(uint8_t instance, uint8_t wmbIndex, flexcan_msgbuff_t *w
 
 #endif /* FEATURE_CAN_HAS_PRETENDED_NETWORKING */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_CheckDsample
- * Description   : Check the Sample value
- *
- *END**************************************************************************/
+/*!
+ * @brief Check the Sample value
+ */
 static inline uint32_t FLEXCAN_CheckDsample(uint32_t tmpSample, uint32_t samplePoint)
 {
     uint32_t result = 0U;
@@ -3286,12 +3002,9 @@ static inline uint32_t FLEXCAN_CheckDsample(uint32_t tmpSample, uint32_t sampleP
     return result;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_CheckdBitrate
- * Description   : Check the Bitrate value
- *
- *END**************************************************************************/
+/*!
+ * @brief Check the Bitrate value
+ */
 static inline uint32_t FLEXCAN_CheckdBitrate(uint32_t tmpBitrate, uint32_t bitrate)
 {
     uint32_t result = 0U;
@@ -3306,12 +3019,9 @@ static inline uint32_t FLEXCAN_CheckdBitrate(uint32_t tmpBitrate, uint32_t bitra
     return result;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_CheckJumpwidth
- * Description   : Check the JumpWidth value
- *
- *END**************************************************************************/
+/*!
+ * @brief Check the JumpWidth value
+ */
 static inline uint32_t FLEXCAN_CheckJumpwidth(uint32_t pseg1)
 {
     uint32_t result = 0U;    
@@ -3326,12 +3036,9 @@ static inline uint32_t FLEXCAN_CheckJumpwidth(uint32_t pseg1)
     return result;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_ProccessTSeg
- * Description   : Calculate Tseg value
- *
- *END**************************************************************************/
+/*!
+ * @brief Calculate Tseg value
+ */
 static inline void FLEXCAN_ProccessTSeg(uint32_t * tSeg1, uint32_t * tSeg2)
 {
     /* Adjust time segment 1 and time segment 2 */
@@ -3342,12 +3049,9 @@ static inline void FLEXCAN_ProccessTSeg(uint32_t * tSeg1, uint32_t * tSeg2)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_ProccessPSeg
- * Description   : Calculate Pseg value
- *
- *END**************************************************************************/
+/*!
+ * @brief Calculate Pseg value
+ */
 static inline void FLEXCAN_ProccessPSeg(uint32_t * tmpPropseg, uint32_t * tmpPseg1)
 {
     while (*tmpPropseg <= 0U)
@@ -3362,13 +3066,9 @@ static inline void FLEXCAN_ProccessPSeg(uint32_t * tmpPropseg, uint32_t * tmpPse
         *tmpPseg1 = *tmpPseg1 + 1U;
     }
 }
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_BitrateToTimeSeg
- * Description   : Converts a bitrate (kbit/s) in time segment values for
- *                 standard CAN frame.
- *
- *END**************************************************************************/
+/*!
+ * @brief Converts a bitrate (kbit/s) in time segment values for standard CAN frame.
+ */
 static uint32_t FLEXCAN_BitrateToTimeSeg(uint32_t bitrate,
                                          uint32_t clkFreq,
                                          flexcan_time_segment_t * timeSeg)
@@ -3449,13 +3149,9 @@ static uint32_t FLEXCAN_BitrateToTimeSeg(uint32_t bitrate,
     return tmpBitrate;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DRV_GetDefaultConfig
- * Description   : Gets the default configuration structure
- *
- * Implements    : FLEXCAN_DRV_GetDefaultConfig_Activity
- *END**************************************************************************/
+/*!
+ * @brief Gets the default configuration structure
+ */
 uint32_t FLEXCAN_DRV_GetDefaultConfig(flexcan_user_config_t * config)
 {
     /* Checks input parameter. */

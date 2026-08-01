@@ -15,7 +15,6 @@
 {{#isTruthy this.compChalSel}}        .compChalSel={{this.compChalSel}},{{/isTruthy}}
         .compHigh={{this.compHigh}},
         .compLow={{this.compLow}},
-        .compIntEnable={{this.compIntEnable}},  
         .effectiveMode={{this.effectiveMode}},
     },
 {{/each}}
@@ -50,6 +49,7 @@
         },
         .totalChannels={{this.sequenceConfig.channels.length}},
     },
+    .compIntEnable={{this.compIntEnable}},  
 {{#if (gt (getGlobalVar 'meta.adc_wdg_inst') 1)}}
     .adcCompareCnt={{this.adcCompareCnt}},
     {{#if (gt this.adcCompareCnt 0)}}
@@ -64,7 +64,7 @@
 {{#isTruthy this.compChalSel}}        .compChalSel={{this.compChalSel}},{{/isTruthy}}
         .compHigh={{this.compHigh}},
         .compLow={{this.compLow}},
-        .compIntEnable={{this.compIntEnable}},
+        .effectiveMode={{this.effectiveMode}},
     },
 {{/if}}
 {{/each}}

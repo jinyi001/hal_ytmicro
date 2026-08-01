@@ -8,6 +8,28 @@
 /*!
  * @file interrupt_manager.h
  * @version 1.4.1
+ *
+ * @brief Interrupt Manager - Public API for NVIC and vector-table control.
+ *
+ * This header defines the application-facing services used to manage interrupt
+ * routing through the core interrupt controller. It provides helpers for
+ * installing RAM-based handlers, enabling or disabling IRQ lines, protecting
+ * critical sections through nested global masking, programming priorities, and
+ * accessing optional pending, active, software-trigger, or multi-core
+ * interrupt services when supported by the target device.
+ *
+ * The APIs are organized into the following categories:
+ *   - Handler Installation
+ *   - IRQ Line Control
+ *   - Global IRQ Control
+ *   - Priority Control
+ *   - Pending State Control
+ *   - Active State Query
+ *   - Software IRQ Control
+ *   - Multi-Core IRQ Routing
+ *
+ * @note Runtime handler installation requires the active vector table to be
+ *       copied to writable RAM.
  */
 
 #ifndef INTERRUPT_MANAGER_H
@@ -15,24 +37,49 @@
 
 #include "device_registers.h"
 
+/*!
+ * @addtogroup interrupt_manager
+ * @brief Public API for vector-table updates and IRQ control.
+ * @details Provides core-level interrupt services built on top of the CMSIS
+ *          NVIC API and the active vector table selected by the startup code.
+ * @{
+ */
+
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
-/* SDK needs to disable global IRQ before run some critical operation which should
- * not be interrupted.
+
+/*!
+ * @brief Enter a nested critical section by disabling global interrupts.
+ *
+ * This macro calls INT_SYS_DisableIRQGlobal() and increments the internal
+ * nesting counter maintained by the Interrupt Manager.
+ *
+ * @note Pair every call with SDK_EXIT_CRITICAL().
  */
 #define SDK_ENTER_CRITICAL() INT_SYS_DisableIRQGlobal()
-/* After critical operation done, global interrupt should be restored.
+
+/*!
+ * @brief Exit a nested critical section and restore global interrupts when allowed.
+ *
+ * This macro calls INT_SYS_EnableIRQGlobal() and releases one nesting level.
+ * Global interrupts are re-enabled only after the disable counter reaches zero.
  */
 #define SDK_EXIT_CRITICAL() INT_SYS_EnableIRQGlobal()
 
-/*! @brief Interrupt handler type */
+/*!
+ * @brief Interrupt service routine function pointer type.
+ *
+ * Use this type when installing a handler into the active vector table through
+ * INT_SYS_InstallHandler().
+ */
 typedef void (*isr_t)(void);
 
 /*******************************************************************************
- * Default interrupt handler - implemented in startup.s
+ * Default Interrupt Handler
  ******************************************************************************/
-/*! @brief Default ISR. */
+
+/*! @brief Default fallback ISR supplied by the device startup code. */
 void DefaultISR(void);
 
 /*******************************************************************************
@@ -41,213 +88,274 @@ void DefaultISR(void);
 
 #if defined(__cplusplus)
 extern "C" {
-#endif /* __cplusplus*/
+#endif /* __cplusplus */
+
+/*******************************************************************************
+ * Handler Installation
+ ******************************************************************************/
+/*!
+ * @name Handler Installation
+ * @brief Functions for updating entries in the active vector table.
+ * @{
+ */
 
 /*!
- * @brief Installs an interrupt handler routine for a given IRQ number. 
+ * @brief Install a handler for the selected IRQ number.
  *
- * This function lets the application register/replace the interrupt
- * handler for a specified IRQ number. See a chip-specific reference
- * manual for details and the  startup_<SoC>.s file for each chip
- * family to find out the default interrupt handler for each device.
+ * Replaces the current vector-table entry associated with @a irqNumber. The
+ * function can optionally return the previous ISR pointer through
+ * @a oldHandler so the caller can restore it later.
  *
- * @note This method is applicable only if interrupt vector is copied in RAM.
+ * @param[in] irqNumber   IRQ or exception number to update.
+ * @param[in] newHandler  New ISR entry to place in the vector table.
+ * @param[out] oldHandler Optional pointer used to store the previous ISR.
+ *                        Pass `NULL` when the old entry is not needed.
  *
- * @param irqNumber   IRQ number
- * @param newHandler  New interrupt handler routine address pointer
- * @param oldHandler  Pointer to a location to store current interrupt handler
+ * @note This service is valid only when the active vector table resides in
+ *       writable RAM. If `__NO_VECTOR_TABLE_COPY` is defined, the startup file
+ *       must provide the final handler bindings instead.
  */
 void INT_SYS_InstallHandler(IRQn_Type irqNumber,
                             isr_t newHandler,
                             isr_t *oldHandler);
 
+/*! @} */ /* End of Handler Installation */
+
+/*******************************************************************************
+ * IRQ Line Control
+ ******************************************************************************/
 /*!
- * @brief Enables an interrupt for a given IRQ number. 
+ * @name IRQ Line Control
+ * @brief Functions for enabling or disabling individual IRQ lines.
+ * @{
+ */
+
+/*!
+ * @brief Enable one IRQ line in the NVIC.
  *
- * This function  enables the individual interrupt for a specified IRQ number.
- *
- * @param irqNumber IRQ number
+ * @param[in] irqNumber IRQ number to enable.
  */
 void INT_SYS_EnableIRQ(IRQn_Type irqNumber);
 
 /*!
- * @brief Disables an interrupt for a given IRQ number. 
+ * @brief Disable one IRQ line in the NVIC.
  *
- * This function disables the individual interrupt for a specified IRQ number.
- *
- * @param irqNumber IRQ number
+ * @param[in] irqNumber IRQ number to disable.
  */
 void INT_SYS_DisableIRQ(IRQn_Type irqNumber);
 
+/*! @} */ /* End of IRQ Line Control */
+
+/*******************************************************************************
+ * Global IRQ Control
+ ******************************************************************************/
 /*!
- * @brief Enables system interrupt.
+ * @name Global IRQ Control
+ * @brief Functions for entering and leaving nested global interrupt masking.
+ * @{
+ */
+
+/*!
+ * @brief Release one level of nested global interrupt masking.
  *
- * This function enables the global interrupt by calling the core API.
- *
+ * Decrements the internal disable counter. Global interrupts are re-enabled
+ * only after the counter reaches zero.
  */
 void INT_SYS_EnableIRQGlobal(void);
 
 /*!
- * @brief Disable system interrupt. 
+ * @brief Disable global interrupts and enter a nested critical section.
  *
- * This function disables the global interrupt by calling the core API.
- *
+ * Executes the core global-disable instruction and increments the internal
+ * disable counter used by the Interrupt Manager.
  */
 void INT_SYS_DisableIRQGlobal(void);
 
-/*! @brief  Set Interrupt Priority
+/*! @} */ /* End of Global IRQ Control */
+
+/*******************************************************************************
+ * Priority Control
+ ******************************************************************************/
+/*!
+ * @name Priority Control
+ * @brief Functions for programming or reading IRQ priorities.
+ * @{
+ */
+
+/*!
+ * @brief Set the priority of one IRQ or exception.
  *
- *   The function sets the priority of an interrupt.
+ * @param[in] irqNumber IRQ or exception number to update.
+ * @param[in] priority  Priority value to program.
  *
- *   @param  irqNumber  Interrupt number.
- *   @param  priority  Priority to set.
+ * @note Some core exceptions expose fixed or restricted priority behavior.
  */
 void INT_SYS_SetPriority(IRQn_Type irqNumber, uint8_t priority);
 
-/*! @brief  Get Interrupt Priority
+/*!
+ * @brief Read the programmed priority of one IRQ or exception.
  *
- *   The function gets the priority of an interrupt.
+ * @param[in] irqNumber IRQ or exception number to query.
+ * @return Priority value reported by the core interrupt controller.
  *
- *   @param  irqNumber  Interrupt number.
- *   @return priority   Priority of the interrupt.
+ * @note Some core exceptions expose fixed or restricted priority behavior.
  */
 uint8_t INT_SYS_GetPriority(IRQn_Type irqNumber);
 
+/*! @} */ /* End of Priority Control */
+
 #if FEATURE_INTERRUPT_HAS_PENDING_STATE
 
+/*******************************************************************************
+ * Pending State Control
+ ******************************************************************************/
 /*!
- * @brief Clear Pending Interrupt
+ * @name Pending State Control
+ * @brief Functions for managing the pending state of one IRQ line.
+ * @{
+ */
+
+/*!
+ * @brief Clear the pending state of one IRQ line.
  *
- * The function clears the pending bit of a peripheral interrupt
- * or a directed interrupt to this CPU (if available).
- *
- * @param irqNumber IRQ number
+ * @param[in] irqNumber IRQ number to acknowledge.
  */
 void INT_SYS_ClearPending(IRQn_Type irqNumber);
 
 /*!
- * @brief Set Pending Interrupt
+ * @brief Force one IRQ line into the pending state.
  *
- * The function configures the pending bit of a peripheral interrupt.
- *
- * @param irqNumber IRQ number
+ * @param[in] irqNumber IRQ number to mark as pending.
  */
 void INT_SYS_SetPending(IRQn_Type irqNumber);
 
 /*!
- * @brief Get Pending Interrupt
+ * @brief Read the pending state of one IRQ line.
  *
- * The function gets the pending bit of a peripheral interrupt
- * or a directed interrupt to this CPU (if available).
- *
- * @param irqNumber IRQ number
- * @return pending  Pending status 0/1
+ * @param[in] irqNumber IRQ number to query.
+ * @return Non-zero when the IRQ is pending, otherwise zero.
  */
 uint32_t INT_SYS_GetPending(IRQn_Type irqNumber);
+
+/*! @} */ /* End of Pending State Control */
 
 #endif /* FEATURE_INTERRUPT_HAS_PENDING_STATE */
 
 #if FEATURE_INTERRUPT_HAS_ACTIVE_STATE
+
+/*******************************************************************************
+ * Active State Query
+ ******************************************************************************/
 /*!
- * @brief Get Active Interrupt
+ * @name Active State Query
+ * @brief Functions for querying whether an IRQ is currently active.
+ * @{
+ */
+
+/*!
+ * @brief Read the active state of one IRQ line.
  *
- * The function gets the active state of a peripheral interrupt.
- *
- * @param irqNumber IRQ number
- * @return active   Active status 0/1
+ * @param[in] irqNumber IRQ number to query.
+ * @return Non-zero when the IRQ is active, otherwise zero.
  */
 uint32_t INT_SYS_GetActive(IRQn_Type irqNumber);
+
+/*! @} */ /* End of Active State Query */
 
 #endif /* FEATURE_INTERRUPT_HAS_ACTIVE_STATE */
 
 #if FEATURE_INTERRUPT_HAS_SOFTWARE_IRQ
 
+/*******************************************************************************
+ * Software IRQ Control
+ ******************************************************************************/
 /*!
- * @brief Set software interrupt request
+ * @name Software IRQ Control
+ * @brief Functions for triggering or clearing software-generated IRQ requests.
+ * @{
+ */
+
+/*!
+ * @brief Trigger a software-generated IRQ request.
  *
- * The function sets a software settable interrupt request.
- *
- * @param irqNumber IRQ number
+ * @param[in] irqNumber IRQ number to trigger through software.
  */
 void INT_SYS_SetSoftwareIRQRequest(IRQn_Type irqNumber);
 
 /*!
- * @brief Clear software interrupt request
+ * @brief Clear a software-generated IRQ request.
  *
- * The function clears a software settable interrupt request.
- *
- * @param irqNumber IRQ number
+ * @param[in] irqNumber IRQ number whose software request should be cleared.
  */
 void INT_SYS_ClearSoftwareIRQRequest(IRQn_Type irqNumber);
+
+/*! @} */ /* End of Software IRQ Control */
 
 #endif /* FEATURE_INTERRUPT_HAS_SOFTWARE_IRQ */
 
 
 #if FEATURE_INTERRUPT_MULTICORE_SUPPORT
 
+/*******************************************************************************
+ * Multi-Core IRQ Routing
+ ******************************************************************************/
 /*!
- * @brief Enables an interrupt for a given IRQ number, on the given cores.
- *
- * This function enables the individual interrupt for a specified IRQ number,
- * and on the specified cores.
- *
- * @param irqNumber IRQ number
- * @param coresIds array with the cores ids for which to enable the interrupt
- * @param coresCnt the number of cores in the coresIds array
+ * @name Multi-Core IRQ Routing
+ * @brief Functions for enabling or disabling one IRQ line across cores.
+ * @{
  */
-void INT_SYS_EnableIRQ_MC(IRQn_Type irqNumber, const uint8_t *coresIds, uint8_t coresCnt);
 
 /*!
- * @brief Gets the cores on which an interrupt for the specified IRQ
- * number is enabled.
+ * @brief Enable one IRQ line on the selected cores.
  *
- * This function will populate an array with all the supported cores,
- * for which the value will be INTERRUPT_CORE_ENABLED if interrupt is enabled
- * on that core, and INTERRUPT_CORE_DISABLED if interrupt is not enabled on
- * that core. The array has to be previously allocated using the
- * NUMBER_OF_CORES define value.
+ * @param[in] irqNumber IRQ number to enable.
+ * @param[in] coresIds  Array of core identifiers to update.
+ * @param[in] coresCnt  Number of entries in @a coresIds.
+ */
+void INT_SYS_EnableIRQ_MC(IRQn_Type irqNumber,
+                          const uint8_t *coresIds,
+                          uint8_t coresCnt);
+
+/*!
+ * @brief Query which cores currently enable one IRQ line.
  *
- * @param irqNumber IRQ number
- * @param cores array with array index as core number; it has to be previously
- * allocated using the NUMBER_OF_CORES define value. it will be populated with the
- * following value:
- *  - INTERRUPT_CORE_DISABLED interrupt disabled for that core
- * 	- INTERRUPT_CORE_ENABLED enabled for that core
+ * @param[in] irqNumber IRQ number to inspect.
+ * @param[out] cores    Caller-allocated array indexed by core number. Each
+ *                      element receives `INTERRUPT_CORE_ENABLED` or
+ *                      `INTERRUPT_CORE_DISABLED`.
  */
 void INT_SYS_GetCoresForIRQ(IRQn_Type irqNumber, interrupt_core_enable_t *cores);
 
 /*!
- * @brief Disables an interrupt for a given IRQ number, on the given cores.
+ * @brief Disable one IRQ line on the selected cores.
  *
- * This function disables the individual interrupt for a specified IRQ number,
- * and on the specified cores.
- *
- * @param irqNumber IRQ number
- * @param coresIds array with the cores ids for which to enable the interrupt
- * @param coresCnt the number of cores in the coresIds array
+ * @param[in] irqNumber IRQ number to disable.
+ * @param[in] coresIds  Array of core identifiers to update.
+ * @param[in] coresCnt  Number of entries in @a coresIds.
  */
-void INT_SYS_DisableIRQ_MC(IRQn_Type irqNumber, const uint8_t *coresIds, uint8_t coresCnt);
+void INT_SYS_DisableIRQ_MC(IRQn_Type irqNumber,
+                           const uint8_t *coresIds,
+                           uint8_t coresCnt);
 
 /*!
- * @brief Disables an interrupt for a given IRQ number, on all cores.
+ * @brief Disable one IRQ line on every supported core.
  *
- * This function disables the individual interrupt for a specified IRQ number,
- * on all cores. It also clears priority for that IRQ number
- *
- * @param irqNumber IRQ number
+ * @param[in] irqNumber IRQ number to disable globally across cores.
  */
 void INT_SYS_DisableIRQ_MC_All(IRQn_Type irqNumber);
+
+/*! @} */ /* End of Multi-Core IRQ Routing */
 
 #endif /* FEATURE_INTERRUPT_MULTICORE_SUPPORT */
 
 
 #if defined(__cplusplus)
 }
-#endif /* __cplusplus*/
+#endif /* __cplusplus */
 
 #endif /* INTERRUPT_MANAGER_H */
 
-/*! @}*/
+/*! @} */
 /*******************************************************************************
  * EOF
  ******************************************************************************/

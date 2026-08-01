@@ -1,46 +1,277 @@
 /*!
-* @defgroup tmr System Timer Module (TMR)
-* @ingroup tmr
-* @brief The S32 SDK provides Peripheral Drivers for the System Timer Module (TMR).
-*
-* The System Timer Module (TMR) is a 32-bit timer designed to support commonly required
-* system and application software timing functions. The TMR includes a 32-bit up counter and
-* four 32-bit compare channels with a separate interrupt source for each channel
-*
-* The number of TMR instances depends on the number of cores of MCU device, one for each core,
-* with four 32-bit compare channels in each TMR
-* 
-* ## Hardware background ##
-*
-* The TMR has the following features:
-*     - One 32-bit up counter with 8-bit prescaler
-*     - Four 32-bit compare channels
-*     - Independent interrupt source for each channel 
-*     - Counter can be stopped in debug mode 
-*     - TMR runs on the system clock by default
-*
-* 
-* ## Integration guideline ##
-*
-* ### Compilation units ###
-*
-* The following files need to be compiled in the project:
-* \verbatim
-${S32SDK_PATH}\platform\drivers\src\tmr\tmr_driver.c
-\endverbatim
-*
-* ### Include path ###
-*
-* The following paths need to be added to the include path of the toolchain:
-* \verbatim
-${S32SDK_PATH}\platform\drivers\inc\
-\endverbatim
-*
-* ### Preprocessor symbols ###
-*
-* No special symbols are required for this component
-* 
-* ### Dependencies ###
-\ref clock_manager \n
-* 
+@defgroup tmr
+@ingroup mod_timer System Timer Module (TMR)
+@brief Shared-counter compare timer module for the YTMicro SDK.
+
+@details
+The TMR module provides a 32-bit free-running up-counter together with four
+32-bit compare channels per instance. Software can use the shared counter as a
+time base, program one-shot compare events at absolute tick values, or build
+periodic schedules by advancing compare values after each event.
+
+@section tmr_features Key Features
+- One shared **32-bit up-counter** per TMR instance.
+- **Four compare channels** per instance for independent event scheduling.
+- **8-bit prescaler** on the shared counter clock path.
+- Optional **per-channel interrupt enable** on supported devices.
+- **Debug-stop control** for freezing the counter while the core is halted.
+- **Microsecond-to-tick conversion** helper based on the active prescaler and
+  the functional clock reported by `clock_manager`.
+- Instance count scales with the target device through `TMR_INSTANCE_COUNT`.
+
+@section tmr_modes Supported Modes
+
+| Mode | Primary APIs | Description |
+|------|--------------|-------------|
+| Shared counter time base | TMR_DRV_Init(), TMR_DRV_StartTimer(), TMR_DRV_GetCounterValue() | Run one free-running counter and read timestamps from `CNT`. |
+| One-shot compare event | TMR_DRV_InitChannel(), TMR_DRV_ConfigChannel(), TMR_DRV_GetStatusFlags() | Trigger a channel event when the counter reaches one absolute compare value. |
+| Periodic compare schedule | TMR_DRV_ComputeTicksByUs(), TMR_DRV_IncrementTicks() | Re-arm the next compare deadline by adding a relative tick interval after each event. |
+| Optional compare interrupt | TMR_DRV_InitChannel() with `interruptEnable` | Generate an interrupt request on supported devices when the compare flag is asserted. |
+
+@section tmr_arch Module Architecture
+
+@verbatim
+┌─────────────────────────────────────────────────┐
+│                Application Code                 │
+│          (calls TMR_DRV_* functions)           │
+├─────────────────────────────────────────────────┤
+│          TMR Driver Layer (tmr_driver.h/c)      │
+│  ● Instance-based API (TMR_DRV_Init, etc.)      │
+│  ● Direct register programming for TMR          │
+│  ● Optional tick conversion via clock_manager   │
+├─────────────────────────────────────────────────┤
+│             TMR Peripheral Hardware             │
+│        (PRS, CTRL, CNT, CH[n].CMP/INT)          │
+└─────────────────────────────────────────────────┘
+@endverbatim
+
+@subsection tmr_arch_driver Driver Layer (tmr_driver.h)
+Application code should use the public `TMR_DRV_*` functions declared in
+tmr_driver.h. The driver resolves the instance base address internally through
+`TMR_BASE_PTRS` and programs the hardware registers directly.
+
+@subsection tmr_arch_shared Shared Counter Model
+Every compare channel in one instance observes the same `CNT` register:
+- Starting or stopping the timer affects **all channels** in that instance.
+- The prescaler is shared by every compare channel.
+- Compare values are absolute counter targets, not per-channel down-counters.
+
+@section tmr_config Configuration Parameters
+
+@subsection tmr_config_module tmr_config_t Fields
+| Field | Type | Description | Default / Source |
+|-------|------|-------------|------------------|
+| clockSource | tmr_clock_source_t | Optional clock-source selector when `FEATURE_TMR_HAS_CLOCK_SELECTION == 1`. | Caller-defined |
+| clockPrescaler | uint8_t | Prescaler register value; effective divisor is `clockPrescaler + 1`. | `0U` from TMR_DRV_GetDefaultConfig() |
+| stopInDebugMode | bool | Freeze the shared counter while the core is halted in debug mode. | `false` from TMR_DRV_GetDefaultConfig() |
+| startValue | uint32_t | Initial counter value written to `CNT`. | `0U` from TMR_DRV_GetDefaultConfig() |
+
+@note TMR_DRV_GetDefaultConfig() initializes only the common fields above.
+If the optional `clockSource` field exists in the current build, set it
+explicitly before calling TMR_DRV_Init().
+
+@subsection tmr_config_channel tmr_channel_config_t Fields
+| Field | Type | Description | Default / Source |
+|-------|------|-------------|------------------|
+| channel | uint8_t | Compare channel index in the range `0 .. TMR_CH_COUNT - 1`. | Caller-defined |
+| compareValue | uint32_t | Absolute compare tick written to `CH[channel].CMP`. | Caller-defined |
+| interruptEnable | bool | Enable compare interrupt generation when `FEATURE_TMR_HAS_INTERRUPT_ENABLE_CONFIG == 1`. | Caller-defined |
+
+@note No dedicated default helper is provided for `tmr_channel_config_t`;
+callers are expected to initialize every field before use.
+
+@subsection tmr_config_features Device Feature Macros
+| Macro | Description |
+|-------|-------------|
+| TMR_INSTANCE_COUNT | Number of TMR peripheral instances available on the device. |
+| TMR_CH_COUNT | Number of compare channels per instance. Typical value: 4. |
+| TMR_CLOCK_NAMES | Functional clock identifiers used by TMR_DRV_ComputeTicksByUs(). |
+| FEATURE_TMR_HAS_INTERRUPT_ENABLE_CONFIG | Enables the optional `interruptEnable` field in `tmr_channel_config_t`. |
+| FEATURE_TMR_HAS_CLOCK_SELECTION | Enables the optional `clockSource` field in `tmr_config_t`. |
+
+@section tmr_usage Usage Patterns
+
+@subsection tmr_usage_basic Pattern 1: Basic Compare Event Setup
+Configure one TMR instance, schedule a single compare event, and start the
+shared counter.
+
+@code{.c}
+#define TMR_INST  (0U)
+#define TMR_CH0   (0U)
+
+tmr_config_t moduleConfig;
+tmr_channel_config_t channelConfig;
+uint32_t ticks;
+
+TMR_DRV_GetDefaultConfig(&moduleConfig);
+#if defined(FEATURE_TMR_HAS_CLOCK_SELECTION) && (FEATURE_TMR_HAS_CLOCK_SELECTION == 1U)
+moduleConfig.clockSource = TMR_CLOCK_SYSTEM;
+#endif
+moduleConfig.clockPrescaler = 0U;
+moduleConfig.startValue = 0U;
+TMR_DRV_Init(TMR_INST, &moduleConfig);
+
+if (TMR_DRV_ComputeTicksByUs(TMR_INST, 1000U, &ticks) == STATUS_SUCCESS)
+{
+    channelConfig.channel = TMR_CH0;
+    channelConfig.compareValue = ticks;
+#if defined(FEATURE_TMR_HAS_INTERRUPT_ENABLE_CONFIG) && (FEATURE_TMR_HAS_INTERRUPT_ENABLE_CONFIG == 1)
+    channelConfig.interruptEnable = true;
+#endif
+    TMR_DRV_InitChannel(TMR_INST, &channelConfig);
+    TMR_DRV_StartTimer(TMR_INST);
+}
+@endcode
+
+@subsection tmr_usage_periodic Pattern 2: Periodic Compare Rescheduling
+Use one compare channel as a periodic software tick source by clearing the
+compare flag and advancing the deadline by a fixed number of ticks.
+
+@code{.c}
+#define TMR_INST        (0U)
+#define TMR_PERIOD_CH   (1U)
+
+static uint32_t g_periodTicks;
+
+void TMR0_IRQHandler(void)
+{
+    if (TMR_DRV_GetStatusFlags(TMR_INST, TMR_PERIOD_CH) != 0U)
+    {
+        TMR_DRV_ClearStatusFlags(TMR_INST, TMR_PERIOD_CH);
+        TMR_DRV_IncrementTicks(TMR_INST, TMR_PERIOD_CH, g_periodTicks);
+    }
+}
+
+void TMR_SetupPeriodicEvent(void)
+{
+    tmr_channel_config_t channelConfig;
+
+    if (TMR_DRV_ComputeTicksByUs(TMR_INST, 100U, &g_periodTicks) == STATUS_SUCCESS)
+    {
+        channelConfig.channel = TMR_PERIOD_CH;
+        channelConfig.compareValue = g_periodTicks;
+#if defined(FEATURE_TMR_HAS_INTERRUPT_ENABLE_CONFIG) && (FEATURE_TMR_HAS_INTERRUPT_ENABLE_CONFIG == 1)
+        channelConfig.interruptEnable = true;
+#endif
+        TMR_DRV_InitChannel(TMR_INST, &channelConfig);
+    }
+}
+@endcode
+
+@subsection tmr_usage_counter Pattern 3: Shared Counter Timestamping
+Use the shared counter as a lightweight timestamp source and reseed it when a
+new timing window starts.
+
+@code{.c}
+#define TMR_INST  (0U)
+
+uint32_t startTick;
+uint32_t endTick;
+uint32_t elapsedTicks;
+
+TMR_DRV_SetStartValueCount(TMR_INST, 0U);
+TMR_DRV_StartTimer(TMR_INST);
+
+startTick = TMR_DRV_GetCounterValue(TMR_INST);
+/* Perform the operation being measured here. */
+endTick = TMR_DRV_GetCounterValue(TMR_INST);
+
+elapsedTicks = endTick - startTick;
+TMR_DRV_StopTimer(TMR_INST);
+@endcode
+
+@section tmr_api API Quick Reference
+
+@subsection tmr_api_init Initialization & De-initialization
+| Function | Description |
+|----------|-------------|
+| TMR_DRV_Init() | Program module-level counter settings for one TMR instance. |
+| TMR_DRV_Deinit() | Reset the shared counter and all compare channels. |
+| TMR_DRV_GetDefaultConfig() | Fill the common fields of `tmr_config_t` with safe defaults. |
+
+@subsection tmr_api_channel Channel Compare Control
+| Function | Description |
+|----------|-------------|
+| TMR_DRV_InitChannel() | Program one compare channel from a configuration structure. |
+| TMR_DRV_ConfigChannel() | Write an absolute compare value and enable the channel. |
+| TMR_DRV_EnableChannel() | Enable a previously configured compare channel. |
+| TMR_DRV_DisableChannel() | Disable a compare channel. |
+
+@subsection tmr_api_counter Counter Control
+| Function | Description |
+|----------|-------------|
+| TMR_DRV_SetStartValueCount() | Write a new seed value into the shared counter register. |
+| TMR_DRV_StartTimer() | Start the shared free-running counter. |
+| TMR_DRV_StopTimer() | Stop the shared free-running counter. |
+| TMR_DRV_GetCounterValue() | Read the current `CNT` register value. |
+
+@subsection tmr_api_sched Time Conversion & Scheduling
+| Function | Description |
+|----------|-------------|
+| TMR_DRV_ComputeTicksByUs() | Convert a microsecond interval to TMR ticks. |
+| TMR_DRV_IncrementTicks() | Advance a compare deadline by a relative tick interval. |
+
+@subsection tmr_api_status Status Flag Management
+| Function | Description |
+|----------|-------------|
+| TMR_DRV_GetStatusFlags() | Read the raw status value of one compare channel. |
+| TMR_DRV_ClearStatusFlags() | Clear the compare flag of one channel. |
+
+@section tmr_notes Important Notes
+
+@subsection tmr_notes_shared Shared Counter Semantics
+- Every compare channel in one instance shares the same counter and prescaler.
+- Starting, stopping, or reseeding the counter affects all channels in that
+  instance simultaneously.
+- Compare values are absolute `CNT` targets, so channel deadlines should be
+  planned against the shared counter timeline.
+
+@subsection tmr_notes_convert Tick Conversion Dependency
+- TMR_DRV_ComputeTicksByUs() depends on `clock_manager` to query the current
+  functional clock listed in `TMR_CLOCK_NAMES`.
+- The conversion also depends on the prescaler currently programmed in `PRS`.
+- The function returns `STATUS_ERROR` if the converted value exceeds the
+  32-bit compare-register range.
+
+@subsection tmr_notes_config Channel Configuration Behavior
+- TMR_DRV_InitChannel() is the preferred first-time setup API when channel
+  interrupt enable state must be configured together with the compare value.
+- TMR_DRV_ConfigChannel() rewrites the channel control register to enable the
+  channel, so use it for compare-value updates rather than for preserving
+  interrupt-related configuration on devices that support `interruptEnable`.
+- TMR_DRV_GetDefaultConfig() does not initialize the optional `clockSource`
+  field when that field exists in the current build.
+
+@subsection tmr_notes_periodic Periodic Scheduling Behavior
+- Call TMR_DRV_ClearStatusFlags() before or together with the re-arm logic in
+  the event service path.
+- TMR_DRV_IncrementTicks() adds the requested interval to the current compare
+  value. If that deadline is already in the past, the driver re-bases the next
+  deadline on the current counter value instead.
+- Delaying the reschedule operation introduces phase drift in periodic-event
+  software loops.
+
+@section tmr_integration Integration Guide
+
+@subsection tmr_integration_files Compilation Units
+The following source file must be added to the project build:
+@verbatim
+${SDK_PATH}/platform/drivers/src/tmr/tmr_driver.c
+@endverbatim
+
+@subsection tmr_integration_include Include Paths
+Add the following directory to the toolchain include path:
+@verbatim
+${SDK_PATH}/platform/drivers/inc/
+@endverbatim
+
+@subsection tmr_integration_symbols Compile Symbols
+No special compile-time symbols are required for this module. Device-specific
+feature macros such as `FEATURE_TMR_HAS_INTERRUPT_ENABLE_CONFIG` and
+`FEATURE_TMR_HAS_CLOCK_SELECTION` are supplied by the selected device headers.
+
+@subsection tmr_integration_deps Dependencies
+- @ref clock_manager — Required when using TMR_DRV_ComputeTicksByUs() to
+  convert time units into compare ticks.
+
 */

@@ -8,6 +8,11 @@
 /*!
  * @file acmp_hw_access.c
  * @version 1.4.1
+ *
+ * @brief ACMP Hardware Access Layer - non-inline helper implementations.
+ *
+ * This file contains the ACMP register helpers that are shared by the public
+ * driver but are not defined as inline functions in `acmp_hw_access.h`.
  */
 
 #include "acmp_hw_access.h"
@@ -143,7 +148,7 @@ uint8_t ACMP_GetOutputFlags(const ACMP_Type *const baseAddr)
  */
 bool ACMP_GetContinuousChannelEnState(const ACMP_Type *const baseAddr, uint8_t ch)
 {
-    return ((baseAddr->CONT & ((uint32_t)ACMP_CONT_CH0EN_MASK << ch)) >> ch) != 0U;
+    return (baseAddr->CONT & ((uint32_t)ACMP_CONT_CH0EN_MASK << ch)) != 0U;
 }
 
 /*!
@@ -155,9 +160,9 @@ bool ACMP_GetContinuousChannelEnState(const ACMP_Type *const baseAddr, uint8_t c
 uint8_t ACMP_GetContinuousChannelExpectation(const ACMP_Type *const baseAddr, uint8_t ch)
 {
 #if FEATURE_ACMP_HAS_EXP_REG
-    return (uint8_t)((baseAddr->EXP & ((uint32_t)ACMP_EXP_CH0EXP_MASK << ch)) >> ch);
+    return (uint8_t)((baseAddr->EXP & (ACMP_EXP_CH0EXP_MASK << ch)) >> (ch + ACMP_EXP_CH0EXP_SHIFT));
 #else
-    return (uint8_t)((baseAddr->STS & (ACMP_STS_CH0OUT_MASK << ch)) >> ch);
+    return (uint8_t)((baseAddr->STS & (ACMP_STS_CH0OUT_MASK << ch)) >> (ch + ACMP_STS_CH0OUT_SHIFT));
 #endif
 }
 

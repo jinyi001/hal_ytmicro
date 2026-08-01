@@ -8,6 +8,22 @@
 /*!
  * @file i2c_driver.h
  * @version 1.4.1
+ *
+ * @brief I2C Driver API – public interface.
+ *
+ * Provides the application-level API for configuring and using the I2C
+ * peripheral in both master and slave modes. APIs are organized as follows:
+ *
+ * - **Master Initialization**  – Init / Deinit
+ * - **Master Configuration**   – baud rate, slave address
+ * - **Master Transfer**        – blocking & non-blocking send/receive, abort
+ * - **Master Status**          – transfer status query
+ * - **Slave Initialization**   – Init / Deinit
+ * - **Slave Buffer Management**– set Tx/Rx buffers
+ * - **Slave Transfer**         – blocking & non-blocking send/receive, abort
+ * - **Slave Status**           – transfer status query
+ * - **Default Configuration**  – get default master/slave config
+ * - **IRQ Handlers**           – master, slave, and a combined master/slave handler
  */
 
 #ifndef I2C_DRIVER_H
@@ -21,119 +37,109 @@
 #include "osif.h"
 #include "callbacks.h"
 
-
 /*!
- * @addtogroup i2c_drv I2C Driver
- * @ingroup i2c
- * @brief Low Power Inter-Integrated Circuit Driver
+ * @addtogroup i2c
+ * @brief Application-level I2C master/slave driver.
  * @{
  */
 
 /*******************************************************************************
- * Enumerations.
+ * Enumerations
  ******************************************************************************/
 
 /*! @cond DRIVER_INTERNAL_USE_ONLY */
-/* Size of the master command queue. Worst case: 5 commands in High-Speed receive with 10-bit address:
-   START + master code, REP START + addr_1 + tx, addr_2, REP START + addr_1 + rx, receive command */
+/*! Size of the master command queue.
+ *  Worst case: 5 commands in High-Speed receive with 10-bit address:
+ *  START + master code, REP START + addr_1 + tx, addr_2,
+ *  REP START + addr_1 + rx, receive command */
 #define I2C_MASTER_CMD_QUEUE_SIZE   5U
 /*! @endcond */
 
-/*! @brief I2C operating modes
- * Implements : i2c_mode_t_Class
+/*! @brief I2C operating modes.
+ *
+ * Selects the bus speed and protocol mode for the I2C peripheral.
  */
 typedef enum
 {
-    I2C_STANDARD_MODE = 0x0U,   /*!< Standard-mode (Sm), bidirectional data transfers up to 100 kbit/s */
-    I2C_FAST_MODE = 0x1U,   /*!< Fast-mode (Fm), bidirectional data transfers up to 400 kbit/s */
+    I2C_STANDARD_MODE = 0x0U,   /*!< Standard-mode (Sm), up to 100 kbit/s */
+    I2C_FAST_MODE = 0x1U,   /*!< Fast-mode (Fm), up to 400 kbit/s */
 #if(I2C_HAS_FAST_PLUS_MODE)
-    I2C_FASTPLUS_MODE = 0x2U,   /*!< Fast-mode Plus (Fm+), bidirectional data transfers up to 1 Mbit/s */
+    I2C_FASTPLUS_MODE = 0x2U,   /*!< Fast-mode Plus (Fm+), up to 1 Mbit/s */
 #endif
 #if(I2C_HAS_HIGH_SPEED_MODE)
-    I2C_HIGHSPEED_MODE = 0x3U,   /*!< High-speed Mode (Hs-mode), bidirectional data transfers up to 3.4 Mbit/s */
+    I2C_HIGHSPEED_MODE = 0x3U,   /*!< High-speed Mode (Hs), up to 3.4 Mbit/s */
 #endif
 #if(I2C_HAS_ULTRA_FAST_MODE)
-    I2C_ULTRAFAST_MODE = 0x4U    /*!< Ultra Fast Mode (UFm), unidirectional data transfers up to 5 Mbit/s */
+    I2C_ULTRAFAST_MODE = 0x4U    /*!< Ultra Fast Mode (UFm), up to 5 Mbit/s */
 #endif
 } i2c_mode_t;
 
-/*! @brief Type of I2C transfer (based on interrupts or DMA).
- * Implements : i2c_transfer_type_t_Class
+/*! @brief Type of I2C transfer mechanism.
+ *
+ * Selects whether the driver uses DMA or interrupt-driven transfers.
  */
 typedef enum
 {
-    I2C_USING_DMA = 0,    /*!< The driver will use DMA to perform I2C transfer */
-    I2C_USING_INTERRUPTS = 1,    /*!< The driver will use interrupts to perform I2C transfer */
+    I2C_USING_DMA = 0,    /*!< DMA-based transfer */
+    I2C_USING_INTERRUPTS = 1,    /*!< Interrupt-based transfer */
 } i2c_transfer_type_t;
 
 /*******************************************************************************
-* Definitions
-******************************************************************************/
+ * Configuration Structures
+ ******************************************************************************/
 
 /*!
- * @brief Defines the example structure
+ * @brief Master configuration structure.
  *
- * This structure is used as an example.
+ * Passed to I2C_DRV_MasterInit() to configure the I2C master.
+ * The application may free this structure after init returns.
  */
-
-/*!
-* @brief Master configuration structure
-*
-* This structure is used to provide configuration parameters for the I2C master at initialization time.
-* Implements : i2c_master_user_config_t_Class
-*/
 typedef struct
 {
-    uint16_t slaveAddress;                      /*!< Slave address, 7-bit or 10-bit */
-    bool is10bitAddr;                           /*!< Selects 7-bit or 10-bit slave address */
-    i2c_mode_t operatingMode;                 /*!< I2C Operating mode */
-    uint32_t baudRate;                          /*!< The baud rate in hertz to use with current slave device */
+    uint16_t slaveAddress;                      /*!< Target slave address (7-bit or 10-bit). */
+    bool is10bitAddr;                           /*!< true = 10-bit address, false = 7-bit. */
+    i2c_mode_t operatingMode;                   /*!< Bus speed / protocol mode. */
+    uint32_t baudRate;                          /*!< SCL frequency in Hz for the selected mode. */
 #if(I2C_HAS_HIGH_SPEED_MODE)
-    uint32_t baudRateHS;                        /*!< Baud rate for High-speed mode. Unused in other operating modes */
-    uint8_t masterCode;                         /*!< Master code for High-speed mode. Valid range: 0-7. Unused in other operating modes */
+    uint32_t baudRateHS;                        /*!< SCL frequency in Hz for Hs-mode (ignored otherwise). */
+    uint8_t masterCode;                         /*!< Hs-mode master code (0–7, ignored otherwise). */
 #endif
-    i2c_transfer_type_t transferType;         /*!< Type of I2C transfer */
-    uint8_t dmaChannel;                         /*!< Channel number for DMA channel. If DMA mode isn't used this field will be ignored. */
-    i2c_master_callback_t masterCallback;     /*!< Master callback function. Note that this function will be
-                                                     called from the interrupt service routine at the end of a transfer,
-                                                     so its execution time should be as small as possible. It can be
-                                                     NULL if you want to check manually the status of the transfer. */
-    void *callbackParam;                        /*!< Parameter for the master callback function */
+    i2c_transfer_type_t transferType;           /*!< DMA or interrupt transfer mechanism. */
+    uint8_t dmaChannel;                         /*!< DMA channel number (ignored when using interrupts). */
+    i2c_master_callback_t masterCallback;       /*!< End-of-transfer callback (called from ISR context).
+                                                     May be NULL for polling usage. */
+    void *callbackParam;                        /*!< User parameter forwarded to masterCallback. */
 } i2c_master_user_config_t;
 
 /*!
- * @brief Slave configuration structure
+ * @brief Slave configuration structure.
  *
- * This structure is used to provide configuration parameters for the I2C slave at initialization time.
- * Implements : i2c_slave_user_config_t_Class
+ * Passed to I2C_DRV_SlaveInit() to configure the I2C slave.
+ * The application may free this structure after init returns.
  */
 typedef struct
 {
-    uint16_t slaveAddress;                    /*!< Slave address, 7-bit or 10-bit */
-    bool is10bitAddr;                         /*!< Selects 7-bit or 10-bit slave address */
-    i2c_mode_t operatingMode;                 /*!< I2C Operating mode */
-    bool slaveListening;                      /*!< Slave mode (always listening or on demand only) */
-    i2c_transfer_type_t transferType;         /*!< Type of I2C transfer */
-    uint8_t dmaChannel;                       /*!< Channel number for DMA rx channel. If DMA mode isn't used this field will be ignored. */
-    i2c_slave_callback_t slaveCallback;       /*!< Slave callback function. Note that this function will be
-                                                  called from the interrupt service routine, so its
-                                                  execution time should be as small as possible. It can be
-                                                  NULL if the slave is not in listening mode
-                                                  (slaveListening = false) */
-    void *callbackParam;                      /*!< Parameter for the slave callback function */
+    uint16_t slaveAddress;                    /*!< Own slave address (7-bit or 10-bit). */
+    bool is10bitAddr;                         /*!< true = 10-bit address, false = 7-bit. */
+    i2c_mode_t operatingMode;                 /*!< Bus speed / protocol mode. */
+    bool slaveListening;                      /*!< true = always listening, false = on-demand. */
+    i2c_transfer_type_t transferType;         /*!< DMA or interrupt transfer mechanism. */
+    uint8_t dmaChannel;                       /*!< DMA channel number (ignored when using interrupts). */
+    i2c_slave_callback_t slaveCallback;       /*!< Event callback (called from ISR context).
+                                                  Required when slaveListening = true. */
+    void *callbackParam;                      /*!< User parameter forwarded to slaveCallback. */
 } i2c_slave_user_config_t;
 
 /*!
- * @brief Baud rate structure
+ * @brief Baud rate parameter structure.
  *
- * This structure is used for setting or getting the baud rate.
- * Implements : i2c_baud_rate_params_t_Class
+ * Used with I2C_DRV_MasterGetBaudRate() and I2C_DRV_MasterSetBaudRate().
  */
 typedef struct
 {
-    uint32_t baudRate;
+    uint32_t baudRate;                        /*!< SCL frequency in Hz. */
 #if(I2C_HAS_HIGH_SPEED_MODE)
-    uint32_t baudRateHS;
+    uint32_t baudRateHS;                      /*!< Hs-mode SCL frequency in Hz. */
 #endif
 } i2c_baud_rate_params_t;
 
@@ -238,132 +244,137 @@ typedef struct
 /*******************************************************************************
  * API
  ******************************************************************************/
-/*!
- * @name I2C Driver
- * @{
- */
 
 #if defined(__cplusplus)
 extern "C" {
 #endif
 
+/*******************************************************************************
+ * Master Initialization
+ ******************************************************************************/
+/*!
+ * @name Master Initialization
+ * @brief Functions for initializing and de-initializing the I2C master driver.
+ * @{
+ */
 
 /*!
- * @brief Initialize the I2C master mode driver
+ * @brief Initialize the I2C master mode driver.
  *
- * This function initializes the I2C driver in master mode.
+ * Configures the I2C peripheral for master operation according to the
+ * provided configuration structure.
  *
- * @param instance  I2C peripheral instance number
- * @param userConfigPtr    Pointer to the I2C master user configuration structure. The function
- *                         reads configuration data from this structure and initializes the
- *                         driver accordingly. The application may free this structure after
- *                         the function returns.
- * @param master    Pointer to the I2C master driver context structure. The driver uses
- *                  this memory area for its internal logic. The application must make no
- *                  assumptions about the content of this structure, and must not free this
- *                  memory until the driver is de-initialized using I2C_DRV_MasterDeinit().
- * @return    Error or success status returned by API
+ * @param[in]  instance       I2C peripheral instance number.
+ * @param[in]  userConfigPtr  Pointer to master configuration. May be freed
+ *                            after this call returns.
+ * @param[out] master         Pointer to master driver state. Must remain
+ *                            allocated until I2C_DRV_MasterDeinit() is called.
+ * @return  STATUS_SUCCESS or error code.
  */
 status_t I2C_DRV_MasterInit(uint32_t instance,
                             const i2c_master_user_config_t *userConfigPtr,
                             i2c_master_state_t *master);
 
-
 /*!
- * @brief De-initialize the I2C master mode driver
+ * @brief De-initialize the I2C master mode driver.
  *
- * This function de-initializes the I2C driver in master mode. The driver can't be used
- * again until reinitialized. The context structure is no longer needed by the driver and
- * can be freed after calling this function.
+ * Releases all master-mode resources. The driver cannot be used again
+ * until re-initialized.
  *
- * @param instance  I2C peripheral instance number
- * @return    Error or success status returned by API
+ * @param[in] instance  I2C peripheral instance number.
+ * @return  STATUS_SUCCESS or error code.
  */
 status_t I2C_DRV_MasterDeinit(uint32_t instance);
 
+/*! @} */ /* End of Master Initialization */
+
+/*******************************************************************************
+ * Master Configuration
+ ******************************************************************************/
+/*!
+ * @name Master Configuration
+ * @brief Functions for configuring baud rate and slave address at run-time.
+ * @{
+ */
 
 /*!
- * @brief Get the currently configured baud rate
+ * @brief Get the currently configured baud rate.
  *
- * This function returns the currently configured baud rate.
- *
- * @param instance  I2C peripheral instance number
- * @param baudRate  structure that contains the current baud rate in hertz
- *                  and the baud rate in hertz for High-speed mode (unused
- *                  in other modes, can be NULL)
+ * @param[in]  instance  I2C peripheral instance number.
+ * @param[out] baudRate  Receives the current baud rate parameters.
  */
 void I2C_DRV_MasterGetBaudRate(uint32_t instance, i2c_baud_rate_params_t *baudRate);
 
-
 /*!
- * @brief Set the baud rate for any subsequent I2C communication
+ * @brief Set the baud rate for subsequent I2C communication.
  *
- * This function sets the baud rate (SCL frequency) for the I2C master. It can also
- * change the operating mode. If the operating mode is High-Speed, a second baud rate
- * must be provided for high-speed communication.
- * Note that due to module limitation not any baud rate can be achieved. The driver
- * will set a baud rate as close as possible to the requested baud rate, but there may
- * still be substantial differences, for example if requesting a high baud rate while
- * using a low-frequency protocol clock for the I2C module. The application should
- * call I2C_DRV_MasterGetBaudRate() after I2C_DRV_MasterSetBaudRate() to check
- * what baud rate was actually set.
+ * Sets the SCL frequency and optionally changes the operating mode.
+ * Due to hardware limitations the actual baud rate may differ from the
+ * requested value. Call I2C_DRV_MasterGetBaudRate() afterwards to read
+ * the actual rate that was achieved.
  *
- * @param instance  I2C peripheral instance number
- * @param operatingMode  I2C operating mode
- * @param baudRate  structure that contains the baud rate in hertz to use by current slave device
- *                  and also the baud rate in hertz for High-speed mode (unused in other modes)
- *
- * @return    Error or success status returned by API
+ * @param[in] instance       I2C peripheral instance number.
+ * @param[in] operatingMode  Desired operating mode.
+ * @param[in] baudRate       Desired baud rate parameters.
+ * @return  STATUS_SUCCESS or error code.
  */
 status_t I2C_DRV_MasterSetBaudRate(uint32_t instance,
                                    const i2c_mode_t operatingMode,
                                    const i2c_baud_rate_params_t baudRate);
 
-
 /*!
- * @brief Set the slave address for any subsequent I2C communication
+ * @brief Set the target slave address.
  *
- * This function sets the slave address which will be used for any future
- * transfer initiated by the I2C master.
+ * Updates the slave address used by all subsequent master transfers.
  *
- * @param instance  I2C peripheral instance number
- * @param address   slave address, 7-bit or 10-bit
- * @param is10bitAddr   specifies if provided address is 10-bit
+ * @param[in] instance    I2C peripheral instance number.
+ * @param[in] address     Slave address (7-bit or 10-bit).
+ * @param[in] is10bitAddr true = 10-bit address, false = 7-bit.
  */
- void I2C_DRV_MasterSetSlaveAddr(uint32_t instance, const uint16_t address, const bool is10bitAddr);
+void I2C_DRV_MasterSetSlaveAddr(uint32_t instance, const uint16_t address, const bool is10bitAddr);
+
+/*! @} */ /* End of Master Configuration */
+
+/*******************************************************************************
+ * Master Transfer
+ ******************************************************************************/
+/*!
+ * @name Master Transfer
+ * @brief Blocking and non-blocking send/receive functions for master mode,
+ *        plus transfer abort.
+ * @{
+ */
 
 /*!
- * @brief Perform a non-blocking send transaction on the I2C bus
+ * @brief Start a non-blocking send transaction (master).
  *
- * This function starts the transmission of a block of data to the currently
- * configured slave address and returns immediately.
- * The rest of the transmission is handled by the interrupt service routine.
- * Use I2C_DRV_MasterGetSendStatus() to check the progress of the transmission.
+ * Initiates transmission to the currently configured slave address and
+ * returns immediately. Use I2C_DRV_MasterGetTransferStatus() to poll
+ * completion, or register a callback.
  *
- * @param instance  I2C peripheral instance number
- * @param txBuff    pointer to the data to be transferred
- * @param txSize    length in bytes of the data to be transferred
- * @param sendStop    specifies whether or not to generate stop condition after the transmission
- * @return    Error or success status returned by API
+ * @param[in] instance  I2C peripheral instance number.
+ * @param[in] txBuff    Pointer to transmit data buffer.
+ * @param[in] txSize    Number of bytes to transmit.
+ * @param[in] sendStop  true = generate STOP after transmission.
+ * @return  STATUS_SUCCESS or error code.
  */
 status_t I2C_DRV_MasterSendData(uint32_t instance,
                                 const uint8_t *txBuff,
                                 uint32_t txSize,
                                 bool sendStop);
 
-
 /*!
- * @brief Perform a blocking send transaction on the I2C bus
+ * @brief Perform a blocking send transaction (master).
  *
- * This function sends a block of data to the currently configured slave address, and
- * only returns when the transmission is complete.
+ * Sends data and blocks until the transfer completes or the timeout
+ * expires.
  *
- * @param instance  I2C peripheral instance number
- * @param txBuff    pointer to the data to be transferred
- * @param txSize    length in bytes of the data to be transferred
- * @param sendStop    specifies whether or not to generate stop condition after the transmission
- * @param timeout   timeout for the transfer in milliseconds
- * @return    Error or success status returned by API
+ * @param[in] instance  I2C peripheral instance number.
+ * @param[in] txBuff    Pointer to transmit data buffer.
+ * @param[in] txSize    Number of bytes to transmit.
+ * @param[in] sendStop  true = generate STOP after transmission.
+ * @param[in] timeout   Timeout in milliseconds.
+ * @return  STATUS_SUCCESS, STATUS_TIMEOUT, or error code.
  */
 status_t I2C_DRV_MasterSendDataBlocking(uint32_t instance,
                                         const uint8_t *txBuff,
@@ -371,48 +382,35 @@ status_t I2C_DRV_MasterSendDataBlocking(uint32_t instance,
                                         bool sendStop,
                                         uint32_t timeout);
 
-
 /*!
- * @brief Abort a non-blocking I2C Master transmission or reception
+ * @brief Start a non-blocking receive transaction (master).
  *
- * @param instance  I2C peripheral instance number
- * @return    Error or success status returned by API
- */
-status_t I2C_DRV_MasterAbortTransferData(uint32_t instance);
-
-
-/*!
- * @brief Perform a non-blocking receive transaction on the I2C bus
+ * Initiates reception from the currently configured slave address and
+ * returns immediately.
  *
- * This function starts the reception of a block of data from the currently
- * configured slave address and returns immediately.
- * The rest of the reception is handled by the interrupt service routine.
- * Use I2C_DRV_MasterGetReceiveStatus() to check the progress of the reception.
- *
- * @param instance  I2C peripheral instance number
- * @param rxBuff    pointer to the buffer where to store received data
- * @param rxSize    length in bytes of the data to be transferred
- * @param sendStop    specifies whether or not to generate stop condition after the reception
- * @return    Error or success status returned by API
+ * @param[in]  instance  I2C peripheral instance number.
+ * @param[out] rxBuff    Pointer to receive data buffer.
+ * @param[in]  rxSize    Number of bytes to receive.
+ * @param[in]  sendStop  true = generate STOP after reception.
+ * @return  STATUS_SUCCESS or error code.
  */
 status_t I2C_DRV_MasterReceiveData(uint32_t instance,
                                    uint8_t *rxBuff,
                                    uint32_t rxSize,
                                    bool sendStop);
 
-
 /*!
- * @brief Perform a blocking receive transaction on the I2C bus
+ * @brief Perform a blocking receive transaction (master).
  *
- * This function receives a block of data from the currently configured slave address,
- * and only returns when the transmission is complete.
+ * Receives data and blocks until the transfer completes or the timeout
+ * expires.
  *
- * @param instance  I2C peripheral instance number
- * @param rxBuff    pointer to the buffer where to store received data
- * @param rxSize    length in bytes of the data to be transferred
- * @param sendStop    specifies whether or not to generate stop condition after the reception
- * @param timeout   timeout for the transfer in milliseconds
- * @return    Error or success status returned by API
+ * @param[in]  instance  I2C peripheral instance number.
+ * @param[out] rxBuff    Pointer to receive data buffer.
+ * @param[in]  rxSize    Number of bytes to receive.
+ * @param[in]  sendStop  true = generate STOP after reception.
+ * @param[in]  timeout   Timeout in milliseconds.
+ * @return  STATUS_SUCCESS, STATUS_TIMEOUT, or error code.
  */
 status_t I2C_DRV_MasterReceiveDataBlocking(uint32_t instance,
                                            uint8_t *rxBuff,
@@ -420,248 +418,303 @@ status_t I2C_DRV_MasterReceiveDataBlocking(uint32_t instance,
                                            bool sendStop,
                                            uint32_t timeout);
 
+/*!
+ * @brief Abort a non-blocking master transfer.
+ *
+ * @param[in] instance  I2C peripheral instance number.
+ * @return  STATUS_SUCCESS or error code.
+ */
+status_t I2C_DRV_MasterAbortTransferData(uint32_t instance);
+
+/*! @} */ /* End of Master Transfer */
+
+/*******************************************************************************
+ * Master Status
+ ******************************************************************************/
+/*!
+ * @name Master Status
+ * @brief Functions for querying the progress of an active master transfer.
+ * @{
+ */
 
 /*!
- * @brief Return the current status of the I2C master transfer
+ * @brief Get the current master transfer status.
  *
- * This function can be called during a non-blocking transmission to check the
- * status of the transfer.
+ * Can be called during a non-blocking transfer to check progress.
  *
- * @param instance  I2C peripheral instance number
- * @param bytesRemaining   the number of remaining bytes in the active I2C transfer
- * @return    Error or success status returned by API
+ * @param[in]  instance        I2C peripheral instance number.
+ * @param[out] bytesRemaining  Remaining bytes in the active transfer
+ *                             (may be NULL if not needed).
+ * @return  STATUS_SUCCESS (transfer complete), STATUS_BUSY (in progress),
+ *          or error code.
  */
 status_t I2C_DRV_MasterGetTransferStatus(uint32_t instance, uint32_t *bytesRemaining);
 
+/*! @} */ /* End of Master Status */
 
+/*******************************************************************************
+ * Slave Initialization
+ ******************************************************************************/
 /*!
- * @brief Handle master operation when I2C interrupt occurs
- *
- * This is the interrupt service routine for the I2C master mode driver. It
- * handles the rest of the transfer started by one of the send/receive functions.
- *
- * @param instance  I2C peripheral instance number
+ * @name Slave Initialization
+ * @brief Functions for initializing and de-initializing the I2C slave driver.
+ * @{
  */
-void I2C_DRV_MasterIRQHandler(uint32_t instance);
-
 
 /*!
- * @brief Initialize the I2C slave mode driver
+ * @brief Initialize the I2C slave mode driver.
  *
- * @param instance  I2C peripheral instance number
- * @param userConfigPtr    Pointer to the I2C slave user configuration structure. The function
- *                         reads configuration data from this structure and initializes the
- *                         driver accordingly. The application may free this structure after
- *                         the function returns.
- * @param slave     Pointer to the I2C slave driver context structure. The driver uses
- *                  this memory area for its internal logic. The application must make no
- *                  assumptions about the content of this structure, and must not free this
- *                  memory until the driver is de-initialized using I2C_DRV_SlaveDeinit().
- * @return    Error or success status returned by API
+ * @param[in]  instance       I2C peripheral instance number.
+ * @param[in]  userConfigPtr  Pointer to slave configuration. May be freed
+ *                            after this call returns.
+ * @param[out] slave          Pointer to slave driver state. Must remain
+ *                            allocated until I2C_DRV_SlaveDeinit() is called.
+ * @return  STATUS_SUCCESS or error code.
  */
 status_t I2C_DRV_SlaveInit(uint32_t instance,
                            const i2c_slave_user_config_t *userConfigPtr,
                            i2c_slave_state_t *slave);
 
-
 /*!
- * @brief De-initialize the I2C slave mode driver
+ * @brief De-initialize the I2C slave mode driver.
  *
- * This function de-initializes the I2C driver in slave mode. The driver can't be used
- * again until reinitialized. The context structure is no longer needed by the driver and
- * can be freed after calling this function.
+ * Releases all slave-mode resources. The driver cannot be used again
+ * until re-initialized.
  *
- * @param instance  I2C peripheral instance number
- * @return    Error or success status returned by API
+ * @param[in] instance  I2C peripheral instance number.
+ * @return  STATUS_SUCCESS or error code.
  */
 status_t I2C_DRV_SlaveDeinit(uint32_t instance);
 
+/*! @} */ /* End of Slave Initialization */
+
+/*******************************************************************************
+ * Slave Buffer Management
+ ******************************************************************************/
+/*!
+ * @name Slave Buffer Management
+ * @brief Functions for providing Tx/Rx buffers to the slave driver
+ *        (typically called from the slave callback).
+ * @{
+ */
 
 /*!
- * @brief Provide a buffer for transmitting data
+ * @brief Provide a transmit data buffer for the slave.
  *
- * This function provides a buffer from which the I2C slave-mode driver can
- * transmit data. It can be called for example from the user callback provided at
- * initialization time, when the driver reports events I2C_SLAVE_EVENT_TX_REQ or
- * I2C_SLAVE_EVENT_TX_EMPTY.
+ * Typically called from the slave callback when the driver reports
+ * I2C_SLAVE_EVENT_TX_REQ or I2C_SLAVE_EVENT_TX_EMPTY.
  *
- * @param instance  I2C peripheral instance number
- * @param txBuff    pointer to the data to be transferred
- * @param txSize    length in bytes of the data to be transferred
- * @return    Error or success status returned by API
+ * @param[in] instance  I2C peripheral instance number.
+ * @param[in] txBuff    Pointer to transmit data.
+ * @param[in] txSize    Number of bytes available.
+ * @return  STATUS_SUCCESS or error code.
  */
 status_t I2C_DRV_SlaveSetTxBuffer(uint32_t instance,
                                   const uint8_t *txBuff,
                                   uint32_t txSize);
 
-
 /*!
- * @brief Provide a buffer for receiving data.
+ * @brief Provide a receive data buffer for the slave.
  *
- * This function provides a buffer in which the I2C slave-mode driver can
- * store received data. It can be called for example from the user callback provided at
- * initialization time, when the driver reports events I2C_SLAVE_EVENT_RX_REQ or
- * I2C_SLAVE_EVENT_RX_FULL.
+ * Typically called from the slave callback when the driver reports
+ * I2C_SLAVE_EVENT_RX_REQ or I2C_SLAVE_EVENT_RX_FULL.
  *
- * @param instance  I2C peripheral instance number
- * @param rxBuff    pointer to the data to be transferred
- * @param rxSize    length in bytes of the data to be transferred
- * @return    Error or success status returned by API
+ * @param[in]  instance  I2C peripheral instance number.
+ * @param[out] rxBuff    Pointer to receive buffer.
+ * @param[in]  rxSize    Buffer capacity in bytes.
+ * @return  STATUS_SUCCESS or error code.
  */
 status_t I2C_DRV_SlaveSetRxBuffer(uint32_t instance,
                                   uint8_t *rxBuff,
                                   uint32_t rxSize);
 
+/*! @} */ /* End of Slave Buffer Management */
+
+/*******************************************************************************
+ * Slave Transfer
+ ******************************************************************************/
+/*!
+ * @name Slave Transfer
+ * @brief Blocking and non-blocking send/receive functions for slave mode
+ *        (only available when slaveListening = false), plus transfer abort.
+ * @{
+ */
 
 /*!
- * @brief Perform a non-blocking send transaction on the I2C bus
+ * @brief Start a non-blocking send transaction (slave).
  *
- * Performs a non-blocking send transaction on the I2C bus when the slave is
- * not in listening mode (initialized with slaveListening = false). It starts
- * the transmission and returns immediately. The rest of the transmission is
- * handled by the interrupt service routine.
- * Use I2C_DRV_SlaveGetTransmitStatus() to check the progress of the transmission.
+ * Only available when the slave was initialized with slaveListening = false.
  *
- * @param instance  I2C peripheral instance number
- * @param txBuff    pointer to the data to be transferred
- * @param txSize    length in bytes of the data to be transferred
- * @return    Error or success status returned by API
+ * @param[in] instance  I2C peripheral instance number.
+ * @param[in] txBuff    Pointer to transmit data buffer.
+ * @param[in] txSize    Number of bytes to transmit.
+ * @return  STATUS_SUCCESS or error code.
  */
 status_t I2C_DRV_SlaveSendData(uint32_t instance,
                                const uint8_t *txBuff,
                                uint32_t txSize);
 
-
 /*!
- * @brief Perform a blocking send transaction on the I2C bus
+ * @brief Perform a blocking send transaction (slave).
  *
- * Performs a blocking send transaction on the I2C bus when the slave is
- * not in listening mode (initialized with slaveListening = false). It sets
- * up the transmission and then waits for the transfer to complete before
- * returning.
+ * Only available when the slave was initialized with slaveListening = false.
+ * Blocks until the transfer completes or the timeout expires.
  *
- * @param instance  I2C peripheral instance number
- * @param txBuff    pointer to the data to be transferred
- * @param txSize    length in bytes of the data to be transferred
- * @param timeout   timeout for the transfer in milliseconds
- * @return    Error or success status returned by API
+ * @param[in] instance  I2C peripheral instance number.
+ * @param[in] txBuff    Pointer to transmit data buffer.
+ * @param[in] txSize    Number of bytes to transmit.
+ * @param[in] timeout   Timeout in milliseconds.
+ * @return  STATUS_SUCCESS, STATUS_TIMEOUT, or error code.
  */
 status_t I2C_DRV_SlaveSendDataBlocking(uint32_t instance,
                                        const uint8_t *txBuff,
                                        uint32_t txSize,
                                        uint32_t timeout);
 
-
 /*!
- * @brief Perform a non-blocking receive transaction on the I2C bus
+ * @brief Start a non-blocking receive transaction (slave).
  *
- * Performs a non-blocking receive transaction on the I2C bus when the slave is
- * not in listening mode (initialized with slaveListening = false). It starts
- * the reception and returns immediately. The rest of the reception is
- * handled by the interrupt service routine.
- * Use I2C_DRV_SlaveGetReceiveStatus() to check the progress of the reception.
+ * Only available when the slave was initialized with slaveListening = false.
  *
- * @param instance  I2C peripheral instance number
- * @param rxBuff    pointer to the buffer where to store received data
- * @param rxSize    length in bytes of the data to be transferred
- * @return    Error or success status returned by API
+ * @param[in]  instance  I2C peripheral instance number.
+ * @param[out] rxBuff    Pointer to receive data buffer.
+ * @param[in]  rxSize    Number of bytes to receive.
+ * @return  STATUS_SUCCESS or error code.
  */
 status_t I2C_DRV_SlaveReceiveData(uint32_t instance,
                                   uint8_t *rxBuff,
                                   uint32_t rxSize);
 
-
 /*!
- * @brief Perform a blocking receive transaction on the I2C bus
+ * @brief Perform a blocking receive transaction (slave).
  *
- * Performs a blocking receive transaction on the I2C bus when the slave is
- * not in listening mode (initialized with slaveListening = false). It sets
- * up the reception and then waits for the transfer to complete before
- * returning.
+ * Only available when the slave was initialized with slaveListening = false.
+ * Blocks until the transfer completes or the timeout expires.
  *
- * @param instance  I2C peripheral instance number
- * @param rxBuff    pointer to the buffer where to store received data
- * @param rxSize    length in bytes of the data to be transferred
- * @param timeout   timeout for the transfer in milliseconds
- * @return    Error or success status returned by API
+ * @param[in]  instance  I2C peripheral instance number.
+ * @param[out] rxBuff    Pointer to receive data buffer.
+ * @param[in]  rxSize    Number of bytes to receive.
+ * @param[in]  timeout   Timeout in milliseconds.
+ * @return  STATUS_SUCCESS, STATUS_TIMEOUT, or error code.
  */
 status_t I2C_DRV_SlaveReceiveDataBlocking(uint32_t instance,
                                           uint8_t *rxBuff,
                                           uint32_t rxSize,
                                           uint32_t timeout);
 
+/*!
+ * @brief Abort a non-blocking slave transfer.
+ *
+ * @param[in] instance  I2C peripheral instance number.
+ * @return  STATUS_SUCCESS or error code.
+ */
+status_t I2C_DRV_SlaveAbortTransferData(uint32_t instance);
+
+/*! @} */ /* End of Slave Transfer */
+
+/*******************************************************************************
+ * Slave Status
+ ******************************************************************************/
+/*!
+ * @name Slave Status
+ * @brief Functions for querying the progress of an active slave transfer.
+ * @{
+ */
 
 /*!
- * @brief Return the current status of the I2C slave transfer
+ * @brief Get the current slave transfer status.
  *
- * This function can be called during a non-blocking transmission to check the
- * status of the transfer.
+ * Can be called during a non-blocking transfer to check progress.
  *
- * @param instance  I2C peripheral instance number
- * @param bytesRemaining   the number of remaining bytes in the active I2C transfer
- * @return    Error or success status returned by API
+ * @param[in]  instance        I2C peripheral instance number.
+ * @param[out] bytesRemaining  Remaining bytes in the active transfer
+ *                             (may be NULL if not needed).
+ * @return  STATUS_SUCCESS (transfer complete), STATUS_BUSY (in progress),
+ *          or error code.
  */
 status_t I2C_DRV_SlaveGetTransferStatus(uint32_t instance,
                                         uint32_t *bytesRemaining);
 
+/*! @} */ /* End of Slave Status */
 
+/*******************************************************************************
+ * Default Configuration
+ ******************************************************************************/
 /*!
- * @brief Abort a non-blocking I2C Master transmission or reception
- *
- * @param instance  I2C peripheral instance number
- * @return    Error or success status returned by API
+ * @name Default Configuration
+ * @brief Functions for obtaining default configuration structures.
+ * @{
  */
-status_t I2C_DRV_SlaveAbortTransferData(uint32_t instance);
-
 
 /*!
- * @brief Handle slave operation when I2C interrupt occurs
+ * @brief Get the default master configuration.
  *
- * This is the interrupt service routine for the I2C slave mode driver. It
- * handles any transfer initiated by an I2C master and notifies the application
- * via the provided callback when relevant events occur.
+ * Fills the provided structure with safe default values.
  *
- * @param instance  I2C peripheral instance number
- */
-void I2C_DRV_SlaveIRQHandler(uint32_t instance);
-
-/*!
- * @brief Gets the default configuration structure for master
- *
- * The default configuration structure is:
- *
- * @param config Pointer to configuration structure
+ * @param[out] config  Pointer to configuration structure to fill.
  */
 void I2C_DRV_MasterGetDefaultConfig(i2c_master_user_config_t *config);
 
 /*!
- * @brief Gets the default configuration structure for slave
+ * @brief Get the default slave configuration.
  *
- * The default configuration structure is:
+ * Fills the provided structure with safe default values.
  *
- * @param config Pointer to configuration structure
+ * @param[out] config  Pointer to configuration structure to fill.
  */
 void I2C_DRV_SlaveGetDefaultConfig(i2c_slave_user_config_t *config);
 
+/*! @} */ /* End of Default Configuration */
+
+/*******************************************************************************
+ * IRQ Handlers
+ ******************************************************************************/
+/*!
+ * @name IRQ Handlers
+ * @brief Interrupt service routines for master, slave modes.
+ * @{
+ */
+
+/*!
+ * @brief Master IRQ handler.
+ *
+ * Handles the continuation of a master transfer started by one of the
+ * send/receive functions. Called from the hardware interrupt vector.
+ *
+ * @param[in] instance  I2C peripheral instance number.
+ */
+void I2C_DRV_MasterIRQHandler(uint32_t instance);
+
+/*!
+ * @brief Slave IRQ handler.
+ *
+ * Handles slave-side bus events and notifies the application via the
+ * registered callback. Called from the hardware interrupt vector.
+ *
+ * @param[in] instance  I2C peripheral instance number.
+ */
+void I2C_DRV_SlaveIRQHandler(uint32_t instance);
+
 #if defined(YTM32B1L_SERIES) || defined(YTM32B1H_SERIES)
 /*!
- * @brief Handler for both slave and master operation when I2C interrupt occurs
+ * @brief Combined master/slave IRQ handler.
  *
- * This is the interrupt service routine for the I2C slave and master mode driver. It
- * handles any transfer initiated by an I2C master and notifies the application
- * via the provided callback when relevant events occur.
+ * Used on devices that share a single interrupt vector for both master
+ * and slave events. A single I2C instance can only operate as either
+ * master or slave at a time.
  *
- * @param instance  I2C peripheral instance number
+ * @param[in] instance  I2C peripheral instance number.
  */
 void I2C_DRV_ModuleIRQHandler(uint32_t instance);
 #endif
 
-/*! @}*/
+/*! @} */ /* End of IRQ Handlers */
+
+/*! @} */ /* End of i2c group */
+
 #if defined(__cplusplus)
 }
 #endif
-
-/*! @}*/
 
 #endif /* I2C_DRIVER_H */
 /*******************************************************************************

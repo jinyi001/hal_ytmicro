@@ -8,6 +8,22 @@
 /*!
  * @file dma_hw_access.h
  * @version 1.4.1
+ *
+ * @brief DMA Hardware Access Layer.
+ *
+ * This header provides low-level inline accessor functions and register
+ * manipulation routines for the DMA peripheral. Functions are organized into:
+ *   - Module Initialization
+ *   - Module Configuration & Control
+ *   - CTS Source Configuration
+ *   - CTS Destination Configuration
+ *   - CTS Ram Reload & Interrupt
+ *   - CTS Transfer Loop & Trigger
+ *   - DMAMUX
+ *   - Utility
+ *
+ * @note This is an internal layer used by the DMA Driver (dma_driver.h/c).
+ *       Application code should use the DMA_DRV_* APIs from dma_driver.h.
  */
 
 #ifndef DMA_HW_ACCESS_H
@@ -23,7 +39,12 @@
 
 #ifdef FEATURE_DMA_ENGINE_STALL
 /*!
- * @brief Specifies the number of cycles the DMA Engine is stalled.
+ * @brief DMA engine stall duration after each read/write operation.
+ *
+ * Defines the number of system clock cycles the DMA engine pauses after
+ * completing each read/write access. Increasing the stall duration reduces
+ * DMA bus utilization and allows more bandwidth for the CPU or other
+ * bus masters.
  */
 typedef enum
 {
@@ -42,52 +63,63 @@ extern "C" {
 #endif
 
 /*!
- * @name DMA hw access module level functions
+ * @name Module Initialization
+ * @brief Functions for initializing the DMA module and cancelling transfers.
  * @{
  */
 
 /*!
- * @brief Initializes DMA module to known state.
+ * @brief Initialize the DMA module to its default state.
  *
- * @param base Register base address for DMA module.
+ * Resets all DMA control registers and CTS entries to zero.
+ *
+ * @param[in] base  Pointer to the DMA peripheral base address.
+ *
+ * @pre The DMA peripheral clock must be enabled.
  */
 void DMA_Init(DMA_Type *base);
 
 /*!
- * @brief Cancels the remaining data transfer.
+ * @brief Cancel the remaining data transfer gracefully.
  *
- * This function stops the executing channel and forces the transfer loop
- * to finish. The cancellation takes effect after the last write of the
- * current read/write sequence. The CX clears itself after the cancel has
- * been honored. This cancel retires the channel normally as if the minor
- * loop had completed.
+ * Stops the executing channel and forces the transfer loop to finish.
+ * The cancellation takes effect after the last write of the current
+ * read/write sequence. The CX bit clears itself after the cancel has
+ * been honored. The channel retires normally as if the trigger loop
+ * had completed.
  *
- * @param base Register base address for DMA module.
+ * @param[in] base  Pointer to the DMA peripheral base address.
+ *
+ * @note The channel is retired normally; no error is flagged.
  */
 void DMA_CancelTransfer(DMA_Type *base);
 
 /*!
- * @brief Cancels the remaining data transfer and treats it as an error condition.
+ * @brief Cancel the remaining data transfer and flag it as an error.
  *
- * This function stops the executing channel and forces the transfer loop
- * to finish. The cancellation takes effect after the last write of the
- * current read/write sequence. The CX clears itself after the cancel has
- * been honoured. This cancel retires the channel normally as if the minor
- * loop had completed. Additional thing is to treat this operation as an error
- * condition.
+ * Stops the executing channel and forces the transfer loop to finish.
+ * The cancellation takes effect after the last write of the current
+ * read/write sequence. The CX bit clears itself after the cancel has
+ * been honored. Unlike DMA_CancelTransfer(), this function additionally
+ * treats the cancellation as an error condition, setting the appropriate
+ * error status bits.
  *
- * @param base Register base address for DMA module.
+ * @param[in] base  Pointer to the DMA peripheral base address.
+ *
+ * @warning The error status bits must be cleared manually after calling
+ *          this function.
  */
 void DMA_CancelTransferWithError(DMA_Type *base);
 
 /*!
- * @brief Halts or does not halt the DMA module when an error occurs.
+ * @brief Configure whether the DMA module halts on an error condition.
  *
- * An error causes the HALT bit to be set. Subsequently, all service requests are ignored until the
- * HALT bit is cleared.
+ * When enabled, an error causes the HALT bit to be set, and all subsequent
+ * service requests are ignored until the HALT bit is cleared.
  *
- * @param base Register base address for DMA module.
- * @param haltOnError Halts (true) or not halt (false) DMA module when an error occurs.
+ * @param[in] base         Pointer to the DMA peripheral base address.
+ * @param[in] haltOnError  true = halt the DMA module when an error occurs;
+ *                         false = do not halt on error.
  */
 static inline void DMA_SetHaltOnErrorCmd(DMA_Type *base, bool haltOnError)
 {
@@ -100,12 +132,17 @@ static inline void DMA_SetHaltOnErrorCmd(DMA_Type *base, bool haltOnError)
 
 #if (defined(FEATURE_DMA_SUPPORT_ECC_ERROR_CHECK) && FEATURE_DMA_SUPPORT_ECC_ERROR_CHECK == 1)
 /*!
- * @brief Enables/Disables the ECC error detection.
+ * @brief Enable or disable ECC error detection for DMA RAM.
  *
- * This function enables/disables the ECC error detection.
+ * When enabled, the DMA module checks for ECC errors on internal SRAM
+ * accesses and reports them via the error interrupt mechanism.
  *
- * @param base Register base address for DMA module.
- * @param enable Enable(true) or Disable (false) ECC error detection.
+ * @param[in] base    Pointer to the DMA peripheral base address.
+ * @param[in] enable  true = enable ECC error detection;
+ *                    false = disable ECC error detection.
+ *
+ * @note This function is only available when
+ *       FEATURE_DMA_SUPPORT_ECC_ERROR_CHECK is defined and set to 1.
  */
 
 static inline void DMA_SetEccErrorCheckCmd(DMA_Type *base, bool enable)
@@ -121,19 +158,25 @@ static inline void DMA_SetEccErrorCheckCmd(DMA_Type *base, bool enable)
 /*! @} */
 
 /*!
- * @name DMA HAL driver configuration and operation
+ * @name Module Configuration & Control
+ * @brief Functions for configuring DMA transfer loop mapping, channel requests,
+ *        error interrupts, and interrupt status flags.
  * @{
  */
 /*!
- * @brief Enables/Disables the transfer loop mapping.
+ * @brief Enable or disable the transfer loop offset mapping feature.
  *
- * This function enables/disables the transfer loop mapping feature.
- * If enabled, the BCNT is redefined to include the individual enable fields and the BCNT field. The
- * individual enable fields allow the transfer loop offset to be applied to the source address, the
- * destination address, or both. The BCNT field is reduced when either offset is enabled.
+ * When enabled, the BCNT register is redefined to include individual enable
+ * fields and the BCNT field. The individual enable fields allow the transfer
+ * loop offset to be applied to the source address, the destination address,
+ * or both. The BCNT field width is reduced when either offset is enabled.
  *
- * @param base Register base address for DMA module.
- * @param enable Enables (true) or Disable (false) transfer loop mapping.
+ * @param[in] base    Pointer to the DMA peripheral base address.
+ * @param[in] enable  true = enable transfer loop mapping;
+ *                    false = disable transfer loop mapping.
+ *
+ * @pre This function must be called before configuring any transfer loop
+ *      offset via DMA_CTSSetTransferLoopOffset().
  */
 static inline void DMA_SetTransferLoopMappingCmd(DMA_Type *base, bool enable)
 {
@@ -145,20 +188,26 @@ static inline void DMA_SetTransferLoopMappingCmd(DMA_Type *base, bool enable)
 }
 
 /*!
- * @brief Enables/Disables the error interrupt for channels.
+ * @brief Enable or disable the error interrupt for a specific DMA channel.
  *
- * @param base Register base address for DMA module.
- * @param channel Channel indicator.
- * @param enable Enable(true) or Disable (false) error interrupt.
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number.
+ * @param[in] enable   true = enable error interrupt for the channel;
+ *                     false = disable error interrupt for the channel.
  */
 void DMA_SetErrorIntCmd(DMA_Type *base, uint8_t channel, bool enable);
 
 /*!
- * @brief Gets the DMA error interrupt status.
+ * @brief Get the DMA error interrupt status flags for all channels.
  *
- * @param base Register base address for DMA module.
- * @return 32 bit variable indicating error channels. If error happens on DMA channel n, the bit n
- * of this variable is '1'. If not, the bit n of this variable is '0'.
+ * Returns a 32-bit bitmask where each bit corresponds to one DMA channel.
+ * A bit set to 1 indicates that an error condition occurred on that channel.
+ *
+ * @param[in] base  Pointer to the DMA peripheral base address.
+ *
+ * @return Bitmask of error interrupt flags. Bit n corresponds to channel n:
+ *         - 1 = error occurred on channel n.
+ *         - 0 = no error on channel n.
  */
 static inline uint32_t DMA_GetErrorIntStatusFlag(const DMA_Type *base)
 {
@@ -166,10 +215,13 @@ static inline uint32_t DMA_GetErrorIntStatusFlag(const DMA_Type *base)
 }
 
 /*!
- * @brief Clears the error interrupt status for the DMA channel or channels.
+ * @brief Clear the error interrupt status flag for a specific DMA channel.
  *
- * @param base Register base address for DMA module.
- * @param channel Channel indicator.
+ * Writes a 1 to the corresponding bit position in the CHEIF register to
+ * clear the error flag. Other channel flags are not affected.
+ *
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
  */
 static inline void DMA_ClearErrorIntStatusFlag(DMA_Type *base, uint8_t channel)
 {
@@ -180,19 +232,23 @@ static inline void DMA_ClearErrorIntStatusFlag(DMA_Type *base, uint8_t channel)
 }
 
 /*!
- * @brief Enables/Disables the DMA request for the channel or all channels.
+ * @brief Enable or disable the DMA hardware request for a specific channel.
  *
- * @param base Register base address for DMA module.
- * @param enable Enable(true) or Disable (false) DMA request.
- * @param channel Channel indicator.
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number.
+ * @param[in] enable   true = enable the DMA request for the channel;
+ *                     false = disable the DMA request for the channel.
  */
 void DMA_SetDmaRequestCmd(DMA_Type *base, uint8_t channel, bool enable);
 
 /*!
- * @brief Clears the done status for a channel or all channels.
+ * @brief Clear the done status flag for a specific DMA channel.
  *
- * @param base Register base address for DMA module.
- * @param channel Channel indicator.
+ * Writes a 1 to the corresponding bit position in the DONE register to
+ * clear the done flag. Other channel flags are not affected.
+ *
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
  */
 static inline void DMA_ClearDoneStatusFlag(DMA_Type *base, uint8_t channel)
 {
@@ -203,10 +259,13 @@ static inline void DMA_ClearDoneStatusFlag(DMA_Type *base, uint8_t channel)
 }
 
 /*!
- * @brief Triggers the DMA channel.
+ * @brief Start a DMA transfer by software trigger on a specific channel.
  *
- * @param base Register base address for DMA module.
- * @param channel Channel indicator.
+ * Sets the START bit in the channel's CTS CSR register, initiating a
+ * service request for the channel.
+ *
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
  */
 static inline void DMA_TriggerChannelStart(DMA_Type *base, uint8_t channel)
 {
@@ -217,10 +276,14 @@ static inline void DMA_TriggerChannelStart(DMA_Type *base, uint8_t channel)
 }
 
 /*!
- * @brief Clears the interrupt status for the DMA channel.
+ * @brief Clear the trigger loop done interrupt status flag for a DMA channel.
  *
- * @param base Register base address for DMA module.
- * @param channel Channel indicator.
+ * Writes a 1 to the corresponding bit in the CHTLDIF register to clear
+ * the interrupt flag. A dummy read-back is performed to ensure the write
+ * completes before the function returns.
+ *
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
  */
 static inline void DMA_ClearIntStatusFlag(DMA_Type *base, uint8_t channel)
 {
@@ -232,10 +295,17 @@ static inline void DMA_ClearIntStatusFlag(DMA_Type *base, uint8_t channel)
 }
 
 /*!
- * @brief Get the interrupt status for the DMA channel.
+ * @brief Get the trigger loop done interrupt status flag for a DMA channel.
  *
- * @param base Register base address for DMA module.
- * @param channel Channel indicator.
+ * Reads the CHTLDIF register to determine whether the trigger loop done
+ * interrupt flag is set for the specified channel.
+ *
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
+ *
+ * @return Interrupt status:
+ * @retval true   The trigger loop done interrupt flag is set for the channel.
+ * @retval false  The trigger loop done interrupt flag is not set.
  */
 static inline bool DMA_GetIntStatusFlag(DMA_Type *base, uint8_t channel)
 {
@@ -248,26 +318,40 @@ static inline bool DMA_GetIntStatusFlag(DMA_Type *base, uint8_t channel)
 /*! @} */
 
 /*!
- * @name DMA HAL driver CTS configuration functions
+ * @name CTS Source Configuration
+ * @brief Functions for configuring CTS source address, offset, transfer
+ *        attributes, byte count, transfer loop offset, and last source
+ *        address adjustment.
  * @{
  */
 
 /*!
- * @brief Clears all registers to 0 for the hardware CTS.
+ * @brief Reset all CTS register fields to zero for a DMA channel.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
+ * Clears every field of the hardware CTS entry associated with the
+ * specified channel, returning it to the power-on default state.
+ *
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number.
  */
 void DMA_CTSClearReg(DMA_Type *base, uint8_t channel);
 
 #ifdef FEATURE_DMA_ENGINE_STALL
 
 /*!
- * @brief Configures DMA engine to stall for a number of cycles after each R/W.
+ * @brief Configure the DMA engine stall duration after each read/write.
  *
- * @param base Register base address for DMA module.
- * @param channel Channel indicator.
- * @param cycles Number of cycles the DMA engine is stalled after each R/W.
+ * Sets the bandwidth control (BWC) field in the CTS CSR register,
+ * causing the DMA engine to stall for the specified number of cycles
+ * after each read/write access. This can be used to throttle DMA bus
+ * utilization.
+ *
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
+ * @param[in] cycles   Number of stall cycles (see dma_engine_stall_t).
+ *
+ * @note This function is only available when FEATURE_DMA_ENGINE_STALL
+ *       is defined.
  */
 static inline void DMA_CTSSetEngineStall(DMA_Type *base, uint8_t channel, dma_engine_stall_t cycles)
 {
@@ -284,11 +368,14 @@ static inline void DMA_CTSSetEngineStall(DMA_Type *base, uint8_t channel, dma_en
 #endif
 
 /*!
- * @brief Configures the source address for the hardware CTS.
+ * @brief Set the source address for a CTS entry.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param address The pointer to the source memory address.
+ * Writes the starting source memory address into the CTS SADDR register
+ * for the specified DMA channel.
+ *
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
+ * @param[in] address  Source memory address for the DMA transfer.
  */
 static inline void DMA_CTSSetSrcAddr(DMA_Type *base, uint8_t channel, uint32_t address)
 {
@@ -299,14 +386,14 @@ static inline void DMA_CTSSetSrcAddr(DMA_Type *base, uint8_t channel, uint32_t a
 }
 
 /*!
- * @brief Configures the source address signed offset for the hardware CTS.
+ * @brief Set the source address signed offset for a CTS entry.
  *
- * Sign-extended offset applied to the current source address to form the next-state value as each
- * source read is complete.
+ * Configures the sign-extended offset that is added to the current source
+ * address after each source read to form the next-state address.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param offset signed-offset for source address.
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
+ * @param[in] offset   Signed offset in bytes applied after each source read.
  */
 static inline void DMA_CTSSetSrcOffset(DMA_Type *base, uint8_t channel, int16_t offset)
 {
@@ -317,22 +404,23 @@ static inline void DMA_CTSSetSrcOffset(DMA_Type *base, uint8_t channel, int16_t 
 }
 
 /*!
- * @brief Configures the transfer attribute for the DMA channel.
+ * @brief Set the transfer attributes (modulo, transfer size) for a DMA channel.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param srcModulo enumeration type for an allowed source modulo. The value defines a specific address range
- * specified as the value after the SADDR + SOFF calculation is performed on the original register
- * value. Setting this field provides the ability to implement a circular data. For data queues
- * requiring power-of-2 size bytes, the queue should start at a 0-modulo-size address and the SMOD
- * field should be set to the appropriate value for the queue, freezing the desired number of upper
- * address bits. The value programmed into this field specifies the number of the lower address bits
- * allowed to change. For a circular queue application, the SOFF is typically set to the transfer
- * size to implement post-increment addressing with SMOD function restricting the addresses to a
- * 0-modulo-size range.
- * @param destModulo Enum type for an allowed destination modulo.
- * @param srcTransferSize Enum type for source transfer size.
- * @param destTransferSize Enum type for destination transfer size.
+ * Configures the source/destination modulo and transfer size fields in the
+ * CTS TCR register. The modulo feature restricts the address range to a
+ * power-of-2 region, enabling circular buffer operation. The transfer size
+ * determines the width of each bus read/write (1/2/4/16/32 bytes).
+ *
+ * @param[in] base              Pointer to the DMA peripheral base address.
+ * @param[in] channel           DMA channel number.
+ * @param[in] srcModulo         Source address modulo. Specifies the number of
+ *                              lower address bits allowed to change, enabling
+ *                              a circular source data queue. Set to
+ *                              DMA_MODULO_OFF to disable.
+ * @param[in] destModulo        Destination address modulo. Same behavior as
+ *                              srcModulo but applied to the destination address.
+ * @param[in] srcTransferSize   Source data read transfer width.
+ * @param[in] destTransferSize  Destination data write transfer width.
  */
 void DMA_CTSSetAttribute(
     DMA_Type *base, uint8_t channel,
@@ -340,13 +428,14 @@ void DMA_CTSSetAttribute(
     dma_transfer_size_t srcTransferSize, dma_transfer_size_t destTransferSize);
 
 /*!
- * @brief Sets the source transfer size.
+ * @brief Set the source data read transfer size for a CTS entry.
  *
- * Configures the source data read transfer size (1/2/4/16/32 bytes).
+ * Configures the width of each source bus read (1/2/4/16/32 bytes) in the
+ * CTS TCR register.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param size Source transfer size.
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
+ * @param[in] size     Source transfer size (see dma_transfer_size_t).
  */
 static inline void DMA_CTSSetSrcTransferSize(DMA_Type *base, uint8_t channel, dma_transfer_size_t size)
 {
@@ -361,13 +450,14 @@ static inline void DMA_CTSSetSrcTransferSize(DMA_Type *base, uint8_t channel, dm
 }
 
 /*!
- * @brief Sets the destination transfer size.
+ * @brief Set the destination data write transfer size for a CTS entry.
  *
- * Configures the destination data write transfer size (1/2/4/16/32 bytes).
+ * Configures the width of each destination bus write (1/2/4/16/32 bytes) in
+ * the CTS TCR register.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param size Destination transfer size.
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
+ * @param[in] size     Destination transfer size (see dma_transfer_size_t).
  */
 static inline void DMA_CTSSetDestTransferSize(DMA_Type *base, uint8_t channel, dma_transfer_size_t size)
 {
@@ -382,28 +472,35 @@ static inline void DMA_CTSSetDestTransferSize(DMA_Type *base, uint8_t channel, d
 }
 
 /*!
- * @brief Configures the nbytes for the DMA channel.
+ * @brief Set the byte count (nbytes) transferred per transfer loop iteration.
  *
- * Note here that user need firstly configure the transfer loop mapping feature and then call this
- * function.
+ * Configures how many bytes are transferred in each service request of the
+ * channel. The exact register layout depends on whether transfer loop
+ * offset mapping is enabled.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param nbytes Number of bytes to be transferred in each service request of the channel
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number.
+ * @param[in] nbytes   Number of bytes transferred per transfer loop iteration.
+ *
+ * @pre Transfer loop mapping (EMLM) must be configured via
+ *      DMA_SetTransferLoopMappingCmd() before calling this function.
  */
 void DMA_CTSSetNbytes(DMA_Type *base, uint8_t channel, uint32_t nbytes);
 
 /*!
- * @brief Enables/disables the source transfer loop offset feature for the CTS.
+ * @brief Enable or disable the source transfer loop offset for a CTS entry.
  *
- * Configures whether the transfer loop offset is applied to the source address
- * upon transfer loop completion.
- * NOTE: EMLM bit needs to be enabled prior to calling this function, otherwise
- * it has no effect.
+ * When enabled, the transfer loop offset value is applied to the source
+ * address upon each transfer loop completion.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param enable Enables (true) or disables (false) source transfer loop offset.
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
+ * @param[in] enable   true = apply transfer loop offset to source address;
+ *                     false = do not apply.
+ *
+ * @pre Transfer loop mapping (EMLM) must be enabled via
+ *      DMA_SetTransferLoopMappingCmd() before calling this function;
+ *      otherwise this function has no effect.
  */
 static inline void DMA_CTSSetSrcMinorLoopOffsetCmd(DMA_Type *base, uint8_t channel, bool enable)
 {
@@ -421,16 +518,19 @@ static inline void DMA_CTSSetSrcMinorLoopOffsetCmd(DMA_Type *base, uint8_t chann
 }
 
 /*!
- * @brief Enables/disables the destination transfer loop offset feature for the CTS.
+ * @brief Enable or disable the destination transfer loop offset for a CTS entry.
  *
- * Configures whether the transfer loop offset is applied to the destination address
- * upon transfer loop completion.
- * NOTE: EMLM bit needs to be enabled prior to calling this function, otherwise
- * it has no effect.
+ * When enabled, the transfer loop offset value is applied to the destination
+ * address upon each transfer loop completion.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param enable Enables (true) or disables (false) destination transfer loop offset.
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
+ * @param[in] enable   true = apply transfer loop offset to destination address;
+ *                     false = do not apply.
+ *
+ * @pre Transfer loop mapping (EMLM) must be enabled via
+ *      DMA_SetTransferLoopMappingCmd() before calling this function;
+ *      otherwise this function has no effect.
  */
 static inline void DMA_CTSSetDestMinorLoopOffsetCmd(DMA_Type *base, uint8_t channel, bool enable)
 {
@@ -448,29 +548,37 @@ static inline void DMA_CTSSetDestMinorLoopOffsetCmd(DMA_Type *base, uint8_t chan
 }
 
 /*!
- * @brief Configures the transfer loop offset for the CTS.
+ * @brief Set the transfer loop offset value for a CTS entry.
  *
- * Configures the offset value. If neither source nor destination offset is enabled,
- * offset is not configured.
- * NOTE: EMLM bit needs to be enabled prior to calling this function, otherwise
- * it has no effect.
+ * Configures the signed offset that is applied to the source and/or
+ * destination address at the completion of each transfer loop iteration.
+ * The offset is only applied if the corresponding source or destination
+ * transfer loop offset enable bit is set.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param offset Minor loop offset
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number.
+ * @param[in] offset   Signed transfer loop offset value in bytes.
+ *
+ * @pre Transfer loop mapping (EMLM) must be enabled via
+ *      DMA_SetTransferLoopMappingCmd() before calling this function;
+ *      otherwise this function has no effect.
+ * @pre At least one of source or destination transfer loop offset must be
+ *      enabled via DMA_CTSSetSrcMinorLoopOffsetCmd() or
+ *      DMA_CTSSetDestMinorLoopOffsetCmd().
  */
 void DMA_CTSSetTransferLoopOffset(DMA_Type *base, uint8_t channel, int32_t offset);
 
 /*!
- * @brief Configures the last source address adjustment for the CTS.
+ * @brief Set the last source address adjustment applied after trigger loop completion.
  *
- * Adjustment value added to the source address at the completion of the major iteration count. This
- * value can be applied to restore the source address to the initial value, or adjust the address to
- * reference the next data structure.
+ * Configures the signed adjustment value that is added to the source address
+ * when the trigger loop count is exhausted. This can be used to restore the
+ * source address to its initial value or to advance it to the next data
+ * structure.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param size adjustment value
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
+ * @param[in] size     Signed adjustment value in bytes.
  */
 static inline void DMA_CTSSetSrcLastAdjust(DMA_Type *base, uint8_t channel, int32_t size)
 {
@@ -480,12 +588,24 @@ static inline void DMA_CTSSetSrcLastAdjust(DMA_Type *base, uint8_t channel, int3
     base->CTS[channel].STO = (uint32_t) size;
 }
 
+/*! @} */
+
 /*!
- * @brief Configures the destination address for the CTS.
+ * @name CTS Destination Configuration
+ * @brief Functions for configuring CTS destination address, offset, and last
+ *        destination address adjustment.
+ * @{
+ */
+
+/*!
+ * @brief Set the destination address for a CTS entry.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param address The pointer to the destination address.
+ * Writes the starting destination memory address into the CTS DADDR register
+ * for the specified DMA channel.
+ *
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
+ * @param[in] address  Destination memory address for the DMA transfer.
  */
 static inline void DMA_CTSSetDestAddr(DMA_Type *base, uint8_t channel, uint32_t address)
 {
@@ -496,14 +616,15 @@ static inline void DMA_CTSSetDestAddr(DMA_Type *base, uint8_t channel, uint32_t 
 }
 
 /*!
- * @brief Configures the destination address signed offset for the CTS.
+ * @brief Set the destination address signed offset for a CTS entry.
  *
- * Sign-extended offset applied to the current source address to form the next-state value as each
- * destination write is complete.
+ * Configures the sign-extended offset that is added to the current
+ * destination address after each destination write to form the next-state
+ * address.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param offset signed-offset
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
+ * @param[in] offset   Signed offset in bytes applied after each destination write.
  */
 static inline void DMA_CTSSetDestOffset(DMA_Type *base, uint8_t channel, int16_t offset)
 {
@@ -514,15 +635,20 @@ static inline void DMA_CTSSetDestOffset(DMA_Type *base, uint8_t channel, int16_t
 }
 
 /*!
- * @brief Configures the last source address adjustment.
+ * @brief Set the last destination address adjustment applied after trigger loop completion.
  *
- * This function adds an adjustment value added to the source address at the completion of the major
- * iteration count. This value can be applied to restore the source address to the initial value, or
- * adjust the address to reference the next data structure.
+ * Configures the signed adjustment value that is added to the destination
+ * address when the trigger loop count is exhausted. This can be used to
+ * restore the destination address to its initial value or to advance it to
+ * the next data structure.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param adjust adjustment value
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
+ * @param[in] adjust   Signed adjustment value in bytes.
+ *
+ * @warning When ram reload (scatter/gather) is enabled on the same channel,
+ *          the DTO field is repurposed as the reload address. Do not use
+ *          this function in that case; use DMA_CTSSetRamReloadLink() instead.
  */
 static inline void DMA_CTSSetDestLastAdjust(DMA_Type *base, uint8_t channel, int32_t adjust)
 {
@@ -532,28 +658,43 @@ static inline void DMA_CTSSetDestLastAdjust(DMA_Type *base, uint8_t channel, int
     base->CTS[channel].DTO_RLD.DTO = (uint32_t) adjust;
 }
 
+/*! @} */
+
 /*!
- * @brief Configures the memory address for the next transfer CTS for the CTS.
+ * @name CTS Ram Reload & Interrupt
+ * @brief Functions for configuring CTS ram reload (scatter/gather), channel
+ *        linking on trigger loop completion, DMA request disable, and
+ *        half-complete / complete interrupt generation.
+ * @{
+ */
+
+/*!
+ * @brief Configure the ram reload link address for a CTS entry.
  *
+ * Enables the ram reload (scatter/gather) feature and sets the address of
+ * the next CTS descriptor to be loaded into this channel when the trigger
+ * loop count completes. The address points to the beginning of a
+ * 0-modulo-32-byte region containing the next transfer CTS.
  *
- * This function enables the ram reload feature for the CTS and configures the next
- * CTS's address. This address points to the beginning of a 0-modulo-32 byte region containing
- * the next transfer CTS to be loaded into this channel. The channel reload is performed as the
- * major iteration count completes. The ram reload address must be 0-modulo-32-byte. Otherwise,
- * a configuration error is reported.
+ * @param[in] base         Pointer to the DMA peripheral base address.
+ * @param[in] channel      DMA channel number.
+ * @param[in] nextCTSAddr  32-bit address of the next CTS descriptor. Must be
+ *                         aligned to a 32-byte boundary.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param nextCTSAddr The address of the next CTS to be linked to this CTS.
+ * @warning A configuration error is reported if the address is not
+ *          0-modulo-32-byte aligned.
  */
 void DMA_CTSSetRamReloadLink(DMA_Type *base, uint8_t channel, uint32_t nextCTSAddr);
 
 /*!
- * @brief Enables/Disables the ram reload feature for the CTS.
+ * @brief Enable or disable the ram reload (scatter/gather) feature for a CTS entry.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param enable Enables (true) /Disables (false) ram reload feature.
+ * When enabled, the CTS descriptor pointed to by the DTO_RLD register is
+ * automatically loaded into the channel upon trigger loop completion.
+ *
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
+ * @param[in] enable   true = enable ram reload; false = disable ram reload.
  */
 static inline void DMA_CTSSetRamReloadCmd(DMA_Type *base, uint8_t channel, bool enable)
 {
@@ -568,16 +709,17 @@ static inline void DMA_CTSSetRamReloadCmd(DMA_Type *base, uint8_t channel, bool 
 }
 
 /*!
- * @brief Configures the major channel link the CTS.
+ * @brief Configure the trigger loop channel link for a CTS entry.
  *
- * If the major link is enabled, after the trigger loop counter is exhausted, the DMA engine initiates a
- * channel service request at the channel defined by these six bits by setting that channel start
- * bits.
+ * When enabled, after the trigger loop counter is exhausted the DMA engine
+ * initiates a channel service request on the linked channel by setting its
+ * START bit.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param majorLinkChannel channel number for major link
- * @param enable Enables (true) or Disables (false) channel major link.
+ * @param[in] base              Pointer to the DMA peripheral base address.
+ * @param[in] channel           DMA channel number (must be < FEATURE_DMA_CHANNELS).
+ * @param[in] majorLinkChannel  Channel number to link on trigger loop completion.
+ * @param[in] enable            true = enable trigger loop channel link;
+ *                              false = disable trigger loop channel link.
  */
 static inline void DMA_CTSSetChannelTriggerLink(DMA_Type *base, uint8_t channel, uint32_t majorLinkChannel, bool enable)
 {
@@ -596,14 +738,17 @@ static inline void DMA_CTSSetChannelTriggerLink(DMA_Type *base, uint8_t channel,
 }
 
 /*!
- * @brief Disables/Enables the DMA request after the trigger loop completes for the CTS.
+ * @brief Configure automatic DMA request disable after trigger loop completion.
  *
- * If disabled, the DMA hardware automatically clears the corresponding DMA request when the
- * current major iteration count reaches zero.
+ * When enabled (disable = true), the DMA hardware automatically clears the
+ * corresponding channel's DMA request enable bit when the trigger loop count
+ * reaches zero, preventing further service requests until the request is
+ * re-enabled.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param disable Disable (true)/Enable (false) DMA request after CTS complete.
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
+ * @param[in] disable  true = auto-clear the DMA request after trigger loop done;
+ *                     false = keep the DMA request enabled after trigger loop done.
  */
 static inline void DMA_CTSSetDisableDmaRequestAfterCTSDoneCmd(DMA_Type *base, uint8_t channel, bool disable)
 {
@@ -618,17 +763,17 @@ static inline void DMA_CTSSetDisableDmaRequestAfterCTSDoneCmd(DMA_Type *base, ui
 }
 
 /*!
- * @brief Enables/Disables the half complete interrupt for the CTS.
+ * @brief Enable or disable the half-complete interrupt for a CTS entry.
  *
- * If set, the channel generates an interrupt request by setting the appropriate bit in the
- * interrupt register when the current major iteration count reaches the halfway point. Specifically,
- * the comparison performed by the DMA engine is (TCNT == (TCNTRV >> 1)). This half-way point
- * interrupt request is provided to support the double-buffered schemes or other types of data movement
- * where the processor needs an early indication of the transfer's process.
+ * When enabled, the channel generates an interrupt request when the current
+ * trigger loop count reaches the halfway point (TCNT == TCNTRV >> 1). This
+ * is useful for double-buffered schemes or other scenarios where the
+ * application needs an early indication of transfer progress.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param enable Enable (true) /Disable (false) half complete interrupt.
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
+ * @param[in] enable   true = enable half-complete interrupt;
+ *                     false = disable half-complete interrupt.
  */
 static inline void DMA_CTSSetMajorHalfCompleteIntCmd(DMA_Type *base, uint8_t channel, bool enable)
 {
@@ -643,14 +788,15 @@ static inline void DMA_CTSSetMajorHalfCompleteIntCmd(DMA_Type *base, uint8_t cha
 }
 
 /*!
- * @brief Enables/Disables the interrupt after the trigger loop completes for the CTS.
+ * @brief Enable or disable the trigger loop complete interrupt for a CTS entry.
  *
- * If enabled, the channel generates an interrupt request by setting the appropriate bit in the
- * interrupt register when the current major iteration count reaches zero.
+ * When enabled, the channel generates an interrupt request when the trigger
+ * loop count reaches zero, indicating that the entire transfer is complete.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param enable Enable (true) /Disable (false) interrupt after CTS done.
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number (must be < FEATURE_DMA_CHANNELS).
+ * @param[in] enable   true = enable trigger loop complete interrupt;
+ *                     false = disable trigger loop complete interrupt.
  */
 static inline void DMA_CTSSetMajorCompleteIntCmd(DMA_Type *base, uint8_t channel, bool enable)
 {
@@ -664,47 +810,79 @@ static inline void DMA_CTSSetMajorCompleteIntCmd(DMA_Type *base, uint8_t channel
     base->CTS[channel].CSR = regValTemp;
 }
 
+/*! @} */
+
 /*!
- * @brief Sets the channel minor link for the CTS.
+ * @name CTS Transfer Loop & Trigger
+ * @brief Functions for configuring transfer loop channel linking and trigger
+ *        loop iteration counts.
+ * @{
+ */
+
+/*!
+ * @brief Configure the transfer loop channel link for a CTS entry.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param linkChannel Channel to be linked on transfer loop complete.
- * @param enable Enable (true)/Disable (false) channel minor link.
+ * When enabled, upon completion of each transfer loop iteration the DMA
+ * engine initiates a service request on the linked channel.
+ *
+ * @param[in] base         Pointer to the DMA peripheral base address.
+ * @param[in] channel      DMA channel number.
+ * @param[in] linkChannel  Channel number to link on each transfer loop completion.
+ * @param[in] enable       true = enable transfer loop channel link;
+ *                         false = disable transfer loop channel link.
  */
 void DMA_CTSSetChannelLoopLink(DMA_Type *base, uint8_t channel, uint32_t linkChannel, bool enable);
 
 /*!
- * @brief Sets the major iteration count according to transfer loop channel link setting.
+ * @brief Set the trigger loop count for a DMA channel.
  *
- * Note here that user need to first set the transfer loop channel link and then call this function.
- * The execute flow inside this function is dependent on the transfer loop channel link setting.
+ * Writes the trigger loop iteration count into the CTS. The internal
+ * register layout depends on whether the transfer loop channel link is
+ * enabled, so the link setting must be configured before calling this
+ * function.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @param count trigger loop count
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number.
+ * @param[in] count    Trigger loop count (number of trigger loop iterations).
+ *
+ * @pre The transfer loop channel link must be configured via
+ *      DMA_CTSSetChannelLoopLink() before calling this function.
  */
 void DMA_CTSSetTriggerCount(DMA_Type *base, uint8_t channel, uint32_t count);
 
 /*!
- * @brief Returns the current major iteration count.
+ * @brief Get the current trigger loop iteration count for a DMA channel.
  *
- * Gets the current major iteration count according to transfer loop channel link settings.
+ * Reads the remaining trigger loop iteration count from the CTS. The
+ * register layout depends on the transfer loop channel link setting, which
+ * is accounted for internally.
  *
- * @param base Register base address for DMA module.
- * @param channel DMA channel number.
- * @return current iteration count
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMA channel number.
+ *
+ * @return Remaining trigger loop iteration count.
  */
 uint32_t DMA_CTSGetCurrentTriggerCount(const DMA_Type *base, uint8_t channel);
+
+/*! @} */
+
+/*!
+ * @name DMAMUX
+ * @brief Functions for initializing the DMAMUX module and routing DMA request
+ *        sources to DMA channels.
+ * @{
+ */
 
 #ifdef FEATURE_DMAMUX_AVAILABLE
 
 /*!
- * @brief Initializes the DMAMUX module to the reset state.
+ * @brief Initialize the DMAMUX module to its reset state.
  *
- * Initializes the DMAMUX module to the reset state.
+ * Resets all DMAMUX channel source selections to their default values.
  *
- * @param base Register base address for DMAMUX module.
+ * @param[in] base  Pointer to the DMA peripheral base address.
+ *
+ * @pre The DMAMUX peripheral clock must be enabled.
  */
 void DMAMUX_Init(DMA_Type *base);
 
@@ -714,14 +892,15 @@ void DMAMUX_Init(DMA_Type *base);
 #ifdef FEATURE_DMAMUX_AVAILABLE
 
 /*!
- * @brief Configures the DMA request for the DMAMUX channel.
+ * @brief Set the DMA request source for a DMAMUX channel.
  *
- * Selects which DMA source is routed to a DMA channel. The DMA sources are defined in the file
- * <MCU>_Features.h
+ * Selects which peripheral DMA request source is routed to the specified
+ * DMA channel. The available source numbers are defined in the
+ * device-specific <MCU>_Features.h header.
  *
- * @param base Register base address for DMAMUX module.
- * @param channel DMAMUX channel number.
- * @param source DMA request source.
+ * @param[in] base     Pointer to the DMA peripheral base address.
+ * @param[in] channel  DMAMUX channel number (must be < FEATURE_DMAMUX_CHANNELS).
+ * @param[in] source   DMA request source number.
  */
 static inline void DMAMUX_SetChannelSource(DMA_Type *base, uint8_t channel, uint8_t source)
 {
@@ -733,15 +912,27 @@ static inline void DMAMUX_SetChannelSource(DMA_Type *base, uint8_t channel, uint
 
 #endif
 
+/*! @} */
+
 /*!
- * @brief Returns DMA Register Base Address.
+ * @name Utility
+ * @brief Helper functions for obtaining DMA register base addresses.
+ * @{
+ */
+
+/*!
+ * @brief Get the DMA register base address for a given instance.
  *
- * Gets the address of the selected DMA module.
+ * Returns a pointer to the DMA_Type register structure for the specified
+ * DMA peripheral instance.
  *
- * @param instance DMA instance to be returned.
- * @return DMA register base address
+ * @param[in] instance  DMA peripheral instance number.
+ *
+ * @return Pointer to the DMA peripheral base address (DMA_Type).
  */
 DMA_Type *DMA_DRV_GetDmaRegBaseAddr(uint32_t instance);
+
+/*! @} */
 
 #if defined(__cplusplus)
 }

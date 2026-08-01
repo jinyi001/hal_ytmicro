@@ -7,7 +7,13 @@
 
 /*!
  * @file linflexd_uart_driver.h
- * @version 1.4.1
+ * @brief LINFlexD UART driver public API.
+ *
+ * This header defines the public interface for the LINFlexD peripheral
+ * operating in UART mode. It provides APIs for initialization, data
+ * transmission/reception (blocking, polling, and non-blocking), callback
+ * installation, buffer management, power mode control, and idle timeout
+ * configuration.
  */
 
 #ifndef LINFlexD_UART_DRIVER_H
@@ -36,11 +42,7 @@
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
-
-/*! @brief Word length in UART mode.
- *
- * Implements : linflexd_uart_word_length_t_Class
- */
+/*! @brief UART word length in bits. */
 typedef enum
 {
     LINFlexD_UART_7_BITS = 0U,      /*!< UART word length of 7-bit */
@@ -49,20 +51,14 @@ typedef enum
     LINFlexD_UART_16_BITS = 3U      /*!< UART word length of 16-bit */
 } linflexd_uart_word_length_t;
 
-/*! @brief Number of stop bits.
- *
- * Implements : linflexd_uart_stop_bits_count_t_Class
- */
+/*! @brief Number of stop bits for UART frames. */
 typedef enum
 {
     LINFlexD_UART_ONE_STOP_BIT = 0U,    /*!< UART 1 stop bit */
     LINFlexD_UART_TWO_STOP_BIT = 1U     /*!< UART 2 stop bit */
 } linflexd_uart_stop_bits_count_t;
 
-/*! @brief Parity type.
- *
- * Implements : linflexd_uart_parity_type_t_Class
- */
+/*! @brief Parity type selection for UART frames. */
 typedef enum
 {
     LINFlexD_UART_PARITY_EVEN = 0U,    /*!< UART parity with even type */
@@ -71,20 +67,14 @@ typedef enum
     LINFlexD_UART_PARITY_ONE = 3U      /*!< UART parity with one type */
 } linflexd_uart_parity_type_t;
 
-/*! @brief Type of UART transfer (based on interrupts or DMA).
- *
- * Implements : linflexd_uart_transfer_type_t_Class
- */
+/*! @brief Type of UART transfer mechanism (interrupt or DMA based). */
 typedef enum
 {
     LINFlexD_UART_USING_DMA = 0U,           /*!< The driver will use DMA to perform UART transfer */
     LINFlexD_UART_USING_INTERRUPTS = 1U     /*!< The driver will use interrupts to perform UART transfer */
 } linflexd_uart_transfer_type_t;
 
-/*! @brief Type of UART transfer (based on interrupts or DMA).
- *
- * Implements : linflexd_uart_transfer_type_t_Class
- */
+/*! @brief UART idle timeout counter state machine states. */
 typedef enum
 {
     LINFlexD_UART_TIMEOUT_CLOSE = 0U,           /*!< Timeout counter closed state */
@@ -94,9 +84,11 @@ typedef enum
     LINFlexD_UART_TIMEOUT_STOP = 4U,            /*!< Timeout counter stop state */
 } linflexd_uart_timeout_state_t;
 
-/*! @brief UART state structure
+/*! @brief UART driver runtime state structure.
  *
- * Implements : linflexd_uart_state_t_Class
+ * This structure holds the internal state of the UART driver for a single
+ * LINFlexD instance. The user must allocate this structure and pass it
+ * to LINFlexD_UART_DRV_Init(). Do not modify its members directly.
  */
 typedef struct
 {
@@ -130,9 +122,10 @@ typedef struct
     volatile status_t receiveStatus;             /*!< Status of last driver receive operation */
 } linflexd_uart_state_t;
 
-/*! @brief UART configuration structure
+/*! @brief UART user configuration structure.
  *
- * Implements : linflexd_uart_user_config_t_Class
+ * This structure is used to configure the LINFlexD module for UART
+ * operation during initialization via LINFlexD_UART_DRV_Init().
  */
 typedef struct
 {
@@ -151,9 +144,9 @@ typedef struct
                                                         If DMA mode is not used this field will be ignored. */      
 } linflexd_uart_user_config_t;
 
-/*! @brief UART idle timeout configuration structure
+/*! @brief UART idle timeout configuration structure.
  *
- * Implements : linflexd_uart_idle_timeout_config_t_Class
+ * This structure configures the idle line detection timeout feature.
  */
 typedef struct
 {
@@ -166,6 +159,9 @@ typedef struct
 /*******************************************************************************
  * API
  ******************************************************************************/
+
+/*! @name Initialization / Deinitialization */
+/*! @{ */
 
 /*!
  * @brief Sets the baud rate for UART communication.
@@ -259,6 +255,11 @@ status_t LINFlexD_UART_DRV_Init(uint32_t instance, linflexd_uart_state_t *uartSt
  */
 status_t LINFlexD_UART_DRV_Deinit(uint32_t instance);
 
+/*! @} */
+
+/*! @name Data Transmission */
+/*! @{ */
+
 /*!
  * @brief Sends data using LINFlexD module in UART mode with blocking method.
  *
@@ -328,6 +329,11 @@ status_t LINFlexD_UART_DRV_GetTransmitStatus(uint32_t instance, uint32_t *bytesR
  * @return STATUS_SUCCESS
  */
 status_t LINFlexD_UART_DRV_AbortSendingData(uint32_t instance);
+
+/*! @} */
+
+/*! @name Data Reception */
+/*! @{ */
 
 /*!
  * @brief Retrieves data from the LINFlexD module in UART mode with blocking method.
@@ -399,6 +405,11 @@ status_t LINFlexD_UART_DRV_GetReceiveStatus(uint32_t instance, uint32_t *bytesRe
  */
 status_t LINFlexD_UART_DRV_AbortReceivingData(uint32_t instance);
 
+/*! @} */
+
+/*! @name Power Mode */
+/*! @{ */
+
 /*!
  * @brief Puts current UART to sleep mode
  * This function changes current UART state to SLEEP_MODE
@@ -416,6 +427,11 @@ status_t LINFlexD_UART_DRV_AbortReceivingData(uint32_t instance);
   * @return function always return STATUS_SUCCESS
   */
  status_t LINFlexD_UART_DRV_GotoIdleState(uint32_t instance);
+
+/*! @} */
+
+/*! @name Buffer Management */
+/*! @{ */
 
 /*!
  * @brief Sets the internal driver reference to the tx buffer.
@@ -446,6 +462,11 @@ status_t LINFlexD_UART_DRV_SetTxBuffer(uint32_t instance,
 status_t LINFlexD_UART_DRV_SetRxBuffer(uint32_t instance,
                                        uint8_t *rxBuff,
                                        uint32_t rxSize);
+
+/*! @} */
+
+/*! @name Timeout Configuration */
+/*! @{ */
 
 /*!
  * @brief Configure a LINFlexD timeout counter..

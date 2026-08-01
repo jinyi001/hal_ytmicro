@@ -39,7 +39,7 @@ void LINFlexD_LIN_DRV_ErrIRQHandler(uint32_t instance);
 /*!
  * @brief ISR declarations - implemented in linflexd_lin_irq.c.
  */
-#if (FEATURE_LINFlexD_ORED_INT_LINES)
+#if defined(FEATURE_LINFlexD_ORED_INT_LINES) && (FEATURE_LINFlexD_ORED_INT_LINES == 1U)
 
     /* ISR declarations for rx/tx/err interrupts or'ed together */
     #if (LINFlexD_INSTANCE_COUNT > 0U)
@@ -75,55 +75,6 @@ void LINFlexD_LIN_DRV_ErrIRQHandler(uint32_t instance);
 
     /* ISR array for LINFlexD LIN driver */
     extern const isr_t g_LinLINFlexDIsr[LINFlexD_INSTANCE_COUNT];
-
-#elif (FEATURE_LINFlexD_RX_TX_ERR_INT_LINES)
-
-    /* ISR declarations for separate rx/tx/err interrupts */
-    #if (LINFlexD_INSTANCE_COUNT > 0U)
-    void LINFlexD0_LIN_RxIRQHandler(void);
-    void LINFlexD0_LIN_TxIRQHandler(void);
-    void LINFlexD0_LIN_ErrIRQHandler(void);
-    #endif
-
-    #if (LINFlexD_INSTANCE_COUNT > 1U)
-    void LINFlexD1_LIN_RxIRQHandler(void);
-    void LINFlexD1_LIN_TxIRQHandler(void);
-    void LINFlexD1_LIN_ErrIRQHandler(void);
-    #endif
-
-    #if (LINFlexD_INSTANCE_COUNT > 2U)
-    void LINFlexD2_LIN_RxIRQHandler(void);
-    void LINFlexD2_LIN_TxIRQHandler(void);
-    void LINFlexD2_LIN_ErrIRQHandler(void);
-    #endif
-
-    #if (LINFlexD_INSTANCE_COUNT > 3U)
-    void LINFlexD3_LIN_RxIRQHandler(void);
-    void LINFlexD3_LIN_TxIRQHandler(void);
-    void LINFlexD3_LIN_ErrIRQHandler(void);
-    #endif
-
-    #if (LINFlexD_INSTANCE_COUNT > 4U)
-    void LINFlexD4_LIN_RxIRQHandler(void);
-    void LINFlexD4_LIN_TxIRQHandler(void);
-    void LINFlexD4_LIN_ErrIRQHandler(void);
-    #endif
-
-    #if (LINFlexD_INSTANCE_COUNT > 5U)
-    void LINFlexD5_LIN_RxIRQHandler(void);
-    void LINFlexD5_LIN_TxIRQHandler(void);
-    void LINFlexD5_LIN_ErrIRQHandler(void);
-    #endif
-
-
-    /* Rx ISR array for LINFlexD LIN driver */
-    extern const isr_t g_LinLINFlexDRxIsr[LINFlexD_INSTANCE_COUNT];
-
-    /* Tx ISR array for LINFlexD LIN driver */
-    extern const isr_t g_LinLINFlexDTxIsr[LINFlexD_INSTANCE_COUNT];
-
-    /* Err ISR array for LINFlexD LIN driver */
-    extern const isr_t g_LinLINFlexDErrIsr[LINFlexD_INSTANCE_COUNT];
 
 #endif
 

@@ -1,43 +1,287 @@
 /*!
-@defgroup power_manager Power Manager
-@brief The YTMicro SDK Power Manager provides a set of API/services that enables applications
-to configure and select among various operational and low power modes.
+@defgroup power_manager
+@ingroup mod_system Power Manager
+@brief System power mode management module for the YTMicro SDK.
 
-## Driver consideration ##
+@details
+The Power Manager provides a hardware-abstraction framework for switching
+between various operational and low-power modes on YTM MCUs. It manages
+pre-defined power mode configurations, notifies registered callbacks before
+and after mode transitions, and supports both agreement-based and forced
+mode-change policies.
 
-The Power Manager driver is developed on top of an appropriate hardware access layer.
-The Power Manager provides API to handle the device power modes. It also supports
-run-time switching between multiple power modes. Each power mode is described by
-configuration structures with multiple power-related options. The Power Manager
-provides a notification mechanism for registered callbacks and API for static and
-dynamic callback registration.
+The module is split into a **common layer** (power_manager.h/c) that
+implements the callback notification mechanism and configuration management,
+and **platform-specific layers** (power_manager_YTM32B1Mx.c, etc.) that
+perform the actual hardware register manipulation.
 
-The Driver uses structures for configuration. The actual format of the structure is
-defined by the underlying device specific header file.
-There is a power mode and a callback configuration structure. The user application 
-can use the default for most settings, changing only what is necessary.
+@section power_features Key Features
+- Multiple pre-defined power mode configurations with runtime switching.
+- Callback notification mechanism with **before**, **after**, and **recover** phases.
+- Two mode-change policies:
+  - **Agreement**: abort if any callback denies the transition.
+  - **Forcible**: switch regardless of callback results.
+- Error tracking with per-callback error index reporting.
+- Platform-specific low-power mode support:
+  - Sleep, Deep Sleep, Standby, Power Down, Deep Power Down (device-dependent).
+- Sleep-on-exit support for RTOS tickless idle integration.
 
-This driver provides functions for initializing power manager and changing the
-power mode.
+@section power_modes Supported Power Modes
 
-All methods that access the hardware layer will return an error code to signal
-if the operation succeeded or failed. The values are defined by the
-status_t enumeration, and the possible values include: success,
-switch error, callback notification errors, wrong clock setup error.
+The available power modes vary by device series. The following table lists
+all modes across the YTM device families:
 
-## Power Mode Definitions ##
+| Power Mode     | B1Lx | B1Mx | B1Hx | Z1x  | Z1DSx | Description                                                        |
+|----------------|------|------|------|------|-------|--------------------------------------------------------------------|
+| RUN            | ✓    | ✓    | ✓    | ✓    | ✓     | Normal run mode, full clock and peripherals.                       |
+| SLEEP          | ✓    | ✓    | ✓    | ✓    | ✓     | Core in sleep, normal interrupt wakeup, peripherals active.        |
+| DEEP SLEEP     | ✓    | ✓    | ✓    | ✓    | ✓     | Most clocks gated, async interrupt wakeup.                         |
+| STANDBY        | ✓    | ✓    | ✓    | —    | —     | Most clocks gated, internal LDO in low power, async wakeup.       |
+| POWER DOWN     | —    | ✓¹   | ✓¹   | ✓    | ✓     | Only part of digital powered, WKU wakeup.                         |
+| DEEP POWER DOWN| —    | ✓²   | ✓²   | ✓    | —     | Deepest low-power state, limited wakeup sources.                  |
 
-YTM device has following power modes:
+¹ Available only on devices with FEATURE_SOC_SUPPORT_POWERDOWN_MODE.
+² Available only on devices with FEATURE_SOC_SUPPORT_DEEPPOWERDOWN_MODE.
 
-| Power Mode | Description                                                                            |
-|:-----------|:---------------------------------------------------------------------------------------|
-| RUN        | Normal mode                                                                            |
-| SLEEP      | Sleep mode, core in sleep mode, normal interrupt wakeup                                |
-| DEEP SLEEP | Deep Sleep mode, most clock gated, async interrupt wakeup                              |
-| STANDBY    | Standby mode, most clock gated, internal LDO in low power mode, async interrupt wakeup |
-| POWER DOWN | Power Down mode, only part of digital powered, WKU wakeup                              |
+@warning Debugger logic is disabled under Deep Sleep, Standby, and Power Down modes.
 
-Note: **Debugger logic is disabled under Deep Sleep, Standby and power down mode.**
+@section power_arch Module Architecture
 
-Note: **YTM L series devices not support power down mode.**
+@verbatim
+┌──────────────────────────────────────────────────────┐
+│                  Application Code                    │
+│           (calls POWER_SYS_* functions)              │
+├──────────────────────────────────────────────────────┤
+│       Common Layer (power_manager.h/c)               │
+│  ● POWER_SYS_Init / Deinit / SetMode                │
+│  ● Callback notification management                 │
+│  ● Error tracking and status query                   │
+├──────────────────────────────────────────────────────┤
+│    Platform-Specific Layer (power_manager_YTMxxx.h/c)│
+│  ● POWER_SYS_DoInit / DoDeinit / DoSetMode          │
+│  ● Direct SCB, PCU register manipulation             │
+│  ● CMU/SysTick save-restore around low-power entry   │
+├──────────────────────────────────────────────────────┤
+│              MCU Hardware (SCB, PCU, SCU)             │
+│        (SLEEPDEEP, SLEEPONEXIT, PCU_CSR, etc.)       │
+└──────────────────────────────────────────────────────┘
+@endverbatim
+
+@subsection power_arch_common Common Layer (power_manager.h)
+Application code should use the `POWER_SYS_*` functions from power_manager.h.
+These functions manage callback invocation and delegate to the platform layer
+for actual hardware operations.
+
+@subsection power_arch_platform Platform Layer (power_manager_YTMxxx.h)
+Each SOC series provides its own implementation of the `POWER_SYS_Do*`
+functions. These handle:
+- ARM SCB SLEEPDEEP / SLEEPONEXIT bit configuration.
+- PCU (Power Control Unit) mode register programming.
+- CMU (Clock Monitoring Unit) disable/restore around low-power entry.
+- SysTick disable/restore to prevent spurious wakeup.
+- FXOSC wait-for-valid after wakeup.
+
+@section power_config Configuration Parameters
+
+@subsection power_config_struct power_manager_user_config_t Fields
+| Field           | Type                    | Description                                                      | Default           |
+|-----------------|-------------------------|------------------------------------------------------------------|--------------------|
+| powerMode       | power_manager_modes_t   | Target power mode (RUN, SLEEP, DEEPSLEEP, STANDBY, etc.).        | POWER_MANAGER_RUN  |
+| sleepOnExitValue| bool                    | If true, core returns to sleep after ISR (sleep-on-exit).        | false              |
+
+@subsection power_config_callback power_manager_callback_user_config_t Fields
+| Field            | Type                          | Description                                      |
+|------------------|-------------------------------|--------------------------------------------------|
+| callbackFunction | power_manager_callback_t      | Pointer to the callback function.                |
+| callbackType     | power_manager_callback_type_t | When to invoke (BEFORE, AFTER, or BEFORE_AFTER). |
+| callbackData     | power_manager_callback_data_t*| Application data passed to the callback.         |
+
+@section power_usage Usage Patterns
+
+@subsection power_usage_basic Pattern 1: Basic Power Mode Initialization and Switch
+The most common usage: initialize with power mode configurations and switch
+to a low-power mode.
+
+@code{.c}
+/* Define power mode configurations */
+power_manager_user_config_t runConfig = {
+    .powerMode = POWER_MANAGER_RUN,
+    .sleepOnExitValue = false,
+};
+
+power_manager_user_config_t sleepConfig = {
+    .powerMode = POWER_MANAGER_SLEEP,
+    .sleepOnExitValue = false,
+};
+
+power_manager_user_config_t *powerConfigsArr[] = {
+    &runConfig,
+    &sleepConfig
+};
+
+/* No callbacks in this example */
+power_manager_callback_user_config_t *callbacksArr[] = { (void *)0 };
+
+int main(void)
+{
+    /* Step 1: Initialize Power Manager */
+    POWER_SYS_Init(&powerConfigsArr, 2U, &callbacksArr, 0U);
+
+    /* Step 2: Switch to SLEEP mode (index 1) */
+    status_t ret = POWER_SYS_SetMode(1U, POWER_MANAGER_POLICY_AGREEMENT);
+
+    /* Step 3: After wakeup, check status */
+    if (ret != STATUS_SUCCESS)
+    {
+        /* Handle error */
+    }
+
+    return 0;
+}
+@endcode
+
+@subsection power_usage_callback Pattern 2: Using Callbacks for Notification
+Register callbacks to perform cleanup before entering low power and
+restoration after wakeup.
+
+@code{.c}
+/* Callback function */
+status_t myCallback(power_manager_notify_struct_t *notify,
+                    power_manager_callback_data_t *dataPtr)
+{
+    status_t ret = STATUS_SUCCESS;
+    switch (notify->notifyType)
+    {
+        case POWER_MANAGER_NOTIFY_BEFORE:
+            /* Save peripheral state before low-power entry */
+            break;
+        case POWER_MANAGER_NOTIFY_AFTER:
+            /* Restore peripheral state after wakeup */
+            break;
+        case POWER_MANAGER_NOTIFY_RECOVER:
+            /* Recover if mode switch was aborted */
+            break;
+        default:
+            break;
+    }
+    return ret;
+}
+
+/* Callback configuration */
+power_manager_callback_user_config_t callbackCfg = {
+    .callbackFunction = &myCallback,
+    .callbackType     = POWER_MANAGER_CALLBACK_BEFORE_AFTER,
+    .callbackData     = (void *)0,
+};
+
+power_manager_callback_user_config_t *callbacksArr[] = { &callbackCfg };
+
+/* Initialize with callback */
+POWER_SYS_Init(&powerConfigsArr, 2U, &callbacksArr, 1U);
+
+/* Switch with agreement policy — callback can deny the transition */
+status_t ret = POWER_SYS_SetMode(1U, POWER_MANAGER_POLICY_AGREEMENT);
+if (ret == STATUS_MCU_NOTIFY_BEFORE_ERROR)
+{
+    /* A callback denied the transition */
+    uint8_t failIdx = POWER_SYS_GetErrorCallbackIndex();
+    (void)failIdx;
+}
+@endcode
+
+@subsection power_usage_default Pattern 3: Using Default Configuration
+Use POWER_SYS_GetDefaultConfig() to obtain the default (RUN mode)
+configuration as a starting point.
+
+@code{.c}
+power_manager_user_config_t config;
+
+/* Get platform-specific default configuration */
+POWER_SYS_GetDefaultConfig(&config);
+
+/* Modify as needed */
+config.powerMode = POWER_MANAGER_DEEPSLEEP;
+config.sleepOnExitValue = false;
+@endcode
+
+@section power_api API Quick Reference
+
+@subsection power_api_init Initialization & De-initialization
+| Function                   | Description                                            |
+|----------------------------|--------------------------------------------------------|
+| POWER_SYS_Init()           | Initialize Power Manager with configs and callbacks.   |
+| POWER_SYS_Deinit()         | De-initialize Power Manager and clear state.           |
+| POWER_SYS_GetDefaultConfig()| Fill config struct with platform default values.      |
+
+@subsection power_api_mode Power Mode Control
+| Function                   | Description                                            |
+|----------------------------|--------------------------------------------------------|
+| POWER_SYS_SetMode()        | Switch to specified power mode with notifications.     |
+| POWER_SYS_GetCurrentMode() | Get the currently active hardware power mode.          |
+
+@subsection power_api_status Status & Error Query
+| Function                          | Description                                      |
+|-----------------------------------|--------------------------------------------------|
+| POWER_SYS_GetLastMode()           | Get index of last successfully set mode.         |
+| POWER_SYS_GetLastModeConfig()     | Get config pointer of last set mode.             |
+| POWER_SYS_GetErrorCallbackIndex() | Get index of last failed callback.               |
+| POWER_SYS_GetErrorCallback()      | Get config pointer of last failed callback.      |
+
+@section power_notes Important Notes
+
+@subsection power_notes_wakeup Wakeup Source Responsibility
+@warning The Power Manager does **not** check if necessary wakeup sources are
+enabled. It is the responsibility of the application to configure wakeup
+sources (e.g., GPIO, WKU pins, async interrupts) before entering a low-power
+mode.
+
+@subsection power_notes_debugger Debugger Limitations
+@warning The debug module is disabled under Deep Sleep, Standby, and Power Down
+modes. Disconnect the debugger before entering these modes. If the application
+enters low power immediately at startup, the chip may become inaccessible to
+the debugger — add a startup delay during development.
+
+@subsection power_notes_isr ISR Usage
+@note Do not call POWER_SYS_SetMode() from an interrupt service routine. The
+callback notification mechanism is not designed for ISR context.
+
+@subsection power_notes_sleeponexit Sleep-on-Exit
+@note When sleepOnExitValue is true, the ARM core will automatically re-enter
+the configured sleep mode after each ISR completes. This is useful for RTOS
+tickless idle implementations. The SLEEPDEEP bit is cleared after wakeup to
+prevent unintended deep sleep entry by the RTOS.
+
+@subsection power_notes_clock Clock Restoration
+@note After waking from Deep Sleep or Standby modes, the driver automatically
+waits for the FXOSC (fast crystal oscillator) to become valid if it was
+enabled before entering low power. The CMU (Clock Monitoring Unit) is
+disabled before low-power entry and restored after wakeup.
+
+@section power_integration Integration Guide
+
+@subsection power_integration_files Compilation Units
+The following source files must be added to the project build:
+@verbatim
+${SDK_PATH}/platform/drivers/src/power/power_manager.c
+${SDK_PATH}/platform/drivers/src/power/<SOC_SERIES>/power_manager_<SOC_SERIES>.c
+@endverbatim
+
+Where `<SOC_SERIES>` is one of: YTM32B1Lx, YTM32B1Mx, YTM32B1Hx, YTM32Z1x, YTM32Z1DSx.
+
+@subsection power_integration_include Include Paths
+Add the following directories to the toolchain include path:
+@verbatim
+${SDK_PATH}/platform/drivers/inc/
+${SDK_PATH}/platform/drivers/src/power/
+${SDK_PATH}/platform/drivers/src/power/<SOC_SERIES>/
+@endverbatim
+
+@subsection power_integration_symbols Compile Symbols
+No special compile-time symbols are required. Platform-specific feature
+macros (e.g., FEATURE_SOC_SUPPORT_POWERDOWN_MODE) are automatically defined
+in the device features header.
+
+@subsection power_integration_deps Dependencies
+- @ref clock_manager — Required for clock restoration after wakeup from low-power modes.
+
 */

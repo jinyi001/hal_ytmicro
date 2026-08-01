@@ -8,6 +8,23 @@
 /*!
  * @file acmp_driver.h
  * @version 1.4.1
+ *
+ * @brief ACMP Driver — public API for analog comparison and threshold detection.
+ *
+ * This header defines the application-level interface for the Analog Comparator
+ * peripheral. The driver aggregates comparator, DAC, input MUX, and continuous
+ * scan settings into `acmp_config_t`, then applies those settings through
+ * instance-based `ACMP_DRV_*` APIs.
+ *
+ * The APIs are organized into the following categories:
+ *   - Initialization & Global Control
+ *   - Configuration Snapshot
+ *   - Comparator, DAC, MUX & Continuous Configuration
+ *   - Continuous Runtime Control
+ *   - Status & Output Query
+ *
+ * @note Configure the ACMP clock and input or output pins before enabling the
+ *       module.
  */
 
 #ifndef ACMP_DRIVER_H
@@ -15,6 +32,14 @@
 
 #include "device_registers.h"
 #include "status.h"
+
+/*!
+ * @addtogroup acmp
+ * @brief Analog Comparator peripheral driver — public API.
+ * @details Provides instance-based APIs for configuring the comparator core,
+ *          DAC threshold generator, input routing, and continuous scan mode.
+ * @{
+ */
 
 /*******************************************************************************
  * Definitions
@@ -27,283 +52,269 @@
 #define ACMP_STS_CH_FLAG_SHIFT              16U
 
 /*******************************************************************************
- * Enumerations.
+ * Enumerations and Data Types
  ******************************************************************************/
 
 /*!
- * @brief Power Modes selection
- * Implements : acmp_power_mode_t_Class
+ * @brief Comparator performance mode.
+ *
+ * Selects the comparator operating point for the desired power or speed trade-off.
  */
 typedef enum
 {
-    ACMP_LOW_POWER = 0U, /*!< Module in low power mode. */
-    ACMP_HIGH_SPEED = 1U, /*!< Module in high speed mode. */
+    ACMP_LOW_POWER = 0U,  /*!< Module in low power mode. */
+    ACMP_HIGH_SPEED = 1U  /*!< Module in high speed mode. */
 } acmp_power_mode_t;
 
 #if FEATURE_ACMP_HAS_DAC_VOLTAGE_REF_SRC
 /*!
- * @brief Voltage Reference selection
- * Implements : acmp_voltage_reference_t_Class
+ * @brief DAC reference source selection.
  */
 typedef enum
 {
     ACMP_EXT_REF = 0U, /*!< Use VREFH/VREFL as supply reference source for DAC. */
     ACMP_INT_REF = 1U  /*!< Use internal supply reference source(VDDA) for DAC. */
 } acmp_voltage_reference_t;
-#endif /* FEATURE_ACMP_HAS_DAC */
+#endif /* FEATURE_ACMP_HAS_DAC_VOLTAGE_REF_SRC */
 
 /*!
- * @brief Port input source selection
- * Implements : acmp_input_source_t_Class
+ * @brief Comparator input source selection.
  */
 typedef enum
 {
     ACMP_INPUT_SRC_DAC = 0U, /*!< Select DAC as source for the comparator port. */
-    ACMP_INPUT_SRC_MUX = 1U, /*!< Select MUX8 as source for the comparator port. */
+    ACMP_INPUT_SRC_MUX = 1U  /*!< Select MUX8 as source for the comparator port. */
 } acmp_input_source_t;
 
 /*!
- * @brief Output polarity selection
- * Implements : acmp_output_polarity_t_Class
+ * @brief Comparator output polarity.
  */
 typedef enum
 {
     ACMP_OUT_POL_NOT_INVERT = 0U, /*!< ACMP output polarity isn't inverted. */
-    ACMP_OUT_POL_INVERT = 1U,     /*!< ACMP output polarity is inverted. */
+    ACMP_OUT_POL_INVERT = 1U      /*!< ACMP output polarity is inverted. */
 } acmp_output_polarity_t;
 
-/*! @brief Output selection
- * Implements : acmp_output_select_t_Class
+/*!
+ * @brief Comparator output path selection.
  */
 typedef enum
 {
-    ACMP_OUTPUT_FILTERED = 0U, /*!< ACMP output filtered to pin */
-    ACMP_OUTPUT_DIRECTLY = 1U  /*!< ACMP output to pin directly */
+    ACMP_OUTPUT_FILTERED = 0U, /*!< Route the filtered output to the pin. */
+    ACMP_OUTPUT_DIRECTLY = 1U  /*!< Route the direct comparator output to the pin. */
 } acmp_output_select_t;
 
-/*! @brief Hysteresis level selection
- * Implements : acmp_hysteresis_t_Class
+/*!
+ * @brief Comparator hysteresis level.
  */
 typedef enum
 {
-    ACMP_HYS_LEVEL_0 = 0U, /*!< Comparator has no hysteresis internally*/
-    ACMP_HYS_LEVEL_1 = 1U, /*!< Comparator has 20mV hysteresis internally*/
-    ACMP_HYS_LEVEL_2 = 2U, /*!< Comparator has 40mV hysteresis internally*/
-    ACMP_HYS_LEVEL_3 = 3U  /*!< Reserved*/
+    ACMP_HYS_LEVEL_0 = 0U, /*!< No internal hysteresis. */
+    ACMP_HYS_LEVEL_1 = 1U, /*!< 20mV internal hysteresis. */
+    ACMP_HYS_LEVEL_2 = 2U, /*!< 40mV internal hysteresis. */
+    ACMP_HYS_LEVEL_3 = 3U  /*!< Reserved. */
 } acmp_hysteresis_t;
 
-/*! @brief Fixed port selection
- * Implements : acmp_fixed_port_t_Class
+/*!
+ * @brief Fixed comparator port used in continuous mode.
  */
 typedef enum
 {
-    ACMP_FIXED_NEG_PORT = 0U, /*!< The negative port is fixed. */
-    ACMP_FIXED_POS_PORT = 1U  /*!< The positive port is fixed. */
+    ACMP_FIXED_NEG_PORT = 0U, /*!< Keep the negative input fixed during the scan. */
+    ACMP_FIXED_POS_PORT = 1U  /*!< Keep the positive input fixed during the scan. */
 } acmp_fixed_port_t;
 
-/*! @brief Edge selection for entering interrupt/dma request
- * Implements : acmp_edge_select_t_Class
+/*!
+ * @brief Comparator event selection for interrupt or DMA signaling.
  */
 typedef enum
 {
-    ACMP_NO_EDGE = 0U,      /*!< Comparator interrupt not generated */
-    ACMP_RISING_EDGE = 1U,  /*!< Comparator interrupt generated on rising edge  */
-    ACMP_FALLING_EDGE = 2U, /*!< Comparator interrupt generated on falling edge  */
-    ACMP_BOTH_EDGES = 3U,   /*!< Comparator interrupt generated on both edges */
+    ACMP_NO_EDGE = 0U,      /*!< Do not generate comparator interrupt. */
+    ACMP_RISING_EDGE = 1U,  /*!< Comparator interrupt generated on rising edge. */
+    ACMP_FALLING_EDGE = 2U, /*!< Comparator interrupt generated on falling edge. */
+    ACMP_BOTH_EDGES = 3U,   /*!< Comparator interrupt generated on both edges. */
 #if defined(FEATURE_ACMP_SUPPORT_LEVEL_DETECTION)
-    ACMP_HIGH_LEVEL = 4U,   /*!< Comparator interrupt generated on high level */
-    ACMP_LOW_LEVEL = 5U,    /*!< Comparator interrupt generated on low level */
+    ACMP_HIGH_LEVEL = 4U,   /*!< Comparator interrupt generated on high level. */
+    ACMP_LOW_LEVEL = 5U     /*!< Comparator interrupt generated on low level. */
 #endif
 } acmp_edge_select_t;
 
-/*! 
- * @brief Filter clock source selection
- * Implements : acmp_filter_clk_src_t_Class
+/*!
+ * @brief Digital filter clock source.
  */
 typedef enum
 {
-    ACMP_FILTER_SEL_FUNC_CLK = 0U, /*!< Select functional clock which is selected in IPC module */
-    ACMP_FILTER_SEL_BUS_CLK = 1U,  /*!< Select bus clock(register-used clock) */
+    ACMP_FILTER_SEL_FUNC_CLK = 0U, /*!< Use the ACMP functional clock selected by IPC. */
+    ACMP_FILTER_SEL_BUS_CLK = 1U   /*!< Use the bus clock. */
 } acmp_filter_clk_src_t;
 
-/*! @brief Analog Comparator sample modes
- * Implements : acmp_sample_mode_t_Class
+/*!
+ * @brief Comparator sample mode.
  */
 typedef enum
 {
-    ACMP_COMMON_MODE = 0U,
-    ACMP_TRIGGER_MODE = 1U,
-    ACMP_WINDOW_MODE = 2U,
+    ACMP_COMMON_MODE = 0U,   /*!< Normal comparator operation. */
+    ACMP_TRIGGER_MODE = 1U,  /*!< Triggered or sampled operation. */
+    ACMP_WINDOW_MODE = 2U,   /*!< Window comparison mode. */
 #if FEATURE_ACMP_HAS_CONTINUOUS_MODE_IN_CTRL_REG
-    ACMP_CONTINUOUS_MODE = 3U,
+    ACMP_CONTINUOUS_MODE = 3U, /*!< Continuous mode. */
 #else
-    ACMP_RESERVED = 3U,
+    ACMP_RESERVED = 3U         /*!< Reserved. */
 #endif
 } acmp_sample_mode_t;
 
 /*!
- * @brief Analog comparator clock source selection
- *
- * Implements : acmp_clock_source_t_Class
+ * @brief Comparator clock source.
  */
 typedef enum
 {
-    ACMP_CLK_SRC_IPC = 0U,
-    ACMP_CLK_SRC_SIRC = 1U,
+    ACMP_CLK_SRC_IPC = 0U, /*!< Use the functional clock. */
+    ACMP_CLK_SRC_SIRC = 1U, /*!< Use the SIRC clock. */
 #if FEATURE_ACMP_SUPPORT_SXOSC_CLK
-    ACMP_CLK_SRC_SXOSC = 2U,
+    ACMP_CLK_SRC_SXOSC = 2U /*!< Use the SXOSC clock. */
 #endif
 } acmp_clock_source_t;
 
-/*! 
- * @brief Analog comparator continuous mode
- * Implements : acmp_continuous_mode_t_Class
+/*!
+ * @brief Continuous scan mode behavior.
  */
 typedef enum
 {
-    ACMP_CONTINUOUS_LOOP_MODE = 0U,     /*!< ACMP continuous mode - loop mode */
-    ACMP_CONTINUOUS_ONE_SHOT_MODE = 1U, /*!< ACMP continuous mode - one-shot mode */
+    ACMP_CONTINUOUS_LOOP_MODE = 0U,     /*!< Repeat the channel scan continuously. */
+    ACMP_CONTINUOUS_ONE_SHOT_MODE = 1U  /*!< Run one scan sequence and then stop. */
 } acmp_continuous_mode_t;
 
 /*!
- * @brief Channel expectation configuration
- * Implements : acmp_ch_expectation_t_Class
+ * @brief Expected result for a channel monitored in continuous mode.
  */
 typedef enum
 {
-    ACMP_EXPECT_POS_LESS_THAN_NEG = 0U,  /*!< Expect that positive port input < negative port input */
-    ACMP_EXPECT_POS_GREAT_THAN_NEG = 1U, /*!< Expect that positive port input > negative port input */
+    ACMP_EXPECT_POS_LESS_THAN_NEG = 0U,  /*!< Expect positive input to remain below negative input. */
+    ACMP_EXPECT_POS_GREAT_THAN_NEG = 1U  /*!< Expect positive input to remain above negative input. */
 } acmp_ch_expectation_config_t;
 
 /*!
- * @brief Channel output result
- * Implements : acmp_ch_output_result_t_Class
+ * @brief Captured comparison result for a scanned channel.
  */
 typedef enum
 {
-    ACMP_POS_LESS_THAN_NEG = 0U,  /*!< Expect that positive port input < negative port input */
-    ACMP_POS_GREAT_THAN_NEG = 1U, /*!< Expect that positive port input > negative port input */
+    ACMP_POS_LESS_THAN_NEG = 0U,  /*!< Positive input was below the negative input. */
+    ACMP_POS_GREAT_THAN_NEG = 1U  /*!< Positive input was above the negative input. */
 } acmp_ch_output_result_t;
 
 /*!
- * @brief ACMP channel configuration
- * Implements : acmp_ch_config_t_Class
+ * @brief Per-channel configuration used by continuous scan mode.
  */
 typedef struct
 {
-    bool enable;
-    acmp_ch_expectation_config_t expectation;
+    bool enable;                                  /*!< Enables monitoring of the channel during the scan. */
+    acmp_ch_expectation_config_t expectation;     /*!< Expected compare result for the channel. */
 } acmp_ch_config_t;
 
-/*! 
- * @brief Channels list (1bit/channel)
- * 
- * Implements : acmp_ch_list_t_Class
+/*!
+ * @brief Packed 8-bit channel bitmap used by ACMP status and expectation APIs.
+ *
+ * Bit 0 corresponds to channel 0, and bit 7 corresponds to channel 7.
  */
 typedef uint8_t acmp_ch_list_t;
 
-/*! 
- * @brief Number of channel
- *
- * Implements : acmp_ch_number_t_Class
+/*!
+ * @brief ACMP input channel index type.
  */
 typedef uint8_t acmp_ch_number_t;
 
 /*!
- * @brief Comparator configuration
+ * @brief Comparator core configuration.
  *
- * This structure is used to configure only comparator block module(filtering, sampling, power_mode etc.)
- * Implements : acmp_comparator_config_t_Class
+ * Controls the comparator operating mode, event generation, hysteresis, output
+ * behavior, filter settings, and optional device-dependent controls.
  */
 typedef struct
 {
-    acmp_sample_mode_t sampleMode;         /*!< ACMP sample mode */
-    acmp_edge_select_t edgeSelection;      /*!< ACMP edge selection for compare interrupt */
-    acmp_hysteresis_t hysteresisLevel;     /*!< ACMP hysteresis level */
+    acmp_sample_mode_t sampleMode;         /*!< Comparator sample mode. */
+    acmp_edge_select_t edgeSelection;      /*!< Output event condition for interrupt or DMA signaling. */
+    acmp_hysteresis_t hysteresisLevel;     /*!< Internal hysteresis level. */
 #if FEATURE_ACMP_HAS_OFFSET_CONTROL
-    bool hardBlockOffset;                  /*!< ACMP hard block offset control */
+    bool hardBlockOffset;                  /*!< Enables hard-block offset behavior when supported. */
 #endif
-    acmp_output_select_t outputSelect;     /*!< ACMP output if filtered */
-    acmp_output_polarity_t outputPolarity; /*!< ACMP output polarity */
-    acmp_power_mode_t powerMode;           /*!< ACMP power mode */
-    bool filterEnable;                     /*!< True if filter is not bypassed */
-    acmp_filter_clk_src_t filterClkSrc;    /*!< Select filter clock source */
-    uint8_t filterSamplePeriod;            /*!< Filter sample period */
-    uint8_t filterSampleCount;             /*!< Number of sample count for filter */
+    acmp_output_select_t outputSelect;     /*!< Selects filtered or direct output routing. */
+    acmp_output_polarity_t outputPolarity; /*!< Selects normal or inverted comparator output. */
+    acmp_power_mode_t powerMode;           /*!< Selects the power or speed operating point. */
+    bool filterEnable;                     /*!< Enables the digital output filter. */
+    acmp_filter_clk_src_t filterClkSrc;    /*!< Selects the filter clock source. */
+    uint8_t filterSamplePeriod;            /*!< Filter sampling period in clock cycles. */
+    uint8_t filterSampleCount;             /*!< Number of agreeing samples required by the filter. */
 #if FEATURE_ACMP_HAS_AUTODIS
-    bool autoDisableHardBlock;             /*!< ACMP disable hard block automatically in one-shot mode */
+    bool autoDisableHardBlock;             /*!< Auto-disables the hard block in one-shot mode when supported. */
 #endif
 #if FEATURE_ACMP_HAS_CLK_SRC_SEL
-    acmp_clock_source_t acmpClkSrc;        /*!< ACMP clock source */
+    acmp_clock_source_t acmpClkSrc;        /*!< Selects the ACMP module clock source. */
 #endif
-    bool interruptEnable;                  /*!< true if interrupt from comparator is enable */
-    bool dmaTriggerEnable;                 /*!< true if DMA transfer trigger from comparator is enable */
+    bool interruptEnable;                  /*!< Enables comparator interrupt generation. */
+    bool dmaTriggerEnable;                 /*!< Enables comparator DMA triggering. */
 } acmp_comparator_config_t;
 
 /*!
- * @brief DAC configuration
- *
- * This structure is used to configure the dac block integrated in analog comparator module
- * Implements : acmp_dac_config_t_Class
+ * @brief DAC threshold generator configuration.
  */
 typedef struct
 {
 #if FEATURE_ACMP_HAS_DAC_VOLTAGE_REF_SRC
-    acmp_voltage_reference_t voltageReferenceSource; /*!< DAC voltage reference selection */
+    acmp_voltage_reference_t voltageReferenceSource; /*!< DAC reference source. */
 #endif
-    bool enable;                                     /*!< True if DAC is enabled */
+    bool enable;                                     /*!< Enables the integrated DAC. */
 #if FEATURE_ACMP_HAS_DAC_OUTPUT
-    bool outputEnable;                               /*!< True if DAC output is enabled */
+    bool outputEnable;                               /*!< Enables the DAC analog output when supported. */
 #endif
-    uint8_t voltage;                                 /*!< The digital value which is converted to analog signal */
+    uint8_t voltage;                                 /*!< DAC threshold code written to the hardware. */
 } acmp_dac_config_t;
 
 /*!
- * @brief Analog multiplexer configuration
+ * @brief Comparator input routing configuration.
  *
- * This structure is used to configure the analog multiplexer to select compared signals 
- * Implements : acmp_mux_config_t_Class
+ * Selects the source and external channel index for each comparator input.
  */
 typedef struct
 {
-    acmp_input_source_t positiveInputSrc; /*!< Select positive port input source */
-    acmp_input_source_t negativeInputSrc; /*!< Select negative port input source */
-    acmp_ch_number_t positiveInputChnSel; /*!< Select which channel is selected for positive port */
-    acmp_ch_number_t negativeInputChnSel; /*!< Select which channel is selected for negative port */
+    acmp_input_source_t positiveInputSrc; /*!< Source routed to the positive input. */
+    acmp_input_source_t negativeInputSrc; /*!< Source routed to the negative input. */
+    acmp_ch_number_t positiveInputChnSel; /*!< External channel routed to the positive input when using the MUX. */
+    acmp_ch_number_t negativeInputChnSel; /*!< External channel routed to the negative input when using the MUX. */
 } acmp_mux_config_t;
 
 /*!
- * @brief Continuous mode configuration
+ * @brief Continuous scan configuration.
  *
- * This structure is used to configure the continuous mode 
- * Implements : acmp_continuous_config_t_Class
+ * Controls round-robin scan behavior, fixed-port selection, channel timing,
+ * and per-channel enable or expectation state.
  */
 typedef struct
 {
-    bool continuousEnable;                 /*!< True if Continuous Mode is enabled.*/
-    acmp_continuous_mode_t continuousMode; /*!< Configure continuous mode loop or one-shot */
+    bool continuousEnable;                 /*!< Enables continuous scan mode. */
+    acmp_continuous_mode_t continuousMode; /*!< Selects loop or one-shot scan behavior. */
 #if FEATURE_ACMP_HAS_TRIG_MODE_GATE
-    bool oneshotTriggerEnable;
+    bool oneshotTriggerEnable;             /*!< Enables trigger gating for one-shot mode. */
 #endif
-    acmp_fixed_port_t fixedPort;           /*!< Configure fixed port positive or negative */
-    uint8_t samplePeriod;                  /*!< Select sample period for a given channel */
-    uint8_t samplePosition;                /*!< Select sample position for a given channel */
-    bool continuousInterruptEnable;        /*!< True if Continuous Mode interrupt is enabled */
-    acmp_ch_config_t channelConfig[8];     /*!< Channel enable and expectation configuration */
+    acmp_fixed_port_t fixedPort;           /*!< Selects the comparator port held constant during the scan. */
+    uint8_t samplePeriod;                  /*!< Delay between successive channel samples. */
+    uint8_t samplePosition;                /*!< Delay from channel switch to actual sampling instant. */
+    bool continuousInterruptEnable;        /*!< Enables continuous-mode interrupt signaling. */
+    acmp_ch_config_t channelConfig[8];     /*!< Per-channel enable and expected compare state. */
 } acmp_continuous_config_t;
 
 /*!
- * @brief Defines the acmp module configuration
+ * @brief Aggregate ACMP configuration container.
  *
- * This structure is used to configure all components of acmp module
- * Implements : acmp_config_t_Class
+ * The driver uses this structure to bundle the four ACMP sub-configuration
+ * blocks. For `ACMP_DRV_GetDefaultConfig()` and `ACMP_DRV_GetConfigAll()`,
+ * every member pointer must reference valid writable storage.
  */
 typedef struct
 {
-    acmp_comparator_config_t *comparatorConfig;
-    acmp_dac_config_t *dacConfig;
-    acmp_mux_config_t *muxConfig;
-    acmp_continuous_config_t *continuousConfig;
+    acmp_comparator_config_t *comparatorConfig;   /*!< Comparator core configuration block. */
+    acmp_dac_config_t *dacConfig;                 /*!< DAC configuration block. */
+    acmp_mux_config_t *muxConfig;                 /*!< Input routing configuration block. */
+    acmp_continuous_config_t *continuousConfig;   /*!< Continuous scan configuration block. */
 } acmp_config_t;
 
 /*******************************************************************************
@@ -314,286 +325,331 @@ typedef struct
 extern "C" {
 #endif
 
+/*******************************************************************************
+ * Initialization & Global Control
+ ******************************************************************************/
 /*!
- * @brief Reset all registers
+ * @name Initialization & Global Control
+ * @brief Functions for resetting, initializing, and enabling the ACMP instance.
+ * @{
+ */
+
+/*!
+ * @brief Reset an ACMP instance through the IPC software reset path.
  *
- * This function set all ACMP registers to reset values.
- *
- * @param[in] instance - instance number
- * @return Operation status
- * @retval STATUS_SUCCESS : Completed successfully.
+ * @param[in] instance  ACMP instance index (0-based).
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Reset completed successfully.
  */
 status_t ACMP_DRV_Reset(const uint32_t instance);
 
 /*!
- * @brief Gets a default comparator configuration
+ * @brief Populate all ACMP sub-configuration blocks with default values.
  *
- * This function returns a default configuration for the comparator as a configuration structure.
+ * The driver writes defaults into the comparator, DAC, MUX, and continuous
+ * configuration structures referenced by @a config.
  *
- * @param[in] config - the configuration structure
- * @return Operation status
- * @retval STATUS_SUCCESS : Completed successfully.
+ * @param[in] config  Pointer to the configuration container. The pointer itself
+ *                    must be valid, and all member pointers must reference
+ *                    writable storage.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Default values were written successfully.
+ *
+ * @note Because the function signature uses `const acmp_config_t *`, the
+ *       pointed-to sub-structures are updated through the member pointers.
  */
 status_t ACMP_DRV_GetDefaultConfig(const acmp_config_t *config);
 
 /*!
- * @brief Configure all comparator features with the given configuration structure
+ * @brief Initialize an ACMP instance from the supplied configuration blocks.
  *
- * This function configures the comparator module with the parameters
- * provided in the config structure.
+ * Applies any non-NULL configuration block referenced by @a config, clears
+ * pending status flags, and configures continuous mode when requested.
  *
- * @param[in] instance - instance number
- * @param[in] config - the configuration structure
- * @return Operation status
- * @retval STATUS_SUCCESS : Completed successfully.
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[in] config    Pointer to the configuration container.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Initialization completed successfully.
+ *
+ * @pre The ACMP peripheral clock must already be enabled.
+ * @note Individual sub-block pointers inside @a config may be NULL if that
+ *       portion of the peripheral should be left untouched.
  */
 status_t ACMP_DRV_Init(const uint32_t instance, const acmp_config_t *config);
 
 /*!
- * @brief Set ACMP channel expected state
+ * @brief Enable the comparator block for the selected instance.
  *
- * @param[in] instance - instance number
- * @param[in] state - channel expected state
- * @return Operation status
- * @retval STATUS_SUCCESS : Completed successfully.
- */
-status_t ACMP_DRV_SetExpectation(const uint32_t instance, uint8_t state);
-
-/*!
- * @brief Enable continuous mode
- *
- * @param[in] instance - instance number
- * @return Operation status
- * @retval STATUS_SUCCESS : Completed successfully.
- */
-status_t ACMP_DRV_EnableContinuous(const uint32_t instance);
-
-/*!
- * @brief Disable continuous mode
- *
- * @param[in] instance - instance number
- * @return Operation status
- * @retval STATUS_SUCCESS : Completed successfully.
- */
-status_t ACMP_DRV_DisableContinuous(const uint32_t instance);
-
-/*!
- * @brief Gets the current comparator configuration
- *
- * This function returns the current configuration for comparator as a configuration structure.
- *
- * @param[in] instance - instance number
- * @param[out] config - the configuration structure
- * @return Operation status
- * @retval STATUS_SUCCESS : Completed successfully.
- */
-status_t ACMP_DRV_GetConfigAll(const uint32_t instance, const acmp_config_t *config);
-
-/*!
- * @brief Configure the DAC component
- *
- * This function configures the DAC with the parameters provided in the config structure.
- *
- * @param[in] instance - instance number
- * @param[in] config - the configuration structure
- * @return Operation status
- * @retval STATUS_SUCCESS : Completed successfully.
- */
-status_t ACMP_DRV_ConfigDac(const uint32_t instance, const acmp_dac_config_t *config);
-
-/*!
- * @brief Return current configuration for DAC
- *
- * This function returns current configuration only for DAC.
- *
- * @param[in] instance - instance number
- * @param[out] config - the configuration structure
- * @return Operation status
- * @retval STATUS_SUCCESS : Completed successfully.
- */
-status_t ACMP_DRV_GetDacConfig(const uint32_t instance, acmp_dac_config_t *config);
-
-/*!
- * @brief Configure the ACMP MUX component
- *
- * This function configures the MUX with the parameters provided in the config structure.
- *
- * @param[in] instance - instance number
- * @param[in] config - the configuration structure
- * @return Operation status
- * @retval STATUS_SUCCESS : Completed successfully.
- */
-status_t ACMP_DRV_ConfigMux(const uint32_t instance, const acmp_mux_config_t *config);
-
-/*!
- * @brief Return configuration only for the MUX component
- *
- * This function returns current configuration to determine which signals go to comparator ports.
- *
- * @param[in] instance - instance number
- * @param[out] config - the configuration structure
- * @return Operation status
- * @retval STATUS_SUCCESS : Completed successfully.
- */
-status_t ACMP_DRV_GetMuxConfig(const uint32_t instance, acmp_mux_config_t *config);
-
-/*!
- * @brief Configure continuous mode
- *
- * This function configures the continuous mode with the parameters provided in the config structure.
- *
- * @param[in] instance - instance number
- * @param[in] config - the configuration structure
- * @return Operation status
- * @retval STATUS_SUCCESS : Completed successfully.
- */
-status_t ACMP_DRV_ConfigContinuous(const uint32_t instance, const acmp_continuous_config_t *config);
-
-/*!
- * @brief Get current continuous mode configuration
- *
- * This function returns the current continuous mode configuration.
- *
- * @param[in] instance - instance number
- * @param[out] config - the configuration structure
- * @return Operation status
- * @retval STATUS_SUCCESS : Completed successfully.
- */
-status_t ACMP_DRV_GetContinuousConfig(const uint32_t instance, acmp_continuous_config_t *config);
-
-/*!
- * @brief Get comparator output flags
- *
- * This function returns in <flags> comparator output flags(rising and falling edge).
- *
- * @param[in] instance - instance number
- * @param[out] flags - pointer to output flags
- *      - NO_EDGE
- *      - RISING_EDGE
- *      - FALLING_EDGE
- *      - BOTH_EDGE
- * @return Operation status
- * @retval STATUS_SUCCESS : Completed successfully.
- */
-status_t ACMP_DRV_GetOutputFlags(const uint32_t instance, uint8_t *flags);
-
-/*!
- * @brief Clear comparator output flags
- *
- * This function clear comparator output flags(rising and falling edge).
- *
- * @param[in] instance - instance number
- * @return Operation status
- * @retval STATUS_SUCCESS : Completed successfully.
- */
-status_t ACMP_DRV_ClearOutputFlags(const uint32_t instance);
-
-/*!
- * @brief Gets input channels change flags
- *
- * This function return in <flags> all input channels flags as uint8_t(1 bite
- *for each channel flag).
- *
- * @param[in] instance - instance number
- * @param[out] flags - pointer to input flags
- * @return Operation status
- * @retval STATUS_SUCCESS : Completed successfully.
- */
-status_t ACMP_DRV_GetChannelFlags(const uint32_t instance, acmp_ch_list_t *flags);
-
-/*!
- * @brief Clear comparator input channels flags
- *
- * This function clear comparator input channels flags.
- *
- * @param[in] instance - instance number
- * @return Operation status
- * @retval STATUS_SUCCESS : Completed successfully.
- */
-status_t ACMP_DRV_ClearChannelFlags(const uint32_t instance);
-
-/*!
- * @brief Configure comparator
- *
- * This function configure only features related with comparator:
- * DMA request, power mode, output select, interrupts enable, polarity,
- * offset, hysteresis, auto disable hard block, internal current control
- * sample mode, filter clock source, filter sample period and position.
- *
- * @param[in] instance - instance number
- * @param[in] config - the configuration structure
- * @return Operation status
- * @retval STATUS_SUCCESS : Completed successfully.
- */
-status_t ACMP_DRV_ConfigComparator(const uint32_t instance, const acmp_comparator_config_t *config);
-
-/*!
- * @brief Return configuration for comparator from ACMP module
- *
- * This function return configuration for features related with comparator:
- * DMA request, power mode, output select, interrupts enable, polarity,
- * offset, hysteresis, auto disable hard block, internal current control
- * sample modes, filter clock source, filter sample period and position.
- *
- * @param[in] instance - instance number
- * @param[out] config - the configuration structure returned
- * @return Operation status
- * @retval STATUS_SUCCESS : Completed successfully.
- */
-status_t ACMP_DRV_GetComparatorConfig(const uint32_t instance, acmp_comparator_config_t *config);
-
-/*!
- * @brief Enable ACMP module
- *
- * This function enable the ACMP.
- * @param[in] instance - instance number
- * @return 
- *        - STATUS_SUCCESS : Completed successfully.
- *        - STATUS_ERROR : Error occurred.
+ * @param[in] instance  ACMP instance index (0-based).
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Enable completed successfully.
  */
 status_t ACMP_DRV_Enable(const uint32_t instance);
 
 /*!
- * @brief Disable ACMP module
+ * @brief Disable the comparator block for the selected instance.
  *
- * This function disable the ACMP.
- * @param[in] instance - instance number
- * @return 
- *        - STATUS_SUCCESS : Completed successfully.
- *        - STATUS_ERROR : Error occurred.
+ * @param[in] instance  ACMP instance index (0-based).
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Disable completed successfully.
  */
 status_t ACMP_DRV_Disable(const uint32_t instance);
 
+/*! @} */ /* End of Initialization & Global Control */
+
+/*******************************************************************************
+ * Configuration Snapshot
+ ******************************************************************************/
 /*!
- * @brief This function is to get channel ID in the continuous mode.
+ * @name Configuration Snapshot
+ * @brief Functions for reading back the full ACMP configuration state.
+ * @{
+ */
+
+/*!
+ * @brief Read back all ACMP configuration blocks for one instance.
  *
- * @param[in] instance - instance number
- * @return channel ID
+ * The driver writes the current comparator, DAC, MUX, and continuous-mode
+ * state into the sub-structures referenced by @a config.
+ *
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[in] config    Pointer to the configuration container. All member
+ *                      pointers must reference writable storage.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Configuration was captured successfully.
+ */
+status_t ACMP_DRV_GetConfigAll(const uint32_t instance, const acmp_config_t *config);
+
+/*! @} */ /* End of Configuration Snapshot */
+
+/*******************************************************************************
+ * Comparator, DAC, MUX & Continuous Configuration
+ ******************************************************************************/
+/*!
+ * @name Comparator, DAC, MUX & Continuous Configuration
+ * @brief Functions for configuring individual ACMP sub-blocks.
+ * @{
+ */
+
+/*!
+ * @brief Configure the comparator core.
+ *
+ * Applies sample mode, event selection, hysteresis, output behavior, filter
+ * settings, interrupt enable, and DMA trigger control.
+ *
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[in] config    Pointer to the comparator configuration structure.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Comparator configuration was applied successfully.
+ */
+status_t ACMP_DRV_ConfigComparator(const uint32_t instance, const acmp_comparator_config_t *config);
+
+/*!
+ * @brief Read back the comparator core configuration.
+ *
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[out] config   Pointer to the structure that receives the comparator state.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Comparator configuration was read successfully.
+ */
+status_t ACMP_DRV_GetComparatorConfig(const uint32_t instance, acmp_comparator_config_t *config);
+
+/*!
+ * @brief Configure the integrated DAC threshold generator.
+ *
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[in] config    Pointer to the DAC configuration structure.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS DAC configuration was applied successfully.
+ */
+status_t ACMP_DRV_ConfigDac(const uint32_t instance, const acmp_dac_config_t *config);
+
+/*!
+ * @brief Read back the integrated DAC configuration.
+ *
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[out] config   Pointer to the structure that receives the DAC state.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS DAC configuration was read successfully.
+ */
+status_t ACMP_DRV_GetDacConfig(const uint32_t instance, acmp_dac_config_t *config);
+
+/*!
+ * @brief Configure the positive and negative input routes.
+ *
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[in] config    Pointer to the MUX configuration structure.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Input routing was applied successfully.
+ */
+status_t ACMP_DRV_ConfigMux(const uint32_t instance, const acmp_mux_config_t *config);
+
+/*!
+ * @brief Read back the positive and negative input routes.
+ *
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[out] config   Pointer to the structure that receives the routing state.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Input routing was read successfully.
+ */
+status_t ACMP_DRV_GetMuxConfig(const uint32_t instance, acmp_mux_config_t *config);
+
+/*!
+ * @brief Configure continuous scan mode.
+ *
+ * Programs the continuous-mode scan behavior, timing, fixed-port selection,
+ * interrupt enable state, and per-channel expectations.
+ *
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[in] config    Pointer to the continuous-mode configuration structure.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Continuous-mode configuration was applied successfully.
+ */
+status_t ACMP_DRV_ConfigContinuous(const uint32_t instance, const acmp_continuous_config_t *config);
+
+/*!
+ * @brief Read back continuous scan configuration.
+ *
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[out] config   Pointer to the structure that receives the continuous-mode state.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Continuous-mode configuration was read successfully.
+ */
+status_t ACMP_DRV_GetContinuousConfig(const uint32_t instance, acmp_continuous_config_t *config);
+
+/*! @} */ /* End of Comparator, DAC, MUX & Continuous Configuration */
+
+/*******************************************************************************
+ * Continuous Runtime Control
+ ******************************************************************************/
+/*!
+ * @name Continuous Runtime Control
+ * @brief Functions for adjusting or enabling continuous mode after initialization.
+ * @{
+ */
+
+/*!
+ * @brief Write the packed expectation bitmap used by continuous mode.
+ *
+ * Each bit in @a state corresponds to one channel expectation value.
+ *
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[in] state     Packed expectation bitmap. Bit 0 controls channel 0 and
+ *                      bit 7 controls channel 7.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Expectation state was updated successfully.
+ */
+status_t ACMP_DRV_SetExpectation(const uint32_t instance, uint8_t state);
+
+/*!
+ * @brief Request continuous scan mode through the runtime control path.
+ *
+ * @param[in] instance  ACMP instance index (0-based).
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Continuous mode was enabled successfully.
+ */
+status_t ACMP_DRV_EnableContinuous(const uint32_t instance);
+
+/*!
+ * @brief Request continuous-mode disable through the runtime control path.
+ *
+ * @param[in] instance  ACMP instance index (0-based).
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Continuous mode was disabled successfully.
+ *
+ * @note On devices that select continuous mode through the sample-mode field,
+ *       the final behavior depends on the underlying hardware implementation.
+ */
+status_t ACMP_DRV_DisableContinuous(const uint32_t instance);
+
+/*! @} */ /* End of Continuous Runtime Control */
+
+/*******************************************************************************
+ * Status & Output Query
+ ******************************************************************************/
+/*!
+ * @name Status & Output Query
+ * @brief Functions for reading ACMP status flags and comparison outputs.
+ * @{
+ */
+
+/*!
+ * @brief Read the comparator output event flags.
+ *
+ * Depending on device support, the returned bitmap may include edge flags only
+ * or both edge and level-detection flags.
+ *
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[out] flags    Pointer to the variable that receives the output flags.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Output flags were read successfully.
+ */
+status_t ACMP_DRV_GetOutputFlags(const uint32_t instance, uint8_t *flags);
+
+/*!
+ * @brief Clear the comparator output event flags.
+ *
+ * @param[in] instance  ACMP instance index (0-based).
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Output flags were cleared successfully.
+ */
+status_t ACMP_DRV_ClearOutputFlags(const uint32_t instance);
+
+/*!
+ * @brief Read the per-channel change flags used by continuous mode.
+ *
+ * Bit 0 corresponds to channel 0 and bit 7 corresponds to channel 7.
+ *
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[out] flags    Pointer to the variable that receives the channel flags.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Channel flags were read successfully.
+ */
+status_t ACMP_DRV_GetChannelFlags(const uint32_t instance, acmp_ch_list_t *flags);
+
+/*!
+ * @brief Clear all continuous-mode channel change flags.
+ *
+ * @param[in] instance  ACMP instance index (0-based).
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Channel flags were cleared successfully.
+ */
+status_t ACMP_DRV_ClearChannelFlags(const uint32_t instance);
+
+/*!
+ * @brief Report the channel currently being sampled in continuous mode.
+ *
+ * @param[in] instance  ACMP instance index (0-based).
+ * @return Current channel identifier.
  */
 uint8_t ACMP_DRV_GetChannelId(const uint32_t instance);
 
 /*!
- * @brief This function is to get module output value.
+ * @brief Read the current comparator output state.
  *
- * @param[in] instance - instance number
- * @return bool output value
+ * @param[in] instance  ACMP instance index (0-based).
+ * @return `true` when the comparator output is high, or `false` otherwise.
  */
 bool ACMP_DRV_GetOutput(const uint32_t instance);
 
 /*!
- * @brief This function is to get module output value.
+ * @brief Read the last captured output for a channel scanned in continuous mode.
  *
- * @param[in] instance - instance number
- * @param[in] channel - channel number
- * @return bool output value
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[in] channel   Channel index to query.
+ * @return `true` when the stored channel output is high, or `false` otherwise.
  */
 bool ACMP_DRV_GetChannelOutput(const uint32_t instance, uint8_t channel);
+
+/*! @} */ /* End of Status & Output Query */
 
 #if defined(__cplusplus)
 }
 #endif
 
-#endif /* __ACMP_DRIVER_H__*/
+/*! @} */
+
+#endif /* ACMP_DRIVER_H */
 
 /*******************************************************************************
  * EOF

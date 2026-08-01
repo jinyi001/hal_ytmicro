@@ -8,23 +8,36 @@
 /*!
  * @file flexcan_hw_access.c
  * @version 1.4.1
+ *
+ * @brief FlexCAN Hardware Access Layer — non-inline register operations.
+ *
+ * Implements the non-inline functions for FlexCAN register access,
+ * including module initialization, message buffer configuration, Rx
+ * FIFO management, Enhanced Rx FIFO, and Pretended Networking setup.
  */
 
 /*!
  * @page misra_violations MISRA-C:2012 violations list
  *
  * PRQA S 0310 Rule 11.3 : Casting to different object pointer type.
+ *
  * PRQA S 0311 Rule 11.8 : Dangerous pointer cast results in loss of const qualification.
+ *
  * PRQA S 2983 Rule 2.2  : TThis assignment is redundant. The value of this object is never subsequently used.
+ *
  * PRQA S 2985 Rule 2.2 :  This operation is redundant. The value of the result is always 
  *                         that of the left-hand operand.
+ *
  * PRQA S 3305 Rule 11.6 : Pointer cast to stricter alignment.
+ *
  * PRQA S 4700 CMN  0.2  : 4700 Metric value out of threshold range: %s.
+ *
  * PRQA S 3206 Rule 2.7  : The parameter '%1s' is not used in this function.
+ *
  * PRQA S 0488 Rule 18.4  : Performing pointer arithmetic.
+ *
  * PRQA S 0489 Rule 18.4  : The integer value 1 is being added or subtracted from a pointer..
- */ 
-
+ */
 
 #include "flexcan_hw_access.h"
 #include "interrupt_manager.h"
@@ -37,16 +50,16 @@
  * Definitions
  ******************************************************************************/
 
-#define FLEXCAN_ALL_INT                                  (0x3B0006U)    /*!< Masks for wakeup, error, bus off*/
-#define BUS_OFF_INT                                      (0xB0004U)     /*!< Masks for busOff, Tx/Rx Warning */
-#if !(defined (YTM32B1L_SERIES))
-#define ERROR_INT                                        (0x300002U)    /*!< Masks for ErrorOvr, ErrorFast, Error */
+#define FLEXCAN_ALL_INT (0x3B0006U) /*!< Masks for wakeup, error, bus off*/
+#define BUS_OFF_INT     (0xB0004U)  /*!< Masks for busOff, Tx/Rx Warning */
+#if !(defined(YTM32B1L_SERIES))
+#define ERROR_INT (0x300002U) /*!< Masks for ErrorOvr, ErrorFast, Error */
 #endif
 
-#define RxFifoFilterTableOffset         0x18U
+#define RxFifoFilterTableOffset 0x18U
 
-#define FlexCanRxFifoAcceptRemoteFrame   1UL
-#define FlexCanRxFifoAcceptExtFrame      1UL
+#define FlexCanRxFifoAcceptRemoteFrame 1UL
+#define FlexCanRxFifoAcceptExtFrame    1UL
 
 /*******************************************************************************
  * Private Functions
@@ -54,8 +67,8 @@
 
 static uint8_t FLEXCAN_ComputeDLCValue(uint8_t payloadSize);
 static uint8_t FLEXCAN_ComputePayloadSize(uint8_t dlcValue);
-static void FLEXCAN_ClearRAM(CAN_Type * base);
-#if (defined (YTM32B1L_SERIES))
+static void FLEXCAN_ClearRAM(CAN_Type *base);
+#if (defined(YTM32B1L_SERIES))
 static uint32_t FLEXCAN_DeserializeUint32(const uint8_t *buffer);
 
 static uint32_t FLEXCAN_DeserializeUint32(const uint8_t *buffer)
@@ -67,6 +80,7 @@ static uint32_t FLEXCAN_DeserializeUint32(const uint8_t *buffer)
     value |= (uint32_t)buffer[0];
     return value;
 }
+
 inline static uint32_t FLEXCAN_DataTransferTxMsgBuff(volatile uint32_t *flexcan_mb_data_32,
                                                      const flexcan_msgbuff_code_status_t *cs,
                                                      const uint8_t *msgData);
@@ -75,58 +89,58 @@ inline static uint32_t FLEXCAN_DataTransferTxMsgBuff(volatile uint32_t *flexcan_
 /* Determines the RxFIFO Filter element number */
 #define RxFifoFilterElementNum(x) (((x) + 1U) * 8U)
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_GetRxFifoMask
- * Description   : Calculate the Global Mask as format ID type in FIFO Mode.
- * Based on the ID format type and Mask Type will calculate the and set accordingly
- * the Rx FIFO Individual\Global Mask register.
- *
- *END**************************************************************************/
-uint32_t FLEXCAN_GetRxFifoMask(flexcan_msgbuff_id_type_t id_type,
-                               flexcan_rx_fifo_id_element_format_t formatType,
-                               uint32_t mask)
+/*!
+ * @brief Calculate the Global Mask as format ID type in FIFO Mode. Based on the ID format type and Mask Type will calculate the and set accordingly the Rx FIFO Individual\Global Mask register.
+ */
+uint32_t
+FLEXCAN_GetRxFifoMask(flexcan_msgbuff_id_type_t id_type, flexcan_rx_fifo_id_element_format_t formatType, uint32_t mask)
 {
     uint32_t val = 0U;
 
     switch (formatType)
-        {
+    {
         case (FLEXCAN_RX_FIFO_ID_FORMAT_A):
             /* Set RTR bit encoded as bit 31 and IDE bit encoded as bit 30 in mask */
-            val = mask & ((1UL<<FLEXCAN_RX_FIFO_ID_FILTER_FORMATAB_RTR_SHIFT) | (1UL<<FLEXCAN_RX_FIFO_ID_FILTER_FORMATAB_IDE_SHIFT));
+            val = mask & ((1UL << FLEXCAN_RX_FIFO_ID_FILTER_FORMATAB_RTR_SHIFT) |
+                          (1UL << FLEXCAN_RX_FIFO_ID_FILTER_FORMATAB_IDE_SHIFT));
             if (id_type == FLEXCAN_MSG_ID_STD)
             {
                 /* Set standard global mask for RX FIFO and IDE will be 1 and check the FIFO filter ide */
-                val |= ((mask << FLEXCAN_RX_FIFO_ID_FILTER_FORMATA_STD_SHIFT) & FLEXCAN_RX_FIFO_ID_FILTER_FORMATA_STD_MASK);
-
+                val |= ((mask << FLEXCAN_RX_FIFO_ID_FILTER_FORMATA_STD_SHIFT) &
+                        FLEXCAN_RX_FIFO_ID_FILTER_FORMATA_STD_MASK);
             }
             else if (id_type == FLEXCAN_MSG_ID_EXT)
             {
                 /* Set extended global mask for RX FIFO and IDE will be 0 and don't check the FIFO filter ide */
-                val |= ((mask << FLEXCAN_RX_FIFO_ID_FILTER_FORMATA_EXT_SHIFT) & FLEXCAN_RX_FIFO_ID_FILTER_FORMATA_EXT_MASK);
+                val |= ((mask << FLEXCAN_RX_FIFO_ID_FILTER_FORMATA_EXT_SHIFT) &
+                        FLEXCAN_RX_FIFO_ID_FILTER_FORMATA_EXT_MASK);
             }
-            else {
+            else
+            {
                 /* Should not get here */
             }
-        break;
+            break;
         case (FLEXCAN_RX_FIFO_ID_FORMAT_B):
             /* Set RTR bit encoded as bit 31 and IDE bit encoded as bit 30 in mask */
-            val = mask & ((1UL<<FLEXCAN_RX_FIFO_ID_FILTER_FORMATAB_RTR_SHIFT) | (1UL<<FLEXCAN_RX_FIFO_ID_FILTER_FORMATAB_IDE_SHIFT));
+            val = mask & ((1UL << FLEXCAN_RX_FIFO_ID_FILTER_FORMATAB_RTR_SHIFT) |
+                          (1UL << FLEXCAN_RX_FIFO_ID_FILTER_FORMATAB_IDE_SHIFT));
             if (id_type == FLEXCAN_MSG_ID_STD)
             {
                 /* Set standard global mask for RX FIFO  */
-                val |= ((mask & FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_STD_MASK) << FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_STD_SHIFT1);
-
+                val |= ((mask & FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_STD_MASK)
+                        << FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_STD_SHIFT1);
             }
             else if (id_type == FLEXCAN_MSG_ID_EXT)
             {
                 /* Set extended global mask for RX FIFO  */
-                val |= ((mask & FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_EXT_MASK1) <<  FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_EXT_SHIFT1);
+                val |= ((mask & FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_EXT_MASK1)
+                        << FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_EXT_SHIFT1);
             }
-            else {
+            else
+            {
                 /* Should not get here */
             }
-        break;
+            break;
         case (FLEXCAN_RX_FIFO_ID_FORMAT_C):
             if ((id_type == FLEXCAN_MSG_ID_EXT) || (id_type == FLEXCAN_MSG_ID_STD))
             {
@@ -136,48 +150,94 @@ uint32_t FLEXCAN_GetRxFifoMask(flexcan_msgbuff_id_type_t id_type,
             {
                 /* Should not get here */
             }
-        break;
+            break;
         default:
             /* FLEXCAN_RX_FIFO_ID_FORMAT_D not supported */
             /* Should not get here */
-        break;
-        }/* End Switch */
+            break;
+    } /* End Switch */
 
     return val;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name: FLEXCAN_ComputeDLCValue
- * Description  : Computes the DLC field value, given a payload size (in bytes).
- *
- *END**************************************************************************/
-static uint8_t FLEXCAN_ComputeDLCValue(
-        uint8_t payloadSize)
+/*!
+ * @brief Computes the DLC field value, given a payload size (in bytes).
+ */
+static uint8_t FLEXCAN_ComputeDLCValue(uint8_t payloadSize)
 {
-    uint32_t ret = 0xFFU;                     /* 0,  1,  2,  3,  4,  5,  6,  7,  8, */
-    static const uint8_t payload_code[65] = { 0U, 1U, 2U, 3U, 4U, 5U, 6U, 7U, 8U,
-                            /* 9 to 12 payload have DLC Code 12 Bytes */
-                        CAN_DLC_VALUE_12_BYTES, CAN_DLC_VALUE_12_BYTES, CAN_DLC_VALUE_12_BYTES, CAN_DLC_VALUE_12_BYTES,
-                            /* 13 to 16 payload have DLC Code 16 Bytes */
-                        CAN_DLC_VALUE_16_BYTES, CAN_DLC_VALUE_16_BYTES, CAN_DLC_VALUE_16_BYTES, CAN_DLC_VALUE_16_BYTES,
-                            /* 17 to 20 payload have DLC Code 20 Bytes */
-                        CAN_DLC_VALUE_20_BYTES, CAN_DLC_VALUE_20_BYTES, CAN_DLC_VALUE_20_BYTES, CAN_DLC_VALUE_20_BYTES,
-                            /* 21 to 24 payload have DLC Code 24 Bytes */
-                        CAN_DLC_VALUE_24_BYTES, CAN_DLC_VALUE_24_BYTES, CAN_DLC_VALUE_24_BYTES, CAN_DLC_VALUE_24_BYTES,
-                            /* 25 to 32 payload have DLC Code 32 Bytes */
-                        CAN_DLC_VALUE_32_BYTES, CAN_DLC_VALUE_32_BYTES, CAN_DLC_VALUE_32_BYTES, CAN_DLC_VALUE_32_BYTES,
-                        CAN_DLC_VALUE_32_BYTES, CAN_DLC_VALUE_32_BYTES, CAN_DLC_VALUE_32_BYTES, CAN_DLC_VALUE_32_BYTES,
-                            /* 33 to 48 payload have DLC Code 48 Bytes */
-                        CAN_DLC_VALUE_48_BYTES, CAN_DLC_VALUE_48_BYTES, CAN_DLC_VALUE_48_BYTES, CAN_DLC_VALUE_48_BYTES,
-                        CAN_DLC_VALUE_48_BYTES, CAN_DLC_VALUE_48_BYTES, CAN_DLC_VALUE_48_BYTES, CAN_DLC_VALUE_48_BYTES,
-                        CAN_DLC_VALUE_48_BYTES, CAN_DLC_VALUE_48_BYTES, CAN_DLC_VALUE_48_BYTES, CAN_DLC_VALUE_48_BYTES,
-                        CAN_DLC_VALUE_48_BYTES, CAN_DLC_VALUE_48_BYTES, CAN_DLC_VALUE_48_BYTES, CAN_DLC_VALUE_48_BYTES,
-                            /* 49 to 64 payload have DLC Code 64 Bytes */
-                        CAN_DLC_VALUE_64_BYTES, CAN_DLC_VALUE_64_BYTES, CAN_DLC_VALUE_64_BYTES, CAN_DLC_VALUE_64_BYTES,
-                        CAN_DLC_VALUE_64_BYTES, CAN_DLC_VALUE_64_BYTES, CAN_DLC_VALUE_64_BYTES, CAN_DLC_VALUE_64_BYTES,
-                        CAN_DLC_VALUE_64_BYTES, CAN_DLC_VALUE_64_BYTES, CAN_DLC_VALUE_64_BYTES, CAN_DLC_VALUE_64_BYTES,
-                        CAN_DLC_VALUE_64_BYTES, CAN_DLC_VALUE_64_BYTES, CAN_DLC_VALUE_64_BYTES, CAN_DLC_VALUE_64_BYTES };
+    uint32_t ret = 0xFFU; /* 0,  1,  2,  3,  4,  5,  6,  7,  8, */
+    static const uint8_t payload_code[65] = { 0U,
+                                              1U,
+                                              2U,
+                                              3U,
+                                              4U,
+                                              5U,
+                                              6U,
+                                              7U,
+                                              8U,
+                                              /* 9 to 12 payload have DLC Code 12 Bytes */
+                                              CAN_DLC_VALUE_12_BYTES,
+                                              CAN_DLC_VALUE_12_BYTES,
+                                              CAN_DLC_VALUE_12_BYTES,
+                                              CAN_DLC_VALUE_12_BYTES,
+                                              /* 13 to 16 payload have DLC Code 16 Bytes */
+                                              CAN_DLC_VALUE_16_BYTES,
+                                              CAN_DLC_VALUE_16_BYTES,
+                                              CAN_DLC_VALUE_16_BYTES,
+                                              CAN_DLC_VALUE_16_BYTES,
+                                              /* 17 to 20 payload have DLC Code 20 Bytes */
+                                              CAN_DLC_VALUE_20_BYTES,
+                                              CAN_DLC_VALUE_20_BYTES,
+                                              CAN_DLC_VALUE_20_BYTES,
+                                              CAN_DLC_VALUE_20_BYTES,
+                                              /* 21 to 24 payload have DLC Code 24 Bytes */
+                                              CAN_DLC_VALUE_24_BYTES,
+                                              CAN_DLC_VALUE_24_BYTES,
+                                              CAN_DLC_VALUE_24_BYTES,
+                                              CAN_DLC_VALUE_24_BYTES,
+                                              /* 25 to 32 payload have DLC Code 32 Bytes */
+                                              CAN_DLC_VALUE_32_BYTES,
+                                              CAN_DLC_VALUE_32_BYTES,
+                                              CAN_DLC_VALUE_32_BYTES,
+                                              CAN_DLC_VALUE_32_BYTES,
+                                              CAN_DLC_VALUE_32_BYTES,
+                                              CAN_DLC_VALUE_32_BYTES,
+                                              CAN_DLC_VALUE_32_BYTES,
+                                              CAN_DLC_VALUE_32_BYTES,
+                                              /* 33 to 48 payload have DLC Code 48 Bytes */
+                                              CAN_DLC_VALUE_48_BYTES,
+                                              CAN_DLC_VALUE_48_BYTES,
+                                              CAN_DLC_VALUE_48_BYTES,
+                                              CAN_DLC_VALUE_48_BYTES,
+                                              CAN_DLC_VALUE_48_BYTES,
+                                              CAN_DLC_VALUE_48_BYTES,
+                                              CAN_DLC_VALUE_48_BYTES,
+                                              CAN_DLC_VALUE_48_BYTES,
+                                              CAN_DLC_VALUE_48_BYTES,
+                                              CAN_DLC_VALUE_48_BYTES,
+                                              CAN_DLC_VALUE_48_BYTES,
+                                              CAN_DLC_VALUE_48_BYTES,
+                                              CAN_DLC_VALUE_48_BYTES,
+                                              CAN_DLC_VALUE_48_BYTES,
+                                              CAN_DLC_VALUE_48_BYTES,
+                                              CAN_DLC_VALUE_48_BYTES,
+                                              /* 49 to 64 payload have DLC Code 64 Bytes */
+                                              CAN_DLC_VALUE_64_BYTES,
+                                              CAN_DLC_VALUE_64_BYTES,
+                                              CAN_DLC_VALUE_64_BYTES,
+                                              CAN_DLC_VALUE_64_BYTES,
+                                              CAN_DLC_VALUE_64_BYTES,
+                                              CAN_DLC_VALUE_64_BYTES,
+                                              CAN_DLC_VALUE_64_BYTES,
+                                              CAN_DLC_VALUE_64_BYTES,
+                                              CAN_DLC_VALUE_64_BYTES,
+                                              CAN_DLC_VALUE_64_BYTES,
+                                              CAN_DLC_VALUE_64_BYTES,
+                                              CAN_DLC_VALUE_64_BYTES,
+                                              CAN_DLC_VALUE_64_BYTES,
+                                              CAN_DLC_VALUE_64_BYTES,
+                                              CAN_DLC_VALUE_64_BYTES,
+                                              CAN_DLC_VALUE_64_BYTES };
 
     if (payloadSize <= 64U)
     {
@@ -191,15 +251,10 @@ static uint8_t FLEXCAN_ComputeDLCValue(
     return (uint8_t)ret;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_ComputePayloadSize
- * Description   : Computes the maximum payload size (in bytes), given a DLC
- * field value.
- *
- *END**************************************************************************/
-static uint8_t FLEXCAN_ComputePayloadSize(
-    uint8_t dlcValue)
+/*!
+ * @brief Computes the maximum payload size (in bytes), given a DLC field value.
+ */
+static uint8_t FLEXCAN_ComputePayloadSize(uint8_t dlcValue)
 {
     uint8_t ret = 0U;
 
@@ -209,48 +264,46 @@ static uint8_t FLEXCAN_ComputePayloadSize(
     }
     else
     {
-        switch (dlcValue) {
-        case CAN_DLC_VALUE_12_BYTES:
-            ret = 12U;
-            break;
-        case CAN_DLC_VALUE_16_BYTES:
-            ret = 16U;
-            break;
-        case CAN_DLC_VALUE_20_BYTES:
-            ret = 20U;
-            break;
-        case CAN_DLC_VALUE_24_BYTES:
-            ret = 24U;
-            break;
-        case CAN_DLC_VALUE_32_BYTES:
-            ret = 32U;
-            break;
-        case CAN_DLC_VALUE_48_BYTES:
-            ret = 48U;
-            break;
-        case CAN_DLC_VALUE_64_BYTES:
-            ret = 64U;
-            break;
-        default:
-            /* The argument is not a valid DLC size */
-            break;
+        switch (dlcValue)
+        {
+            case CAN_DLC_VALUE_12_BYTES:
+                ret = 12U;
+                break;
+            case CAN_DLC_VALUE_16_BYTES:
+                ret = 16U;
+                break;
+            case CAN_DLC_VALUE_20_BYTES:
+                ret = 20U;
+                break;
+            case CAN_DLC_VALUE_24_BYTES:
+                ret = 24U;
+                break;
+            case CAN_DLC_VALUE_32_BYTES:
+                ret = 32U;
+                break;
+            case CAN_DLC_VALUE_48_BYTES:
+                ret = 48U;
+                break;
+            case CAN_DLC_VALUE_64_BYTES:
+                ret = 64U;
+                break;
+            default:
+                /* The argument is not a valid DLC size */
+                break;
         }
     }
 
     return ret;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_GetMaxMbNum
- * Description   : Computes the maximum RAM size occupied by MBs.
- *
- *END**************************************************************************/
-uint32_t FLEXCAN_GetMaxMbNum(const CAN_Type * base)
+/*!
+ * @brief Computes the maximum RAM size occupied by MBs.
+ */
+uint32_t FLEXCAN_GetMaxMbNum(const CAN_Type *base)
 {
     uint32_t i = 0;
     uint32_t ret = 0;
-    static CAN_Type * const flexcanBase[] = CAN_BASE_PTRS;
+    static CAN_Type *const flexcanBase[] = CAN_BASE_PTRS;
     static const uint32_t maxMbNum[] = FEATURE_CAN_MAX_MB_NUM_ARRAY;
 
 #if (CAN_INSTANCE_COUNT > 1U)
@@ -266,53 +319,54 @@ uint32_t FLEXCAN_GetMaxMbNum(const CAN_Type * base)
     return ret;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_ClearRAM
- * Description   : Clears FlexCAN memory positions that require initialization.
- *
- *END**************************************************************************/
-static void FLEXCAN_ClearRAM(CAN_Type * base)
+/*!
+ * @brief Clears FlexCAN memory positions that require initialization.
+ */
+static void FLEXCAN_ClearRAM(CAN_Type *base)
 {
     uint32_t databyte;
     uint32_t maxMbNum;
     volatile uint32_t *RAM = base->RAM;
-   
+
     /* Clear RXMGMASK,RX14MASK,RX15MASK,RXFGMASK Regions*/
     base->RXMGMASK = 0xFFFFFFFFU;
     base->RX14MASK = 0xFFFFFFFFU;
     base->RX15MASK = 0xFFFFFFFFU;
     base->RXFGMASK = 0xFFFFFFFFU;
-    
+
     /* Clear MB region */
     /* Get max mailbox number */
     maxMbNum = FLEXCAN_GetMaxMbNum(base);
-    for (databyte = 0U; databyte < (4U * maxMbNum); databyte++) {
+    for (databyte = 0U; databyte < (4U * maxMbNum); databyte++)
+    {
         RAM[databyte] = 0x0U;
     }
 
     /* Clear RX Individual Mask Regions for RXIMRn */
-    for (databyte = 0U; databyte < maxMbNum; databyte++) {
+    for (databyte = 0U; databyte < maxMbNum; databyte++)
+    {
         base->RXIMR[databyte] = 0xFFFFFFFFU;
     }
 
 #if FEATURE_CAN_HAS_ENHANCE_RX_FIFO
     /* Clear enhance fifo filter table if target has enhance fifo feature*/
-    if(FLEXCAN_HasEnhanceRxFIFO(base))
+    if (FLEXCAN_HasEnhanceRxFIFO(base))
     {
         /* Clear enhanced Rx FIFO filter table */
         RAM = (volatile uint32_t *)((uint32_t)base + (uint32_t)FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_OFFSET);
-        for (databyte = 0U; databyte < FEATURE_CAN_ERFFELn_COUNT; databyte++) {
+        for (databyte = 0U; databyte < FEATURE_CAN_ERFFELn_COUNT; databyte++)
+        {
             RAM[databyte] = 0xFFFFFFFFU;
         }
-    } 
+    }
 #endif /* FEATURE_CAN_HAS_ENHANCE_RX_FIFO */
 
 #if FEATURE_CAN_HAS_HR_TIMESTAMP
     /* Clear High-resolution Time Stamp Regions if target has HRTIMESTAMP */
     if (FLEXCAN_HasHRTIMESTAMP(base))
     {
-        for (databyte = 0U; databyte < maxMbNum; databyte++) {
+        for (databyte = 0U; databyte < maxMbNum; databyte++)
+        {
             base->HR_TIME_STAMPn[databyte] = 0x0U;
         }
     }
@@ -322,30 +376,34 @@ static void FLEXCAN_ClearRAM(CAN_Type * base)
     base->CTRL2 = (base->CTRL2 & ~CAN_CTRL2_WRMFRZ_MASK) | CAN_CTRL2_WRMFRZ(1U);
 
     RAM = (volatile uint32_t *)((uint32_t)base + 0xA80U);
-    for (databyte = 0U; databyte < 6U; databyte++) {
+    for (databyte = 0U; databyte < 6U; databyte++)
+    {
         RAM[databyte] = 0x0U;
     }
     /* Clean SMB of Classical CAN */
     RAM = (volatile uint32_t *)((uint32_t)base + 0xAB0U);
-    for (databyte = 0U; databyte < 12U; databyte++) {
+    for (databyte = 0U; databyte < 12U; databyte++)
+    {
         RAM[databyte] = 0x0U;
     }
     /* Clear SMB region in CANFD mode */
     RAM = (volatile uint32_t *)((uint32_t)base + 0xF28U);
-    for (databyte = 0U; databyte < 54U; databyte++) {
+    for (databyte = 0U; databyte < 54U; databyte++)
+    {
         RAM[databyte] = 0x0U;
     }
 
 #if FEATURE_CAN_HAS_ENHANCE_RX_FIFO
     /* Clear enhance fifo if target has enhance fifo feature and ECC on */
-    if(FLEXCAN_HasEnhanceRxFIFO(base))
+    if (FLEXCAN_HasEnhanceRxFIFO(base))
     {
         /* Clear enhanced Rx FIFO data region */
         RAM = (volatile uint32_t *)((uint32_t)base + (uint32_t)FLEXCAN_ENHANCE_RX_FIFO_DATA_REGION_OFFSET);
-        for (databyte = 0U; databyte < (20U * FEATURE_CAN_ENHANCE_RX_FIFO_COUNT); databyte++) {
+        for (databyte = 0U; databyte < (20U * FEATURE_CAN_ENHANCE_RX_FIFO_COUNT); databyte++)
+        {
             RAM[databyte] = 0x0U;
         }
-    } 
+    }
 #endif /* FEATURE_CAN_HAS_ENHANCE_RX_FIFO */
 
 #if FEATURE_CAN_HAS_HR_TIMESTAMP
@@ -367,15 +425,10 @@ static void FLEXCAN_ClearRAM(CAN_Type * base)
  * Code
  ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_GetMsgBuffRegion
- * Description   : Returns the start of a MB area, based on its index.
- *
- *END**************************************************************************/
-volatile uint32_t* FLEXCAN_GetMsgBuffRegion(
-        CAN_Type * base,
-        uint32_t msgBuffIdx)
+/*!
+ * @brief Returns the start of a MB area, based on its index.
+ */
+volatile uint32_t *FLEXCAN_GetMsgBuffRegion(CAN_Type *base, uint32_t msgBuffIdx)
 {
 #if FEATURE_CAN_HAS_FD
     uint8_t payload_size = FLEXCAN_GetPayloadSize(base);
@@ -398,60 +451,50 @@ volatile uint32_t* FLEXCAN_GetMsgBuffRegion(
     return &(base->RAM[mb_index]);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_Enable
- * Description   : Enable FlexCAN module.
- * This function will enable FlexCAN module.
- *
- *END**************************************************************************/
-void FLEXCAN_Enable(CAN_Type * base)
+/*!
+ * @brief Enable FlexCAN module. This function will enable FlexCAN module.
+ */
+void FLEXCAN_Enable(CAN_Type *base)
 {
     /* Check for low power mode */
-    if(((base->MCR & CAN_MCR_LPMACK_MASK) >> CAN_MCR_LPMACK_SHIFT) == 1U)
+    if (((base->MCR & CAN_MCR_LPMACK_MASK) >> CAN_MCR_LPMACK_SHIFT) == 1U)
     {
         /* Enable clock */
         base->MCR = (base->MCR & ~CAN_MCR_MDIS_MASK) | CAN_MCR_MDIS(0U);
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_Disable
- * Description   : Disable FlexCAN module.
- * This function will disable FlexCAN module.
- *
- *END**************************************************************************/
-void FLEXCAN_Disable(CAN_Type * base)
+/*!
+ * @brief Disable FlexCAN module. This function will disable FlexCAN module.
+ */
+void FLEXCAN_Disable(CAN_Type *base)
 {
     /* To access the memory mapped registers */
     /* Entre disable mode (hard reset). */
-    if(((base->MCR & CAN_MCR_MDIS_MASK) >> CAN_MCR_MDIS_SHIFT) == 0U)
+    if (((base->MCR & CAN_MCR_MDIS_MASK) >> CAN_MCR_MDIS_SHIFT) == 0U)
     {
         /* Clock disable (module) */
         base->MCR = (base->MCR & ~CAN_MCR_MDIS_MASK) | CAN_MCR_MDIS(1U);
 
         /* Wait until disable mode acknowledged */
-        while (((base->MCR & CAN_MCR_LPMACK_MASK) >> CAN_MCR_LPMACK_SHIFT) == 0U) {}
+        while (((base->MCR & CAN_MCR_LPMACK_MASK) >> CAN_MCR_LPMACK_SHIFT) == 0U)
+        {
+        }
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_Init
- * Description   : Initialize FlexCAN module.
- * This function will reset FlexCAN module, set maximum number of message
- * buffers, initialize all message buffers as inactive, enable RX FIFO
- * if needed, mask all mask bits, and disable all MB interrupts.
- *
- *END**************************************************************************/
-void FLEXCAN_Init(CAN_Type * base)
-{   
+/*!
+ * @brief Initialize FlexCAN module. This function will reset FlexCAN module, set maximum number of message buffers, initialize all message buffers as inactive, enable RX FIFO if needed, mask all mask bits, and disable all MB interrupts.
+ */
+void FLEXCAN_Init(CAN_Type *base)
+{
     /* Reset the FLEXCAN */
     base->MCR = (base->MCR & ~CAN_MCR_SOFTRST_MASK) | CAN_MCR_SOFTRST(1U);
 
     /* Wait for reset cycle to complete */
-    while (((base->MCR & CAN_MCR_SOFTRST_MASK) >> CAN_MCR_SOFTRST_SHIFT) != 0U) {}
+    while (((base->MCR & CAN_MCR_SOFTRST_MASK) >> CAN_MCR_SOFTRST_SHIFT) != 0U)
+    {
+    }
 
     /* Enable abort */
 #ifndef ERRATA_E9527
@@ -493,23 +536,18 @@ void FLEXCAN_Init(CAN_Type * base)
 }
 
 #if (defined(YTM32B1L_SERIES))
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_DataTransferTxMsgBuff
- * Description   : Transfer Payload data in message buffer, in case of unaligned
- * buffer it makes a byte alignment.
- * This function is private.
- *
- *END**************************************************************************/
+/*!
+ * @brief Transfer Payload data in message buffer, in case of unaligned buffer it makes a byte alignment. This function is private.
+ */
 inline static uint32_t FLEXCAN_DataTransferTxMsgBuff(volatile uint32_t *flexcan_mb_data_32, /* PRQA S 4700, 3206 */
-                                                 const flexcan_msgbuff_code_status_t *cs,
-                                                 const uint8_t *msgData) 
+                                                     const flexcan_msgbuff_code_status_t *cs,
+                                                     const uint8_t *msgData)
 {
     uint32_t databyte;
     const uint32_t *msgData_32 = (const uint32_t *)msgData; /* PRQA S 0310, 3305 */
 
     /* Check if the buffer address is aligned */
-    if (((uint32_t)msgData_32&0x3U) != 0U)
+    if (((uint32_t)msgData_32 & 0x3U) != 0U)
     {
         for (databyte = 0U; databyte < (cs->dataLen & ~3U); databyte += 4U)
         {
@@ -528,24 +566,16 @@ inline static uint32_t FLEXCAN_DataTransferTxMsgBuff(volatile uint32_t *flexcan_
 }
 #endif /* defined(YTM32B1L_SERIES) */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_SetTxMsgBuff
- * Description   : Configure a message buffer for transmission.
- * This function will first check if RX FIFO is enabled. If RX FIFO is enabled,
- * the function will make sure if the MB requested is not occupied by RX FIFO
- * and ID filter table. Then this function will copy user's buffer into the
- * message buffer data area and configure the message buffer as required for
- * transmission.
- *
- *END**************************************************************************/
-status_t FLEXCAN_SetTxMsgBuff( /* PRQA S 4700 */
-    CAN_Type * base,
-    uint32_t msgBuffIdx,
-    const flexcan_msgbuff_code_status_t *cs,
-    uint32_t msgId,
-    const uint8_t *msgData,
-    const bool isRemote)
+/*!
+ * @brief Configure a message buffer for transmission. This function will first check if RX FIFO is enabled. If RX FIFO is enabled, the function will make sure if the MB requested is not occupied by RX FIFO and ID filter table. Then this function will copy user's buffer into the message buffer data area and configure the message buffer as required for transmission.
+ */
+status_t FLEXCAN_SetTxMsgBuff(/* PRQA S 4700 */
+                              CAN_Type *base,
+                              uint32_t msgBuffIdx,
+                              const flexcan_msgbuff_code_status_t *cs,
+                              uint32_t msgId,
+                              const uint8_t *msgData,
+                              const bool isRemote)
 {
     DEV_ASSERT(cs != NULL);
 
@@ -558,12 +588,12 @@ status_t FLEXCAN_SetTxMsgBuff( /* PRQA S 4700 */
 
     volatile uint32_t *flexcan_mb = FLEXCAN_GetMsgBuffRegion(base, msgBuffIdx);
 
-    volatile uint32_t *flexcan_mb_id   = &flexcan_mb[1];
-    volatile uint8_t  *flexcan_mb_data = (volatile uint8_t *)(&flexcan_mb[2]);
+    volatile uint32_t *flexcan_mb_id = &flexcan_mb[1];
+    volatile uint8_t *flexcan_mb_data = (volatile uint8_t *)(&flexcan_mb[2]);
     volatile uint32_t *flexcan_mb_data_32 = &flexcan_mb[2];
     const uint32_t *msgData_32 = (const uint32_t *)msgData; /* PRQA S 0310, 3305 */
 
-    if (msgBuffIdx > (((base->MCR) & CAN_MCR_MAXMB_MASK) >> CAN_MCR_MAXMB_SHIFT) )
+    if (msgBuffIdx > (((base->MCR) & CAN_MCR_MAXMB_MASK) >> CAN_MCR_MAXMB_SHIFT))
     {
         stat = STATUS_CAN_BUFF_OUT_OF_RANGE;
     }
@@ -579,8 +609,9 @@ status_t FLEXCAN_SetTxMsgBuff( /* PRQA S 4700 */
         /* and every 4 number of RX FIFO filters occupied one MB*/
         val2 = RxFifoOcuppiedLastMsgBuff(val1);
 
-        if (msgBuffIdx <= val2) {
-            stat =  STATUS_CAN_BUFF_OUT_OF_RANGE;
+        if (msgBuffIdx <= val2)
+        {
+            stat = STATUS_CAN_BUFF_OUT_OF_RANGE;
         }
     }
 
@@ -607,17 +638,17 @@ status_t FLEXCAN_SetTxMsgBuff( /* PRQA S 4700 */
             uint8_t payload_size = FLEXCAN_ComputePayloadSize(dlc_value);
 
 #if (defined(YTM32B1L_SERIES))
-            (void) msgData_32;
-            databyte = FLEXCAN_DataTransferTxMsgBuff( flexcan_mb_data_32, cs, msgData);
+            (void)msgData_32;
+            databyte = FLEXCAN_DataTransferTxMsgBuff(flexcan_mb_data_32, cs, msgData);
 #else
             for (databyte = 0; databyte < (cs->dataLen & ~3U); databyte += 4U)
             {
                 FlexcanSwapBytesInWord(msgData_32[databyte >> 2U], flexcan_mb_data_32[databyte >> 2U]);
             }
 #endif
-            for ( ; databyte < cs->dataLen; databyte++)
+            for (; databyte < cs->dataLen; databyte++)
             {
-                flexcan_mb_data[FlexcanSwapBytesInWordIndex(databyte)] =  msgData[databyte];
+                flexcan_mb_data[FlexcanSwapBytesInWordIndex(databyte)] = msgData[databyte];
             }
             /* Add padding, if needed */
             for (databyte = cs->dataLen; databyte < payload_size; databyte++)
@@ -640,7 +671,7 @@ status_t FLEXCAN_SetTxMsgBuff( /* PRQA S 4700 */
             /* Set IDE and SRR bit*/
             flexcan_mb_config |= CAN_CS_IDE_MASK | CAN_CS_SRR_MASK;
         }
-        if(cs->msgIdType == FLEXCAN_MSG_ID_STD)
+        if (cs->msgIdType == FLEXCAN_MSG_ID_STD)
         {
             /* ID[28-18] */
             *flexcan_mb_id &= ~CAN_ID_STD_MASK;
@@ -692,14 +723,10 @@ status_t FLEXCAN_SetTxMsgBuff( /* PRQA S 4700 */
     return stat;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_AbortTxMsgBuff
- * Description   : Writes the abort code into the CODE field of the requested
- * Tx message buffer.
- *
- *END**************************************************************************/
-void FLEXCAN_AbortTxMsgBuff(CAN_Type * base, uint32_t msgBuffIdx)
+/*!
+ * @brief Writes the abort code into the CODE field of the requested Tx message buffer.
+ */
+void FLEXCAN_AbortTxMsgBuff(CAN_Type *base, uint32_t msgBuffIdx)
 {
     uint32_t flexcan_mb_config = 0;
     uint32_t code = FLEXCAN_TX_ABORT;
@@ -720,14 +747,10 @@ void FLEXCAN_AbortTxMsgBuff(CAN_Type * base, uint32_t msgBuffIdx)
     *flexcan_mb = flexcan_mb_config;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_ResetRxMsgBuff
- * Description   : Writes the Inactive Rx code into the CODE field of the requested
- * Rx message buffer and restore the MB to active Rx. This will force even the unlock of the RxMB.
- *
- *END**************************************************************************/
-void FLEXCAN_ResetRxMsgBuff(CAN_Type * base, uint32_t msgBuffIdx)
+/*!
+ * @brief Writes the Inactive Rx code into the CODE field of the requested Rx message buffer and restore the MB to active Rx. This will force even the unlock of the RxMB.
+ */
+void FLEXCAN_ResetRxMsgBuff(CAN_Type *base, uint32_t msgBuffIdx)
 {
     uint32_t flexcan_mb_config = 0U;
     uint32_t code = FLEXCAN_RX_INACTIVE;
@@ -747,28 +770,18 @@ void FLEXCAN_ResetRxMsgBuff(CAN_Type * base, uint32_t msgBuffIdx)
     *flexcan_mb = flexcan_mb_config;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_SetRxMsgBuff
- * Description   : Configure a message buffer for receiving.
- * This function will first check if RX FIFO is enabled. If RX FIFO is enabled,
- * the function will make sure if the MB requested is not occupied by RX FIFO
- * and ID filter table. Then this function will configure the message buffer as
- * required for receiving.
- *
- *END**************************************************************************/
-status_t FLEXCAN_SetRxMsgBuff(
-    CAN_Type * base,
-    uint32_t msgBuffIdx,
-    const flexcan_msgbuff_code_status_t *cs,
-    uint32_t msgId)
+/*!
+ * @brief Configure a message buffer for receiving. This function will first check if RX FIFO is enabled. If RX FIFO is enabled, the function will make sure if the MB requested is not occupied by RX FIFO and ID filter table. Then this function will configure the message buffer as required for receiving.
+ */
+status_t
+FLEXCAN_SetRxMsgBuff(CAN_Type *base, uint32_t msgBuffIdx, const flexcan_msgbuff_code_status_t *cs, uint32_t msgId)
 {
     DEV_ASSERT(cs != NULL);
 
     uint32_t val1;
     uint32_t val2;
     uint32_t flexcan_mb_config = 0;
-    
+
     volatile uint32_t *flexcan_mb = FLEXCAN_GetMsgBuffRegion(base, msgBuffIdx);
     volatile uint32_t *flexcan_mb_id = &flexcan_mb[1];
     status_t stat = STATUS_SUCCESS;
@@ -789,8 +802,9 @@ status_t FLEXCAN_SetRxMsgBuff(
         /* and every 4 number of RX FIFO filters occupied one MB*/
         val2 = RxFifoOcuppiedLastMsgBuff(val1);
 
-        if (msgBuffIdx <= val2) {
-            stat =  STATUS_CAN_BUFF_OUT_OF_RANGE;
+        if (msgBuffIdx <= val2)
+        {
+            stat = STATUS_CAN_BUFF_OUT_OF_RANGE;
         }
     }
 
@@ -834,28 +848,21 @@ status_t FLEXCAN_SetRxMsgBuff(
     return stat;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_GetMsgBuff
- * Description   : Get a message buffer field values.
- * This function will first check if RX FIFO is enabled. If RX FIFO is enabled,
- * the function will make sure if the MB requested is not occupied by RX FIFO
- * and ID filter table. Then this function will get the message buffer field
- * values and copy the MB data field into user's buffer.
- *
- *END**************************************************************************/
-void FLEXCAN_GetMsgBuff(  /* PRQA S 4700 */
-    CAN_Type * base,
-    uint32_t msgBuffIdx,
-    flexcan_msgbuff_t *msgBuff)  
+/*!
+ * @brief Get a message buffer field values. This function will first check if RX FIFO is enabled. If RX FIFO is enabled, the function will make sure if the MB requested is not occupied by RX FIFO and ID filter table. Then this function will get the message buffer field values and copy the MB data field into user's buffer.
+ */
+void FLEXCAN_GetMsgBuff(/* PRQA S 4700 */
+                        CAN_Type *base,
+                        uint32_t msgBuffIdx,
+                        flexcan_msgbuff_t *msgBuff)
 {
     DEV_ASSERT(msgBuff != NULL);
 
     uint8_t i;
 
     volatile const uint32_t *flexcan_mb = FLEXCAN_GetMsgBuffRegion(base, msgBuffIdx);
-    volatile const uint32_t *flexcan_mb_id   = &flexcan_mb[1];
-    volatile const uint8_t  *flexcan_mb_data = (volatile const uint8_t *)(&flexcan_mb[2]);
+    volatile const uint32_t *flexcan_mb_id = &flexcan_mb[1];
+    volatile const uint8_t *flexcan_mb_data = (volatile const uint8_t *)(&flexcan_mb[2]);
     volatile const uint32_t *flexcan_mb_data_32 = &flexcan_mb[2];
     uint32_t *msgBuff_data_32 = (uint32_t *)(msgBuff->data); /* PRQA S 0310, 3305 */
     uint32_t mbWord;
@@ -885,54 +892,48 @@ void FLEXCAN_GetMsgBuff(  /* PRQA S 4700 */
     }
 #if (defined(YTM32B1L_SERIES))
     /* Check if the buffer address is aligned */
-    if (((uint32_t)msgBuff_data_32&0x3U) != 0U)
+    if (((uint32_t)msgBuff_data_32 & 0x3U) != 0U)
     {
         /* Copy MB data field into user's buffer */
-        for (i = 0U ; i < (payload_size & ~3U); i += 4U)
+        for (i = 0U; i < (payload_size & ~3U); i += 4U)
         {
             mbWord = flexcan_mb_data_32[i >> 2U];
             uint8_t index;
             uint32_t x;
-            const uint8_t * p;
+            const uint8_t *p;
             FlexcanSwapBytesInWord(mbWord, x);
             p = (uint8_t *)&x;
-            for (index=0; index < 4U; index++)
+            for (index = 0; index < 4U; index++)
             {
-                msgBuff->data[i+index]= p[index];
+                msgBuff->data[i + index] = p[index];
             }
         }
     }
     else
     {
-        for (i = 0U ; i < (payload_size & ~3U); i += 4U)
+        for (i = 0U; i < (payload_size & ~3U); i += 4U)
         {
             mbWord = flexcan_mb_data_32[i >> 2U]; /* PRQA S 2983 */
             FlexcanSwapBytesInWord(mbWord, msgBuff_data_32[i >> 2U]);
         }
     }
 #else
-    for (i = 0U ; i < (payload_size & ~3U); i += 4U)
+    for (i = 0U; i < (payload_size & ~3U); i += 4U)
     {
         mbWord = flexcan_mb_data_32[i >> 2U]; /* PRQA S 2983 */
         FlexcanSwapBytesInWord(mbWord, msgBuff_data_32[i >> 2U]);
     }
 #endif
-    for ( ; i < payload_size ; i++)
-    {   /* Max allowed value for index is 63 */
+    for (; i < payload_size; i++)
+    { /* Max allowed value for index is 63 */
         msgBuff->data[i] = flexcan_mb_data[FlexcanSwapBytesInWordIndex(i)];
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_LockRxMsgBuff
- * Description   : Lock the RX message buffer.
- * This function will lock the RX message buffer.
- *
- *END**************************************************************************/
-void FLEXCAN_LockRxMsgBuff(
-    CAN_Type * base,
-    uint32_t msgBuffIdx)
+/*!
+ * @brief Lock the RX message buffer. This function will lock the RX message buffer.
+ */
+void FLEXCAN_LockRxMsgBuff(CAN_Type *base, uint32_t msgBuffIdx)
 {
     volatile const uint32_t *flexcan_mb = FLEXCAN_GetMsgBuffRegion(base, msgBuffIdx);
 
@@ -940,14 +941,10 @@ void FLEXCAN_LockRxMsgBuff(
     (void)*flexcan_mb;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_EnableRxFifo
- * Description   : Enable Rx FIFO feature.
- * This function will enable the Rx FIFO feature.
- *
- *END**************************************************************************/
-status_t FLEXCAN_EnableRxFifo(CAN_Type * base, uint32_t numOfFilters)
+/*!
+ * @brief Enable Rx FIFO feature. This function will enable the Rx FIFO feature.
+ */
+status_t FLEXCAN_EnableRxFifo(CAN_Type *base, uint32_t numOfFilters)
 {
     uint32_t i;
     uint16_t noOfMbx = (uint16_t)FLEXCAN_GetMaxMbNum(base);
@@ -966,13 +963,14 @@ status_t FLEXCAN_EnableRxFifo(CAN_Type * base, uint32_t numOfFilters)
         /* Enable RX FIFO */
         base->MCR = (base->MCR & ~CAN_MCR_RFEN_MASK) | CAN_MCR_RFEN(1U);
         /* Set the number of the RX FIFO filters needed */
-        base->CTRL2 = (base->CTRL2 & ~CAN_CTRL2_RFFN_MASK) | ((numOfFilters << CAN_CTRL2_RFFN_SHIFT) & CAN_CTRL2_RFFN_MASK);
+        base->CTRL2 = (base->CTRL2 & ~CAN_CTRL2_RFFN_MASK) |
+                      ((numOfFilters << CAN_CTRL2_RFFN_SHIFT) & CAN_CTRL2_RFFN_MASK);
         /* RX FIFO global mask, take in consideration all filter fields*/
         (base->RXFGMASK) = CAN_RXFGMASK_FGM_MASK;
 
         for (i = (uint32_t)0; i < noOfMbx; i++)
         {
-            if(i < ((numOfFilters + (uint32_t)1)* (uint32_t)8))
+            if (i < ((numOfFilters + (uint32_t)1) * (uint32_t)8))
             {
                 /* RX fifo individual mask */
                 base->RXIMR[i] = CAN_RXIMR_MI_MASK;
@@ -989,13 +987,9 @@ status_t FLEXCAN_EnableRxFifo(CAN_Type * base, uint32_t numOfFilters)
 }
 
 #if FEATURE_CAN_HAS_ENHANCE_RX_FIFO
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_EnableEnhanceRxFifo
- * Description   : Enable enhanced Rx FIFO feature.
- * This function will enable the enhanced Rx FIFO feature.
- *
- *END**************************************************************************/
+/*!
+ * @brief Enable enhanced Rx FIFO feature. This function will enable the enhanced Rx FIFO feature.
+ */
 status_t FLEXCAN_EnableEnhanceRxFifo(CAN_Type *base, uint32_t numOfFilters, uint32_t numOfExtendedIDFilters)
 {
     status_t stat = STATUS_ERROR;
@@ -1021,9 +1015,11 @@ status_t FLEXCAN_EnableEnhanceRxFifo(CAN_Type *base, uint32_t numOfFilters, uint
             base->ERFSR = (base->ERFSR & ~CAN_ERFSR_ERFWMI_MASK) | CAN_ERFSR_ERFWMI(1U);
             base->ERFSR = (base->ERFSR & ~CAN_ERFSR_ERFDA_MASK) | CAN_ERFSR_ERFDA(1U);
             /* Set the number of the enhance RX FIFO filters needed */
-            base->ERFCR = (base->ERFCR & ~CAN_ERFCR_NFE_MASK) | ((numOfFilters << CAN_ERFCR_NFE_SHIFT) & CAN_ERFCR_NFE_MASK);
+            base->ERFCR = (base->ERFCR & ~CAN_ERFCR_NFE_MASK) |
+                          ((numOfFilters << CAN_ERFCR_NFE_SHIFT) & CAN_ERFCR_NFE_MASK);
             /* Set the extended ID filter number of the enhance RX FIFO needed */
-            base->ERFCR = (base->ERFCR & ~CAN_ERFCR_NEXIF_MASK) | ((numOfExtendedIDFilters << CAN_ERFCR_NEXIF_SHIFT) & CAN_ERFCR_NEXIF_MASK);
+            base->ERFCR = (base->ERFCR & ~CAN_ERFCR_NEXIF_MASK) |
+                          ((numOfExtendedIDFilters << CAN_ERFCR_NEXIF_SHIFT) & CAN_ERFCR_NEXIF_MASK);
             stat = STATUS_SUCCESS;
         }
     }
@@ -1031,13 +1027,9 @@ status_t FLEXCAN_EnableEnhanceRxFifo(CAN_Type *base, uint32_t numOfFilters, uint
     return stat;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_SetEnhanceRxFifoWatermark
- * Description   : Set enhanced Rx FIFO watermark value.
- * This function will set the enhanced Rx FIFO watermark value.
- *
- *END**************************************************************************/
+/*!
+ * @brief Set enhanced Rx FIFO watermark value. This function will set the enhanced Rx FIFO watermark value.
+ */
 status_t FLEXCAN_SetEnhanceRxFifoWatermark(CAN_Type *base, uint32_t watermark)
 {
     status_t stat = STATUS_ERROR;
@@ -1052,7 +1044,8 @@ status_t FLEXCAN_SetEnhanceRxFifoWatermark(CAN_Type *base, uint32_t watermark)
         else
         {
             /* Set the enhanced Rx FIFO Watermark */
-            base->ERFCR = (base->ERFCR & ~CAN_ERFCR_ERFWM_MASK) | ((watermark << CAN_ERFCR_ERFWM_SHIFT) & CAN_ERFCR_ERFWM_MASK);  /* PRQA S 2985 */
+            base->ERFCR = (base->ERFCR & ~CAN_ERFCR_ERFWM_MASK) |
+                          ((watermark << CAN_ERFCR_ERFWM_SHIFT) & CAN_ERFCR_ERFWM_MASK); /* PRQA S 2985 */
             stat = STATUS_SUCCESS;
         }
     }
@@ -1060,16 +1053,12 @@ status_t FLEXCAN_SetEnhanceRxFifoWatermark(CAN_Type *base, uint32_t watermark)
 }
 #endif /* FEATURE_CAN_HAS_ENHANCE_RX_FIFO */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_SetMaxMsgBuffNum
- * Description   : Set the number of the last Message Buffers.
- * This function will define the number of the last Message Buffers
- *
- *END**************************************************************************/
-status_t FLEXCAN_SetMaxMsgBuffNum(   /* PRQA S 4700 */
-    CAN_Type * base,
-    uint32_t maxMsgBuffNum)
+/*!
+ * @brief Set the number of the last Message Buffers. This function will define the number of the last Message Buffers
+ */
+status_t FLEXCAN_SetMaxMsgBuffNum(/* PRQA S 4700 */
+                                  CAN_Type *base,
+                                  uint32_t maxMsgBuffNum)
 {
     uint8_t msgBuffIdx;
     uint32_t databyte;
@@ -1103,11 +1092,12 @@ status_t FLEXCAN_SetMaxMsgBuffNum(   /* PRQA S 4700 */
     if (status == STATUS_SUCCESS)
     {
         /* Set the maximum number of MBs*/
-        base->MCR = (base->MCR & ~CAN_MCR_MAXMB_MASK) | (((maxMsgBuffNum - 1U) << CAN_MCR_MAXMB_SHIFT) & CAN_MCR_MAXMB_MASK); /*PRQA S 2985*/
+        base->MCR = (base->MCR & ~CAN_MCR_MAXMB_MASK) |
+                    (((maxMsgBuffNum - 1U) << CAN_MCR_MAXMB_SHIFT) & CAN_MCR_MAXMB_MASK); /*PRQA S 2985*/
         isRxFifoEnabled = FLEXCAN_IsRxFifoEnabled(base);
 #if FEATURE_CAN_HAS_ENHANCE_RX_FIFO
         hasEnhanceRxFIFO = FLEXCAN_HasEnhanceRxFIFO(base);
-        if(hasEnhanceRxFIFO == true)
+        if (hasEnhanceRxFIFO == true)
         {
             isEnhanceRxFifoEnabled = FLEXCAN_IsEnhanceRxFifoEnabled(base);
         }
@@ -1139,16 +1129,12 @@ status_t FLEXCAN_SetMaxMsgBuffNum(   /* PRQA S 4700 */
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_SetRxFifoFilter
- * Description   : Configure RX FIFO ID filter table elements.
- *
- *END**************************************************************************/
-void FLEXCAN_SetRxFifoFilter(
-    CAN_Type * base,
-    flexcan_rx_fifo_id_element_format_t idFormat,
-    const flexcan_id_table_t *idFilterTable)
+/*!
+ * @brief Configure RX FIFO ID filter table elements.
+ */
+void FLEXCAN_SetRxFifoFilter(CAN_Type *base,
+                             flexcan_rx_fifo_id_element_format_t idFormat,
+                             const flexcan_id_table_t *idFilterTable)
 {
     DEV_ASSERT(idFilterTable != NULL);
 
@@ -1160,11 +1146,13 @@ void FLEXCAN_SetRxFifoFilter(
 
     numOfFilters = (((base->CTRL2) & CAN_CTRL2_RFFN_MASK) >> CAN_CTRL2_RFFN_SHIFT);
 
-    switch(idFormat)
+    switch (idFormat)
     {
         case (FLEXCAN_RX_FIFO_ID_FORMAT_A):
             /* One full ID (standard and extended) per ID Filter Table element.*/
-            (base->MCR) = (((base->MCR) & ~(CAN_MCR_IDAM_MASK)) | ( (((uint32_t)(((uint32_t)(FLEXCAN_RX_FIFO_ID_FORMAT_A))<<CAN_MCR_IDAM_SHIFT))&CAN_MCR_IDAM_MASK)));
+            (base->MCR) =
+                (((base->MCR) & ~(CAN_MCR_IDAM_MASK)) |
+                 ((((uint32_t)(((uint32_t)(FLEXCAN_RX_FIFO_ID_FORMAT_A)) << CAN_MCR_IDAM_SHIFT)) & CAN_MCR_IDAM_MASK)));
 
             for (i = 0; i < RxFifoFilterElementNum(numOfFilters); i++)
             {
@@ -1174,25 +1162,25 @@ void FLEXCAN_SetRxFifoFilter(
                 {
                     val = FlexCanRxFifoAcceptRemoteFrame << FLEXCAN_RX_FIFO_ID_FILTER_FORMATAB_RTR_SHIFT;
                 }
-                if(idFilterTable[i].isExtendedFrame)
+                if (idFilterTable[i].isExtendedFrame)
                 {
                     val |= FlexCanRxFifoAcceptExtFrame << FLEXCAN_RX_FIFO_ID_FILTER_FORMATAB_IDE_SHIFT;
-                    filterTable[i] = val + ((idFilterTable[i].id <<
-                                             FLEXCAN_RX_FIFO_ID_FILTER_FORMATA_EXT_SHIFT) &
-                                             FLEXCAN_RX_FIFO_ID_FILTER_FORMATA_EXT_MASK);
+                    filterTable[i] = val + ((idFilterTable[i].id << FLEXCAN_RX_FIFO_ID_FILTER_FORMATA_EXT_SHIFT) &
+                                            FLEXCAN_RX_FIFO_ID_FILTER_FORMATA_EXT_MASK);
                 }
                 else
                 {
-                    filterTable[i] = val + ((idFilterTable[i].id <<
-                                             FLEXCAN_RX_FIFO_ID_FILTER_FORMATA_STD_SHIFT) &
-                                             FLEXCAN_RX_FIFO_ID_FILTER_FORMATA_STD_MASK);
+                    filterTable[i] = val + ((idFilterTable[i].id << FLEXCAN_RX_FIFO_ID_FILTER_FORMATA_STD_SHIFT) &
+                                            FLEXCAN_RX_FIFO_ID_FILTER_FORMATA_STD_MASK);
                 }
             }
             break;
         case (FLEXCAN_RX_FIFO_ID_FORMAT_B):
             /* Two full standard IDs or two partial 14-bit (standard and extended) IDs*/
             /* per ID Filter Table element.*/
-           (base->MCR) = (((base->MCR) & ~(CAN_MCR_IDAM_MASK)) | ( (((uint32_t)(((uint32_t)(FLEXCAN_RX_FIFO_ID_FORMAT_B))<<CAN_MCR_IDAM_SHIFT))&CAN_MCR_IDAM_MASK)));
+            (base->MCR) =
+                (((base->MCR) & ~(CAN_MCR_IDAM_MASK)) |
+                 ((((uint32_t)(((uint32_t)(FLEXCAN_RX_FIFO_ID_FORMAT_B)) << CAN_MCR_IDAM_SHIFT)) & CAN_MCR_IDAM_MASK)));
 
             j = 0;
             for (i = 0; i < RxFifoFilterElementNum(numOfFilters); i++)
@@ -1212,103 +1200,99 @@ void FLEXCAN_SetRxFifoFilter(
                 {
                     val1 |= FlexCanRxFifoAcceptExtFrame << FLEXCAN_RX_FIFO_ID_FILTER_FORMATAB_IDE_SHIFT;
 
-                    filterTable[i] = val1 + (((idFilterTable[j].id &
-                                               FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_EXT_MASK) >>
-                                               FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_EXT_CMP_SHIFT) <<
-                                               FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_EXT_SHIFT1);
+                    filterTable[i] = val1 + (((idFilterTable[j].id & FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_EXT_MASK) >>
+                                              FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_EXT_CMP_SHIFT)
+                                             << FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_EXT_SHIFT1);
                 }
                 else
                 {
-                    filterTable[i] = val1 + ((idFilterTable[j].id &
-                                              FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_STD_MASK) <<
-                                              FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_STD_SHIFT1);
+                    filterTable[i] = val1 + ((idFilterTable[j].id & FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_STD_MASK)
+                                             << FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_STD_SHIFT1);
                 }
                 if (idFilterTable[j + 1U].isExtendedFrame)
                 {
                     val2 |= FlexCanRxFifoAcceptExtFrame << FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_IDE_SHIFT;
 
-                    filterTable[i] |= val2 + (((idFilterTable[j + 1U].id &
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_EXT_MASK) >>
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_EXT_CMP_SHIFT) << /* PRQA S 2985 */
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_EXT_SHIFT2); 
+                    filterTable[i] |=
+                        val2 + (((idFilterTable[j + 1U].id & FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_EXT_MASK) >>
+                                 FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_EXT_CMP_SHIFT)
+                                << /* PRQA S 2985 */
+                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_EXT_SHIFT2);
                 }
                 else
                 {
-                    filterTable[i] |= val2 + ((idFilterTable[j + 1U].id &
-                                               FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_STD_MASK) <<
-                                               FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_STD_SHIFT2);
+                    filterTable[i] |= val2 + ((idFilterTable[j + 1U].id & FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_STD_MASK)
+                                              << FLEXCAN_RX_FIFO_ID_FILTER_FORMATB_STD_SHIFT2);
                 }
                 j = j + 2U;
             }
             break;
         case (FLEXCAN_RX_FIFO_ID_FORMAT_C):
             /* Four partial 8-bit Standard IDs per ID Filter Table element.*/
-            (base->MCR) = (((base->MCR) & ~(CAN_MCR_IDAM_MASK)) | ( (((uint32_t)(((uint32_t)(FLEXCAN_RX_FIFO_ID_FORMAT_C))<<CAN_MCR_IDAM_SHIFT))&CAN_MCR_IDAM_MASK)));
+            (base->MCR) =
+                (((base->MCR) & ~(CAN_MCR_IDAM_MASK)) |
+                 ((((uint32_t)(((uint32_t)(FLEXCAN_RX_FIFO_ID_FORMAT_C)) << CAN_MCR_IDAM_SHIFT)) & CAN_MCR_IDAM_MASK)));
             j = 0;
             for (i = 0; i < RxFifoFilterElementNum(numOfFilters); i++)
             {
                 if (idFilterTable[j].isExtendedFrame)
                 {
-                    filterTable[i] |= (((idFilterTable[j].id &
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_EXT_MASK) >>
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_EXT_CMP_SHIFT) <<
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_SHIFT1); 
+                    filterTable[i] |= (((idFilterTable[j].id & FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_EXT_MASK) >>
+                                        FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_EXT_CMP_SHIFT)
+                                       << FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_SHIFT1);
                 }
                 else
                 {
-                    filterTable[i] |= (((idFilterTable[j].id &
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_STD_MASK) >>
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_STD_CMP_SHIFT) <<
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_SHIFT1);
+                    filterTable[i] |= (((idFilterTable[j].id & FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_STD_MASK) >>
+                                        FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_STD_CMP_SHIFT)
+                                       << FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_SHIFT1);
                 }
                 if (idFilterTable[j + 1U].isExtendedFrame)
                 {
-                    filterTable[i] |= (((idFilterTable[j + 1U].id &
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_EXT_MASK) >>
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_EXT_CMP_SHIFT) <<
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_SHIFT2); 
+                    filterTable[i] |= (((idFilterTable[j + 1U].id & FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_EXT_MASK) >>
+                                        FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_EXT_CMP_SHIFT)
+                                       << FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_SHIFT2);
                 }
                 else
                 {
-                    filterTable[i] |= (((idFilterTable[j + 1U].id &
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_STD_MASK) >>
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_STD_CMP_SHIFT) <<
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_SHIFT2);
+                    filterTable[i] |= (((idFilterTable[j + 1U].id & FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_STD_MASK) >>
+                                        FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_STD_CMP_SHIFT)
+                                       << FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_SHIFT2);
                 }
                 if (idFilterTable[j + 2U].isExtendedFrame)
                 {
-                    filterTable[i] |= (((idFilterTable[j + 2U].id &
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_EXT_MASK) >>
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_EXT_CMP_SHIFT) <<
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_SHIFT3);
+                    filterTable[i] |= (((idFilterTable[j + 2U].id & FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_EXT_MASK) >>
+                                        FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_EXT_CMP_SHIFT)
+                                       << FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_SHIFT3);
                 }
                 else
                 {
-                    filterTable[i] |= (((idFilterTable[j + 2U].id &
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_STD_MASK) >>
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_STD_CMP_SHIFT) <<
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_SHIFT3); 
+                    filterTable[i] |= (((idFilterTable[j + 2U].id & FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_STD_MASK) >>
+                                        FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_STD_CMP_SHIFT)
+                                       << FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_SHIFT3);
                 }
                 if (idFilterTable[j + 3U].isExtendedFrame)
                 {
-                    filterTable[i] |= (((idFilterTable[j + 3U].id &
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_EXT_MASK) >>
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_EXT_CMP_SHIFT) <<  /* PRQA S 2985 */
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_SHIFT4); 
+                    filterTable[i] |= (((idFilterTable[j + 3U].id & FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_EXT_MASK) >>
+                                        FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_EXT_CMP_SHIFT)
+                                       << /* PRQA S 2985 */
+                                       FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_SHIFT4);
                 }
                 else
                 {
-                    filterTable[i] |= (((idFilterTable[j + 3U].id &
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_STD_MASK) >>
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_STD_CMP_SHIFT) <<  /* PRQA S 2985 */
-                                                FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_SHIFT4);
+                    filterTable[i] |= (((idFilterTable[j + 3U].id & FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_STD_MASK) >>
+                                        FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_STD_CMP_SHIFT)
+                                       << /* PRQA S 2985 */
+                                       FLEXCAN_RX_FIFO_ID_FILTER_FORMATC_SHIFT4);
                 }
                 j = j + 4U;
             }
             break;
         case (FLEXCAN_RX_FIFO_ID_FORMAT_D):
             /* All frames rejected.*/
-            (base->MCR) = (((base->MCR) & ~(CAN_MCR_IDAM_MASK)) | ( (((uint32_t)(((uint32_t)(FLEXCAN_RX_FIFO_ID_FORMAT_D))<<CAN_MCR_IDAM_SHIFT))&CAN_MCR_IDAM_MASK)));
+            (base->MCR) =
+                (((base->MCR) & ~(CAN_MCR_IDAM_MASK)) |
+                 ((((uint32_t)(((uint32_t)(FLEXCAN_RX_FIFO_ID_FORMAT_D)) << CAN_MCR_IDAM_SHIFT)) & CAN_MCR_IDAM_MASK)));
             break;
         default:
             /* Should not get here */
@@ -1317,16 +1301,12 @@ void FLEXCAN_SetRxFifoFilter(
 }
 
 #if FEATURE_CAN_HAS_ENHANCE_RX_FIFO
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_SetEnchanceRxFifoFilter
- * Description   : Configure enhanced RX FIFO ID filter table elements.
- *
- *END**************************************************************************/
-void FLEXCAN_SetEnchanceRxFifoFilter(
-    CAN_Type * base,
-    const flexcan_enhance_rx_fifo_filter_table_t *idfilterTable,
-    uint8_t idfilterTableLength)
+/*!
+ * @brief Configure enhanced RX FIFO ID filter table elements.
+ */
+void FLEXCAN_SetEnchanceRxFifoFilter(CAN_Type *base,
+                                     const flexcan_enhance_rx_fifo_filter_table_t *idfilterTable,
+                                     uint8_t idfilterTableLength)
 {
     DEV_ASSERT(idfilterTable != NULL);
 
@@ -1337,10 +1317,11 @@ void FLEXCAN_SetEnchanceRxFifoFilter(
     numOfExtendedIdFilters = (((base->ERFCR) & CAN_ERFCR_NEXIF_MASK) >> CAN_ERFCR_NEXIF_SHIFT);
     numOfStandardIdFilters = (numOfFilters - numOfExtendedIdFilters) * 2U;
     rel_numOfStandardIdFilters = (uint32_t)idfilterTableLength - numOfExtendedIdFilters;
- 
+
     uint32_t *extIdTablePtr, *stdIdTablePtr;
-    extIdTablePtr = (uint32_t *)base + (FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_OFFSET / 4U);   /* PRQA S 0310, 0488 */
-    stdIdTablePtr = (uint32_t *)base + ((FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_OFFSET / 4U) + (numOfExtendedIdFilters * 2UL));  /* PRQA S 0310, 0488 */
+    extIdTablePtr = (uint32_t *)base + (FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_OFFSET / 4U); /* PRQA S 0310, 0488 */
+    stdIdTablePtr = (uint32_t *)base + ((FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_OFFSET / 4U) +
+                                        (numOfExtendedIdFilters * 2UL)); /* PRQA S 0310, 0488 */
 
     idfilterPtr = idfilterTable;
 
@@ -1350,14 +1331,18 @@ void FLEXCAN_SetEnchanceRxFifoFilter(
         if (idfilterPtr->isExtendedFrame)
         {
             *extIdTablePtr = ((*extIdTablePtr) & ~(FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_FSCH_MASK)) |
-                             (((uint32_t)(idfilterPtr->filterScheme) << FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_FSCH_SHIFT) &  /* PRQA S 2985 */
+                             (((uint32_t)(idfilterPtr->filterScheme)
+                               << FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_FSCH_SHIFT) & /* PRQA S 2985 */
                               FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_FSCH_MASK);
             *extIdTablePtr = ((*extIdTablePtr) & ~(FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_EXTID_FILTER_MASK)) |
-                             ((idfilterPtr->filter_table.scheme_filter_mask.filter << FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_EXTID_FILTER_SHIFT) &   /* PRQA S 2985 */
+                             ((idfilterPtr->filter_table.scheme_filter_mask.filter
+                               << FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_EXTID_FILTER_SHIFT) & /* PRQA S 2985 */
                               FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_EXTID_FILTER_MASK);
-            *(extIdTablePtr + 1U) = ((*(extIdTablePtr + 1)) & ~(FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_EXTID_MASK_MASK)) |  /* PRQA S 0489 */
-                                   ((idfilterPtr->filter_table.scheme_filter_mask.mask << FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_EXTID_MASK_SHIFT) &  /* PRQA S 2985 */
-                                    FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_EXTID_MASK_MASK);
+            *(extIdTablePtr + 1U) =
+                ((*(extIdTablePtr + 1)) & ~(FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_EXTID_MASK_MASK)) | /* PRQA S 0489 */
+                ((idfilterPtr->filter_table.scheme_filter_mask.mask
+                  << FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_EXTID_MASK_SHIFT) & /* PRQA S 2985 */
+                 FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_EXTID_MASK_MASK);
             if (idfilterPtr->isRemoteFrame)
             {
                 /* Set RTR mask, set RTR fliter */
@@ -1368,7 +1353,7 @@ void FLEXCAN_SetEnchanceRxFifoFilter(
             {
                 /* If mask filter mdoe or range filter mode , set RTR mask, if double filter mode, clear RTR filter */
                 *(extIdTablePtr) &= ~FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_EXTID_RTRFILTER_MASK;
-                if(FLEXCAN_ENAHNCE_RXFIFO_FSCH_DOUBLE_FILTER != idfilterPtr->filterScheme)
+                if (FLEXCAN_ENAHNCE_RXFIFO_FSCH_DOUBLE_FILTER != idfilterPtr->filterScheme)
                 {
                     *(extIdTablePtr + 1U) |= FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_EXTID_RTRMASK_MASK; /* PRQA S 0489 */
                 }
@@ -1389,13 +1374,16 @@ void FLEXCAN_SetEnchanceRxFifoFilter(
         if (!idfilterPtr->isExtendedFrame)
         {
             *stdIdTablePtr = ((*stdIdTablePtr) & ~(FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_FSCH_MASK)) |
-                             (((uint32_t)(idfilterPtr->filterScheme) << FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_FSCH_SHIFT) &  /* PRQA S 2985 */
+                             (((uint32_t)(idfilterPtr->filterScheme)
+                               << FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_FSCH_SHIFT) & /* PRQA S 2985 */
                               FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_FSCH_MASK);
             *stdIdTablePtr = ((*stdIdTablePtr) & ~(FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_STDID_FILTER_MASK)) |
-                             ((idfilterPtr->filter_table.scheme_filter_mask.filter << FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_STDID_FILTER_SHIFT) &
+                             ((idfilterPtr->filter_table.scheme_filter_mask.filter
+                               << FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_STDID_FILTER_SHIFT) &
                               FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_STDID_FILTER_MASK);
             *stdIdTablePtr = ((*stdIdTablePtr) & ~(FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_STDID_MASK_MASK)) |
-                             ((idfilterPtr->filter_table.scheme_filter_mask.mask << FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_STDID_MASK_SHIFT) &  /* PRQA S 2985 */
+                             ((idfilterPtr->filter_table.scheme_filter_mask.mask
+                               << FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_STDID_MASK_SHIFT) & /* PRQA S 2985 */
                               FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_STDID_MASK_MASK);
             if (idfilterPtr->isRemoteFrame)
             {
@@ -1407,7 +1395,7 @@ void FLEXCAN_SetEnchanceRxFifoFilter(
             {
                 /* If mask filter mdoe or range filter mode , set RTR mask, if double filter mode, clear RTR filter */
                 *stdIdTablePtr &= ~FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_STDID_RTRFILTER_MASK;
-                if(FLEXCAN_ENAHNCE_RXFIFO_FSCH_DOUBLE_FILTER != idfilterPtr->filterScheme)
+                if (FLEXCAN_ENAHNCE_RXFIFO_FSCH_DOUBLE_FILTER != idfilterPtr->filterScheme)
                 {
                     *stdIdTablePtr |= FLEXCAN_ENHANCE_RX_FIFO_ERFFEL_STDID_RTRMASK_MASK;
                 }
@@ -1430,15 +1418,10 @@ void FLEXCAN_SetEnchanceRxFifoFilter(
 }
 #endif /* FEATURE_CAN_HAS_ENHANCE_RX_FIFO */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_SetMsgBuffIntCmd
- * Description   : Enable/Disable the corresponding Message Buffer interrupt.
- *
- *END**************************************************************************/
-status_t FLEXCAN_SetMsgBuffIntCmd(
-    CAN_Type * base,
-    uint32_t msgBuffIdx, bool enable)
+/*!
+ * @brief Enable/Disable the corresponding Message Buffer interrupt.
+ */
+status_t FLEXCAN_SetMsgBuffIntCmd(CAN_Type *base, uint32_t msgBuffIdx, bool enable)
 {
     uint32_t temp;
     status_t stat = STATUS_SUCCESS;
@@ -1500,14 +1483,10 @@ status_t FLEXCAN_SetMsgBuffIntCmd(
     return stat;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_SetErrIntCmd
- * Description   : Enable the error interrupts.
- * This function will enable Error interrupt.
- *
- *END**************************************************************************/
-void FLEXCAN_SetErrIntCmd(CAN_Type * base, flexcan_int_type_t errType, bool enable)
+/*!
+ * @brief Enable the error interrupts. This function will enable Error interrupt.
+ */
+void FLEXCAN_SetErrIntCmd(CAN_Type *base, flexcan_int_type_t errType, bool enable)
 {
     uint32_t temp = (uint32_t)errType;
     if (enable)
@@ -1542,28 +1521,24 @@ void FLEXCAN_SetErrIntCmd(CAN_Type * base, flexcan_int_type_t errType, bool enab
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_ExitFreezeMode
- * Description   : Exit of freeze mode.
- *
- *END**************************************************************************/
-void FLEXCAN_ExitFreezeMode(CAN_Type * base)
+/*!
+ * @brief Exit of freeze mode.
+ */
+void FLEXCAN_ExitFreezeMode(CAN_Type *base)
 {
     base->MCR = (base->MCR & ~CAN_MCR_HALT_MASK) | CAN_MCR_HALT(0U);
     base->MCR = (base->MCR & ~CAN_MCR_FRZ_MASK) | CAN_MCR_FRZ(0U);
 
     /* Wait till exit freeze mode */
-    while (((base->MCR & CAN_MCR_FRZACK_MASK) >> CAN_MCR_FRZACK_SHIFT) != 0U) {}
+    while (((base->MCR & CAN_MCR_FRZACK_MASK) >> CAN_MCR_FRZACK_SHIFT) != 0U)
+    {
+    }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_EnterFreezeMode
- * Description   : Enter the freeze mode.
- *
- *END**************************************************************************/
-void FLEXCAN_EnterFreezeMode(CAN_Type * base)
+/*!
+ * @brief Enter the freeze mode.
+ */
+void FLEXCAN_EnterFreezeMode(CAN_Type *base)
 {
     bool enabled = false;
 
@@ -1579,18 +1554,22 @@ void FLEXCAN_EnterFreezeMode(CAN_Type * base)
     }
 #if defined(ERRATA_E9595)
     /* Check Low-Power Mode Acknowledge Cleared */
-    while (((base->MCR & CAN_MCR_LPMACK_MASK) >> CAN_MCR_LPMACK_SHIFT) == 1U) {}
+    while (((base->MCR & CAN_MCR_LPMACK_MASK) >> CAN_MCR_LPMACK_SHIFT) == 1U)
+    {
+    }
     /* Check if is a Bus-Off Error corresponding to 1x */
     if ((((base->ESR1 & CAN_ESR1_FLTCONF_MASK) >> CAN_ESR1_FLTCONF_SHIFT) & 2U) != 0U)
     {
         /* Save registers before Soft Reset */
-        uint32_t tempIMSK[2],tempMCR;
+        uint32_t tempIMSK[2], tempMCR;
         tempIMSK[0] = base->IMASK1;
         tempIMSK[1] = base->IMASK2;
         tempMCR = base->MCR;
         /* Soft Reset FlexCan */
         base->MCR |= CAN_MCR_SOFTRST(1U);
-        while (((base->MCR & CAN_MCR_SOFTRST_MASK) >> CAN_MCR_SOFTRST_SHIFT) != 0U) {}
+        while (((base->MCR & CAN_MCR_SOFTRST_MASK) >> CAN_MCR_SOFTRST_SHIFT) != 0U)
+        {
+        }
         /* Restore registers after Soft Reset */
         base->IMASK1 = tempIMSK[0];
         base->IMASK2 = tempIMSK[1];
@@ -1671,7 +1650,9 @@ void FLEXCAN_EnterFreezeMode(CAN_Type * base)
 
         /* Soft Reset FlexCan */
         base->MCR |= CAN_MCR_SOFTRST(1U);
-        while (((base->MCR & CAN_MCR_SOFTRST_MASK) >> CAN_MCR_SOFTRST_SHIFT) != 0U) {}
+        while (((base->MCR & CAN_MCR_SOFTRST_MASK) >> CAN_MCR_SOFTRST_SHIFT) != 0U)
+        {
+        }
 
         /* Restore IMASK1 value */
         base->IMASK1 = tempIMSK1;
@@ -1706,19 +1687,18 @@ void FLEXCAN_EnterFreezeMode(CAN_Type * base)
     {
         base->MCR |= CAN_MCR_MDIS_MASK;
         /* Wait until disable mode acknowledged */
-        while (((base->MCR & CAN_MCR_LPMACK_MASK) >> CAN_MCR_LPMACK_SHIFT) == 0U) {}
+        while (((base->MCR & CAN_MCR_LPMACK_MASK) >> CAN_MCR_LPMACK_SHIFT) == 0U)
+        {
+        }
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_ClearErrIntStatusFlag
- * Description   : Clear all error interrupt status.
- *
- *END**************************************************************************/
-void FLEXCAN_ClearErrIntStatusFlag(CAN_Type * base)
+/*!
+ * @brief Clear all error interrupt status.
+ */
+void FLEXCAN_ClearErrIntStatusFlag(CAN_Type *base)
 {
-    if((base->ESR1 & FLEXCAN_ALL_INT) != 0U)
+    if ((base->ESR1 & FLEXCAN_ALL_INT) != 0U)
     {
 #if (defined(YTM32B1L_SERIES))
         (base->ESR1) = FLEXCAN_ALL_INT;
@@ -1733,13 +1713,10 @@ void FLEXCAN_ClearErrIntStatusFlag(CAN_Type * base)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_ClearBusOffIntStatusFlag
- * Description   : Clear all busOff and Tx/Rx Warning interrupt status.
- *
- *END**************************************************************************/
-void FLEXCAN_ClearBusOffIntStatusFlag(CAN_Type * base)
+/*!
+ * @brief Clear all busOff and Tx/Rx Warning interrupt status.
+ */
+void FLEXCAN_ClearBusOffIntStatusFlag(CAN_Type *base)
 {
     if ((base->ESR1 & BUS_OFF_INT) != 0U)
     {
@@ -1750,16 +1727,12 @@ void FLEXCAN_ClearBusOffIntStatusFlag(CAN_Type * base)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_ReadRxFifo
- * Description   : Read Rx FIFO data.
- * This function will copy MB[0] data field into user's buffer.
- *
- *END**************************************************************************/
-void FLEXCAN_ReadRxFifo( /* PRQA S 4700 */
-    const CAN_Type * base,
-    flexcan_msgbuff_t *rxFifo)  
+/*!
+ * @brief Read Rx FIFO data. This function will copy MB[0] data field into user's buffer.
+ */
+void FLEXCAN_ReadRxFifo(/* PRQA S 4700 */
+                        const CAN_Type *base,
+                        flexcan_msgbuff_t *rxFifo)
 {
     DEV_ASSERT(rxFifo != NULL);
 
@@ -1775,7 +1748,7 @@ void FLEXCAN_ReadRxFifo( /* PRQA S 4700 */
     uint8_t can_real_payload = FLEXCAN_ComputePayloadSize(flexcan_mb_dlc_value);
 
     /* For legacy Rx FIFO, the payload size cannot exceed 8 bytes */
-    if(can_real_payload > 8U)
+    if (can_real_payload > 8U)
     {
         can_real_payload = 8U;
     }
@@ -1801,7 +1774,7 @@ void FLEXCAN_ReadRxFifo( /* PRQA S 4700 */
             mbWord = flexcan_mb_data_32[databyte >> 2U];
             uint32_t x;
             uint8_t index;
-            const uint8_t * p;
+            const uint8_t *p;
             FlexcanSwapBytesInWord(mbWord, x);
             p = (uint8_t *)&x;
             for (index = 0U; index < 4U; index++)
@@ -1829,28 +1802,25 @@ void FLEXCAN_ReadRxFifo( /* PRQA S 4700 */
 #endif
 }
 
-
 #if FEATURE_CAN_HAS_ENHANCE_RX_FIFO
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_ReadEnhanceRxFifo
- * Description   : Read enhanced Rx FIFO data.
- * This function will copy enhanded Rx FIFO data field into user's buffer.
- *
- *END**************************************************************************/
-void FLEXCAN_ReadEnhanceRxFifo(  /* PRQA S 4700 */
-    const CAN_Type * base,
-    flexcan_msgbuff_t *rxFifo)
+/*!
+ * @brief Read enhanced Rx FIFO data. This function will copy enhanded Rx FIFO data field into user's buffer.
+ */
+void FLEXCAN_ReadEnhanceRxFifo(/* PRQA S 4700 */
+                               const CAN_Type *base,
+                               flexcan_msgbuff_t *rxFifo)
 {
     DEV_ASSERT(rxFifo != NULL);
 
     uint32_t databyte;
     uint32_t mbWord;
 
-    volatile const uint32_t *enhanceFifoData = (uint32_t *)base + (FLEXCAN_ENHANCE_RX_FIFO_DATA_REGION_OFFSET / 4U); /* PRQA S 0310, 0311, 3305, 0488 */
-    volatile const uint32_t *msgId = (enhanceFifoData + 1U); /* PRQA S 0488, 0489 */
-    volatile const uint32_t *msgData = (enhanceFifoData + 2U); /* PRQA S 0488, 0489 */
-    uint8_t enhanceFifoMsgDLC = (uint8_t)(((*enhanceFifoData) & FLEXCAN_ENHANCE_RX_FIFO_DLC_MASK) >> FLEXCAN_ENHANCE_RX_FIFO_DLC_SHIFT);
+    volatile const uint32_t *enhanceFifoData =
+        (uint32_t *)base + (FLEXCAN_ENHANCE_RX_FIFO_DATA_REGION_OFFSET / 4U); /* PRQA S 0310, 0311, 3305, 0488 */
+    volatile const uint32_t *msgId = (enhanceFifoData + 1U);                  /* PRQA S 0488, 0489 */
+    volatile const uint32_t *msgData = (enhanceFifoData + 2U);                /* PRQA S 0488, 0489 */
+    uint8_t enhanceFifoMsgDLC =
+        (uint8_t)(((*enhanceFifoData) & FLEXCAN_ENHANCE_RX_FIFO_DLC_MASK) >> FLEXCAN_ENHANCE_RX_FIFO_DLC_SHIFT);
     uint8_t realDataLength = FLEXCAN_ComputePayloadSize(enhanceFifoMsgDLC);
     uint32_t *msgData_32 = (uint32_t *)(rxFifo->data); /* PRQA S 0310, 3305 */
 
@@ -1869,61 +1839,51 @@ void FLEXCAN_ReadEnhanceRxFifo(  /* PRQA S 4700 */
     /* Copy MB[0] data field into user's buffer */
     for (databyte = 0U; databyte < realDataLength; databyte += 4U)
     {
-        mbWord = msgData[databyte >> 2U];  /* PRQA S 2983 */
+        mbWord = msgData[databyte >> 2U]; /* PRQA S 2983 */
         FlexcanSwapBytesInWord(mbWord, msgData_32[databyte >> 2U]);
     }
 }
 #endif /* FEATURE_CAN_HAS_ENHANCE_RX_FIFO */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_SetOperationMode
- * Description   : Enable a FlexCAN operation mode.
- * This function will enable one of the modes listed in flexcan_operation_modes_t.
- *
- *END**************************************************************************/
-void FLEXCAN_SetOperationMode(
-    CAN_Type * base,
-    flexcan_operation_modes_t mode)
+/*!
+ * @brief Enable a FlexCAN operation mode. This function will enable one of the modes listed in flexcan_operation_modes_t.
+ */
+void FLEXCAN_SetOperationMode(CAN_Type *base, flexcan_operation_modes_t mode)
 {
-
     switch (mode)
     {
-    case FLEXCAN_FREEZE_MODE:
-        /* Debug mode, Halt and Freeze*/
-        FLEXCAN_EnterFreezeMode(base);
-        break;
-    case FLEXCAN_DISABLE_MODE:
-        /* Debug mode, Halt and Freeze */
-        base->MCR = (base->MCR & ~CAN_MCR_MDIS_MASK) | CAN_MCR_MDIS(1U);
-        break;
-    case FLEXCAN_NORMAL_MODE:
-        base->MCR = (base->MCR & ~CAN_MCR_SUPV_MASK) | CAN_MCR_SUPV(0U);
-        base->CTRL1 = (base->CTRL1 & ~CAN_CTRL1_LOM_MASK) | CAN_CTRL1_LOM(0U);
-        base->CTRL1 = (base->CTRL1 & ~CAN_CTRL1_LPB_MASK) | CAN_CTRL1_LPB(0U);
-        break;
-    case FLEXCAN_LISTEN_ONLY_MODE:
-        base->CTRL1 = (base->CTRL1 & ~CAN_CTRL1_LOM_MASK) | CAN_CTRL1_LOM(1U);
-        break;
-    case FLEXCAN_LOOPBACK_MODE:
-        base->CTRL1 = (base->CTRL1 & ~CAN_CTRL1_LPB_MASK) | CAN_CTRL1_LPB(1U);
-        base->CTRL1 = (base->CTRL1 & ~CAN_CTRL1_LOM_MASK) | CAN_CTRL1_LOM(0U);
-        /* Enable Self Reception */
-        FLEXCAN_SetSelfReception(base, true);
-        break;
-    default:
-        /* Should not get here */
-        break;
+        case FLEXCAN_FREEZE_MODE:
+            /* Debug mode, Halt and Freeze*/
+            FLEXCAN_EnterFreezeMode(base);
+            break;
+        case FLEXCAN_DISABLE_MODE:
+            /* Debug mode, Halt and Freeze */
+            base->MCR = (base->MCR & ~CAN_MCR_MDIS_MASK) | CAN_MCR_MDIS(1U);
+            break;
+        case FLEXCAN_NORMAL_MODE:
+            base->MCR = (base->MCR & ~CAN_MCR_SUPV_MASK) | CAN_MCR_SUPV(0U);
+            base->CTRL1 = (base->CTRL1 & ~CAN_CTRL1_LOM_MASK) | CAN_CTRL1_LOM(0U);
+            base->CTRL1 = (base->CTRL1 & ~CAN_CTRL1_LPB_MASK) | CAN_CTRL1_LPB(0U);
+            break;
+        case FLEXCAN_LISTEN_ONLY_MODE:
+            base->CTRL1 = (base->CTRL1 & ~CAN_CTRL1_LOM_MASK) | CAN_CTRL1_LOM(1U);
+            break;
+        case FLEXCAN_LOOPBACK_MODE:
+            base->CTRL1 = (base->CTRL1 & ~CAN_CTRL1_LPB_MASK) | CAN_CTRL1_LPB(1U);
+            base->CTRL1 = (base->CTRL1 & ~CAN_CTRL1_LOM_MASK) | CAN_CTRL1_LOM(0U);
+            /* Enable Self Reception */
+            FLEXCAN_SetSelfReception(base, true);
+            break;
+        default:
+            /* Should not get here */
+            break;
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_IsOutOfRangeMbIdx
- * Description   : Returns True if selected Message Buffer index is out of range.
- *
- *END**************************************************************************/
-bool FLEXCAN_IsOutOfRangeMbIdx(const CAN_Type * base, uint32_t msgBuffIdx)   /* PRQA S 4700 */
+/*!
+ * @brief Returns True if selected Message Buffer index is out of range.
+ */
+bool FLEXCAN_IsOutOfRangeMbIdx(const CAN_Type *base, uint32_t msgBuffIdx) /* PRQA S 4700 */
 {
     bool resultval = false;
 #if FEATURE_CAN_HAS_ENHANCE_RX_FIFO
@@ -1940,9 +1900,9 @@ bool FLEXCAN_IsOutOfRangeMbIdx(const CAN_Type * base, uint32_t msgBuffIdx)   /* 
         /* Check if RX FIFO is enabled*/
         if (FLEXCAN_IsRxFifoEnabled(base) == true)
         {
- #if FEATURE_CAN_HAS_ENHANCE_RX_FIFO
+#if FEATURE_CAN_HAS_ENHANCE_RX_FIFO
             hasEnhanceRxFIFO = FLEXCAN_HasEnhanceRxFIFO(base);
-            if(hasEnhanceRxFIFO == true)
+            if (hasEnhanceRxFIFO == true)
             {
                 isEnhanceRxFifoEnabled = FLEXCAN_IsEnhanceRxFifoEnabled(base);
             }
@@ -1969,15 +1929,10 @@ bool FLEXCAN_IsOutOfRangeMbIdx(const CAN_Type * base, uint32_t msgBuffIdx)   /* 
 }
 
 #if FEATURE_CAN_HAS_FD
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_SetPayloadSize
- * Description   : Sets the payload size of the MBs.
- *
- *END**************************************************************************/
-void FLEXCAN_SetPayloadSize(
-    CAN_Type * base,
-    flexcan_fd_payload_size_t payloadSize)
+/*!
+ * @brief Sets the payload size of the MBs.
+ */
+void FLEXCAN_SetPayloadSize(CAN_Type *base, flexcan_fd_payload_size_t payloadSize)
 {
     uint32_t tmp;
 
@@ -1997,7 +1952,7 @@ void FLEXCAN_SetPayloadSize(
         tmp &= ~(CAN_FDCTRL_MBDSR2_MASK);
         tmp |= ((uint32_t)payloadSize) << CAN_FDCTRL_MBDSR2_SHIFT;
 #endif
-#if defined (FEATURE_CAN_HAS_MBDSR3)&&(FEATURE_CAN_HAS_MBDSR3 == 1)
+#if defined(FEATURE_CAN_HAS_MBDSR3) && (FEATURE_CAN_HAS_MBDSR3 == 1)
         tmp &= ~(CAN_FDCTRL_MBDSR3_MASK);
         tmp |= ((uint32_t)payloadSize) << CAN_FDCTRL_MBDSR3_SHIFT;
 #endif
@@ -2005,13 +1960,10 @@ void FLEXCAN_SetPayloadSize(
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_GetPayloadSize
- * Description   : Returns the payload size of the MBs (in bytes).
- *
- *END**************************************************************************/
-uint8_t FLEXCAN_GetPayloadSize(const CAN_Type * base)
+/*!
+ * @brief Returns the payload size of the MBs (in bytes).
+ */
+uint8_t FLEXCAN_GetPayloadSize(const CAN_Type *base)
 {
     uint32_t payloadSize;
 
@@ -2027,17 +1979,14 @@ uint8_t FLEXCAN_GetPayloadSize(const CAN_Type * base)
 
     return (uint8_t)payloadSize;
 }
-#endif  /* End FEATURE_CAN_HAS_FD */
+#endif /* End FEATURE_CAN_HAS_FD */
 
 #if FEATURE_CAN_HAS_PRETENDED_NETWORKING
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLEXCAN_ConfigPN
- * Description   : Configures the Pretended Networking mode.
- *
- *END**************************************************************************/
-void FLEXCAN_ConfigPN(CAN_Type * base, const flexcan_pn_config_t *pnConfig)
+/*!
+ * @brief Configures the Pretended Networking mode.
+ */
+void FLEXCAN_ConfigPN(CAN_Type *base, const flexcan_pn_config_t *pnConfig)
 {
     DEV_ASSERT(pnConfig != NULL);
 
@@ -2056,7 +2005,8 @@ void FLEXCAN_ConfigPN(CAN_Type * base, const flexcan_pn_config_t *pnConfig)
     FLEXCAN_SetPNIdFilter1(base, pnConfig->idFilter1);
 
     /* Configure the second ID, if needed (as mask for exact matching or higher limit for range matching) */
-    if ((pnConfig->idFilterType == FLEXCAN_FILTER_MATCH_EXACT) || (pnConfig->idFilterType == FLEXCAN_FILTER_MATCH_RANGE))
+    if ((pnConfig->idFilterType == FLEXCAN_FILTER_MATCH_EXACT) ||
+        (pnConfig->idFilterType == FLEXCAN_FILTER_MATCH_RANGE))
     {
         FLEXCAN_SetPNIdFilter2(base, pnConfig);
     }
@@ -2067,17 +2017,17 @@ void FLEXCAN_ConfigPN(CAN_Type * base, const flexcan_pn_config_t *pnConfig)
     }
 
     /* Configure payload filtering, if requested */
-    if ((pnConfig->filterComb == FLEXCAN_FILTER_ID_PAYLOAD) || (pnConfig->filterComb == FLEXCAN_FILTER_ID_PAYLOAD_NTIMES))
+    if ((pnConfig->filterComb == FLEXCAN_FILTER_ID_PAYLOAD) ||
+        (pnConfig->filterComb == FLEXCAN_FILTER_ID_PAYLOAD_NTIMES))
     {
-        FLEXCAN_SetPNDlcFilter(base,
-                               pnConfig->payloadFilter.dlcLow,
-                               pnConfig->payloadFilter.dlcHigh);
+        FLEXCAN_SetPNDlcFilter(base, pnConfig->payloadFilter.dlcLow, pnConfig->payloadFilter.dlcHigh);
 
         FLEXCAN_SetPNPayloadHighFilter1(base, pnConfig->payloadFilter.payload1);
         FLEXCAN_SetPNPayloadLowFilter1(base, pnConfig->payloadFilter.payload1);
 
         /* Configure the second payload, if needed (as mask for exact matching or higher limit for range matching) */
-        if ((pnConfig->payloadFilterType == FLEXCAN_FILTER_MATCH_EXACT) || (pnConfig->payloadFilterType == FLEXCAN_FILTER_MATCH_RANGE))
+        if ((pnConfig->payloadFilterType == FLEXCAN_FILTER_MATCH_EXACT) ||
+            (pnConfig->payloadFilterType == FLEXCAN_FILTER_MATCH_RANGE))
         {
             FLEXCAN_SetPNPayloadHighFilter2(base, pnConfig->payloadFilter.payload2);
             FLEXCAN_SetPNPayloadLowFilter2(base, pnConfig->payloadFilter.payload2);

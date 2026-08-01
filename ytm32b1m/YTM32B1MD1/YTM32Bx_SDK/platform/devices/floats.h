@@ -8,6 +8,7 @@
 /*!
  * @file floats.h
  * @version 1.4.1
+ * @brief Fixed-width floating-point aliases for platform/devices.
  */
 
 #ifndef FLOATS_H
@@ -17,15 +18,26 @@
 extern "C"{
 #endif
 
-/**
-@brief 32bit long floating point data type
-*/
+/*!
+ * @addtogroup devices_floats
+ * @brief Floating-point typedefs shared by device headers and drivers.
+ * @details
+ * This header provides concise aliases for the floating-point widths commonly
+ * referenced by shared platform code and peripheral drivers.
+ * @{
+ */
+
+/*!
+ * @brief 32-bit single-precision floating-point alias.
+ */
 typedef float float32_t;
 
-/**
-@brief 64bit long floating point data type
-*/
+/*!
+ * @brief 64-bit double-precision floating-point alias.
+ */
 typedef double float64_t;
+
+/*! @} */ /* End of devices_floats */
 
 #ifdef __cplusplus
 }

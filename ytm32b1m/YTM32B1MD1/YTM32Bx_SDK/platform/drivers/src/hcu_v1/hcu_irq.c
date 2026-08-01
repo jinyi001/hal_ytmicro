@@ -8,6 +8,12 @@
 /*!
  * @file hcu_irq.c
  * @version 1.4.1
+ *
+ * @brief HCU V1 interrupt-vector wrapper.
+ *
+ * This file exposes the startup-visible HCU interrupt symbol and forwards the
+ * interrupt flow into the shared driver handler implemented in
+ * `HCU_DRV_IRQHandler()`.
  */
 
 #include "device_registers.h"
@@ -29,9 +35,7 @@
 #ifdef HCU
 
 /*!
- * @brief This function is the implementation of HCU handler named in startup code.
- *
- * It passes the instance to the shared HCU IRQ handler.
+ * @brief Forward the startup-level HCU interrupt to the driver handler.
  */
 void HCU_IRQHandler(void);
 
@@ -44,4 +48,3 @@ void HCU_IRQHandler(void)
 /*******************************************************************************
  * EOF
  ******************************************************************************/
-

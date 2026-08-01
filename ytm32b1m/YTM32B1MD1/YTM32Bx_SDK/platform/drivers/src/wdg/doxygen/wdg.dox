@@ -1,88 +1,342 @@
 /*!
-@defgroup wdg Watchdog timer (WDG)
-@brief The YTMicro SDK provides Peripheral Driver for the Watchdog timer (WDG) module of YTMicro SDK devices.
+@defgroup wdg
+@ingroup mod_system Watchdog Timer (WDG)
+@brief Hardware watchdog supervision module for the YTMicro SDK.
 
-## The WDG supports features:
-- Support 32-bit countdown timer
-- Support regular or window servicing mode
-- Support reset request or interrupt for the first timeout
-- Support hard and soft configuration lock bits
-- Support fixed key for dog feeding
+@details
+The WDG module provides a hardware watchdog timer that supervises application
+execution by requiring a periodic refresh sequence. If software fails to
+service the watchdog in time, the peripheral can first raise an interrupt and
+then reset the device, helping the system recover from lockups or runaway code.
 
-## Integration guideline
+@section wdg_features Key Features
+- 32-bit watchdog timeout register with software-programmable reload value.
+- Supports **normal refresh mode** and **window refresh mode**.
+- Optional **interrupt-before-reset** behavior on the first timeout event.
+- Configurable watchdog activity in **debug halt** and **deep-sleep** modes.
+- Optional **clock source selection** on devices that expose the clock-source field.
+- Optional **APB access error reset** generation.
+- Software and hardware **lock control** to block further configuration changes.
+- Internal helper layer that manages the mandatory unlock and refresh key sequences.
 
-The following files need to be compiled in the project:
-```sh
-${SDK_PATH}\platform\drivers\src\wdg\wdg_driver.c
-${SDK_PATH}\platform\drivers\src\wdg\wdg_hw_driver.c
-```
+@section wdg_modes Supported Modes
 
-## Include path
+The following table summarizes the operating modes and runtime controls exposed
+by the WDG driver:
 
-The following paths need to be added to the include path of the toolchain:
-```sh
-${SDK_PATH}\platform\drivers\inc\
-```
+| Mode / Feature          | Configuration Fields / APIs                                  | Description |
+|-------------------------|--------------------------------------------------------------|-------------|
+| Normal refresh mode     | `winEnable = false`                                          | The watchdog can be refreshed at any time before timeout. |
+| Window refresh mode     | `winEnable = true`, `windowValue`, WDG_DRV_SetWindow()       | Refresh is valid only after the counter reaches the configured window threshold. |
+| Interrupt-before-reset  | `intEnable`, WDG_DRV_SetInt()                                | The first timeout raises an interrupt; a later timeout can reset the device if the watchdog is still not serviced. |
+| Debug-halt control      | `opMode.debug`, WDG_DRV_SetMode(..., WDG_DEBUG_MODE)         | Selects whether the watchdog runs or freezes while the core is halted by a debugger. |
+| Deep-sleep control      | `opMode.deepsleep`, WDG_DRV_SetMode(..., WDG_DEEPSLEEP_MODE) | Selects whether the watchdog runs or freezes in deep-sleep mode. |
+| Clock source select     | `clockSource` (when present)                                 | Selects the watchdog clock source on devices that implement the clock-source field. |
 
-## Preprocessor symbols
+@warning Window mode requires a valid relationship between `windowValue` and
+`timeoutValue`. Refreshing too early in window mode causes an immediate reset.
 
-No special symbols are required for this component
+@section wdg_arch Module Architecture
 
-## Dependencies
+The WDG module is organized in a two-layer architecture:
 
-- \ref clock_manager
-- \ref interrupt_manager
+@verbatim
+┌──────────────────────────────────────────────┐
+│              Application Code                │
+│         (calls WDG_DRV_* functions)          │
+├──────────────────────────────────────────────┤
+│          WDG Driver Layer (wdg_driver.h/c)   │
+│  ● Instance-based API (WDG_DRV_Init, etc.)   │
+│  ● Validates public parameters and manages   │
+│    IRQ enable / disable                      │
+├──────────────────────────────────────────────┤
+│     WDG HW Access Layer (wdg_hw_access.h/c)  │
+│  ● Direct register-level access              │
+│  ● Handles unlock, protected writes, and     │
+│    state decoding                            │
+├──────────────────────────────────────────────┤
+│           WDG Peripheral Hardware            │
+│      (CR, TOVR, WVR, SVCR, LR, INTF regs)    │
+└──────────────────────────────────────────────┘
+@endverbatim
 
-@defgroup wdg_driver WDG Driver
-@ingroup wdg
+@subsection wdg_arch_driver Driver Layer (wdg_driver.h)
+Application code should use the `WDG_DRV_*` functions from wdg_driver.h.
+These APIs accept a zero-based watchdog instance index and resolve the
+peripheral base address internally through `WDG_BASE_PTRS`.
 
-## WDG Driver Guide
+@subsection wdg_arch_hw HW Access Layer (wdg_hw_access.h)
+The internal hardware access layer provides low-level helpers grouped as:
+- **Initialization & Configuration** - WDG_Config(), WDG_Deinit(), WDG_GetConfig()
+- **Watchdog Operation** - WDG_Trigger(), WDG_ClearIntFlag()
+- **Mode & Window Configuration** - WDG_SetInt(), WDG_SetWindowMode(),
+  WDG_SetWindowValue(), WDG_SetDebug(), WDG_SetDeepSleep()
+- **Status Query** - WDG_IsEnabled(), WDG_IsUpdateEnabled(), WDG_IsUnlocked()
 
-If the macro WDG_CR_CLKSRC_MASK MASK is defined,The WDG clock source has two options: SIRC and SXOSC, It is selected from the clockSource member variable of the wdg_user_CONFIG_t structure.
+@section wdg_config Configuration Parameters
 
-The macro WDG_CR_CLKSRC_MASK is automatically defined, depending on the chip model.
+@subsection wdg_config_struct wdg_user_config_t Fields
+| Field               | Type               | Description                                                   | Default Value / Source            |
+|---------------------|--------------------|---------------------------------------------------------------|-----------------------------------|
+| clockSource         | wdg_clock_source_t | Watchdog clock source on devices that support source select.  | Caller supplied when field exists |
+| opMode              | wdg_op_mode_t      | Debug-halt and deep-sleep run-state behavior.                 | Both fields false                 |
+| updateEnable        | bool               | Keeps watchdog configuration writable after initialization.   | true                              |
+| intEnable           | bool               | Enables interrupt-before-reset on the first timeout.          | false                             |
+| winEnable           | bool               | Enables window refresh mode.                                  | false                             |
+| windowValue         | uint32_t           | Earliest counter value at which refresh is legal in window mode. | FEATURE_WDG_WVR_RESET_VALUE    |
+| timeoutValue        | uint32_t           | Timeout reload value written to TOVR.                         | FEATURE_WDG_TOVR_RESET_VALUE      |
+| apbErrorResetEnable | bool               | Enables reset generation on APB access error.                 | false                             |
 
-## WDG Driver Operation
+@note WDG_DRV_GetDefaultConfig() does not initialize `clockSource` when that
+field exists. Set it explicitly before calling WDG_DRV_Init() if the selected
+device supports watchdog clock selection.
 
-This is example code to configure the WDG driver:
-```c
-#define INST_WDG1 (0U)
+@subsection wdg_config_features Device Feature Macros
+| Macro                             | Description |
+|-----------------------------------|-------------|
+| FEATURE_WDG_UNLOCK_VALUE_1        | First key used to unlock protected watchdog registers. |
+| FEATURE_WDG_UNLOCK_VALUE_2        | Second key used to unlock protected watchdog registers. |
+| FEATURE_WDG_TRIGGER_VALUE_1       | First key used to refresh the watchdog counter. |
+| FEATURE_WDG_TRIGGER_VALUE_2       | Second key used to refresh the watchdog counter. |
+| FEATURE_WDG_TOVR_RESET_VALUE      | Reset value of the timeout register. |
+| FEATURE_WDG_WVR_RESET_VALUE       | Reset value of the window register. |
+| FEATURE_WDG_MINIMUM_TIMEOUT_VALUE | Minimum timeout value that WDG_DRV_Init() accepts. |
+| FEATURE_WDG_CR_RESET_VALUE        | Reset image written to the watchdog control register during deinit. |
+| FEATURE_WDG_HAS_CLOCK_SOURCE_SELECT | Indicates that WDG_GetConfig() reports the selected clock source. |
+| WDG_CR_CLKSRC_MASK                | Indicates that the public configuration structure exposes `clockSource`. |
 
-const wdg_user_config_t WDG_Cfg_Default = {
-    .opMode = {               /* WDG not functional in Wait/Debug/Stop mode */
-        .deepsleep = true,
-        .debug = false,
-    },
-    .updateEnable = true,     /* Enable further updates of the WDG configuration */
-    .intEnable = false,       /* Timeout interrupt disabled */
-    .winEnable = false,       /* Window mode disabled */
-    .windowValue = 0U,        /* Window value */
-    .timeoutValue = 0x400,   /* Timeout value */
-    #if (defined(WDG_CR_CLKSRC_MASK))
-    .clockSource = WDG_SXOSC_CLOCK,    /*Clock source*/
-    #endif
-};
+@section wdg_usage Usage Patterns
 
-/* Main*/
-void main(void)
+@subsection wdg_usage_basic Pattern 1: Basic Initialization and Periodic Refresh
+Initialize the watchdog with the driver defaults, set a timeout, and refresh it
+periodically inside the application loop.
+
+@code{.c}
+#include "wdg_driver.h"
+
+#define WDG_INSTANCE (0U)
+
+void Wdg_BasicExample(void)
 {
-   ... 
+    status_t status;
+    wdg_user_config_t wdgConfig;
 
-   /* Initialize WDG module */
-   WDG_DRV_Init(INST_WDG1, &userConfigPtr);
+    WDG_DRV_GetDefaultConfig(&wdgConfig);
+#if defined(WDG_CR_CLKSRC_MASK)
+    wdgConfig.clockSource = WDG_SIRC_CLOCK;
+#endif
+    wdgConfig.timeoutValue = 0x400U;
 
-   /* Enable the timeout interrupt and set the ISR */
-   WDG_DRV_SetInt(INST_WDG1, true);
+    status = WDG_DRV_Init(WDG_INSTANCE, &wdgConfig);
+    if (status != STATUS_SUCCESS)
+    {
+        return;
+    }
 
-   while (1) {
-
-       /* Do something that takes in 0x400 clock cycles */
-
-       /* Refresh the counter */
-       WDG_DRV_Trigger(INST_WDG1);
-   }
-
-   return 0;
+    for (;;)
+    {
+        /* Application work goes here. */
+        WDG_DRV_Trigger(WDG_INSTANCE);
+    }
 }
-```
+@endcode
+
+@subsection wdg_usage_window Pattern 2: Window Refresh Mode
+Use window mode when the application must detect refreshes that are too early
+as well as refreshes that are too late.
+
+@code{.c}
+#include "wdg_driver.h"
+
+#define WDG_INSTANCE (0U)
+
+void Wdg_WindowExample(void)
+{
+    status_t status;
+    wdg_user_config_t wdgConfig;
+
+    WDG_DRV_GetDefaultConfig(&wdgConfig);
+    wdgConfig.timeoutValue = 0x600U;
+    wdgConfig.winEnable = true;
+    wdgConfig.windowValue = 0x100U;
+
+    status = WDG_DRV_Init(WDG_INSTANCE, &wdgConfig);
+    if (status != STATUS_SUCCESS)
+    {
+        return;
+    }
+
+    for (;;)
+    {
+        while (WDG_DRV_GetCounter(WDG_INSTANCE) > wdgConfig.windowValue)
+        {
+        }
+
+        WDG_DRV_Trigger(WDG_INSTANCE);
+    }
+}
+@endcode
+
+@subsection wdg_usage_interrupt Pattern 3: Interrupt Before Reset
+Enable the interrupt-before-reset path to capture diagnostics and recover
+without waiting for the second timeout.
+
+@code{.c}
+#include "wdg_driver.h"
+
+#define WDG_INSTANCE (0U)
+
+static volatile bool s_wdgTimeoutObserved;
+
+void WDG_IRQHandler(void)
+{
+    s_wdgTimeoutObserved = true;
+    WDG_DRV_ClearIntFlag(WDG_INSTANCE);
+    WDG_DRV_Trigger(WDG_INSTANCE);
+}
+
+void Wdg_InterruptExample(void)
+{
+    status_t status;
+    wdg_user_config_t wdgConfig;
+
+    WDG_DRV_GetDefaultConfig(&wdgConfig);
+    wdgConfig.timeoutValue = 0x800U;
+    wdgConfig.intEnable = true;
+
+    status = WDG_DRV_Init(WDG_INSTANCE, &wdgConfig);
+    if (status != STATUS_SUCCESS)
+    {
+        return;
+    }
+
+    if (s_wdgTimeoutObserved)
+    {
+        /* Diagnostics or recovery code can run here. */
+    }
+}
+@endcode
+
+@subsection wdg_usage_runtime Pattern 4: Runtime Reconfiguration
+Keep configuration updates enabled when the application needs to adjust timeout,
+window, or run-state behavior after initialization.
+
+@code{.c}
+#include "wdg_driver.h"
+
+#define WDG_INSTANCE (0U)
+
+void Wdg_RuntimeUpdateExample(void)
+{
+    status_t status;
+    wdg_user_config_t wdgConfig;
+    wdg_user_config_t currentConfig;
+
+    WDG_DRV_GetDefaultConfig(&wdgConfig);
+    wdgConfig.updateEnable = true;
+    wdgConfig.timeoutValue = 0x400U;
+
+    status = WDG_DRV_Init(WDG_INSTANCE, &wdgConfig);
+    if (status != STATUS_SUCCESS)
+    {
+        return;
+    }
+
+    (void)WDG_DRV_SetTimeout(WDG_INSTANCE, 0x800U);
+    (void)WDG_DRV_SetWindow(WDG_INSTANCE, true, 0x200U);
+    (void)WDG_DRV_SetMode(WDG_INSTANCE, true, WDG_DEBUG_MODE);
+    (void)WDG_DRV_SetInt(WDG_INSTANCE, true);
+
+    WDG_DRV_GetConfig(WDG_INSTANCE, &currentConfig);
+    (void)currentConfig;
+}
+@endcode
+
+@section wdg_api API Quick Reference
+
+@subsection wdg_api_init Initialization & De-initialization
+| Function                   | Description |
+|----------------------------|-------------|
+| WDG_DRV_Init()             | Validate the user configuration and start the watchdog. |
+| WDG_DRV_Deinit()           | Attempt to restore the watchdog to its reset configuration. |
+| WDG_DRV_GetDefaultConfig() | Populate the software defaults used by the WDG driver. |
+
+@subsection wdg_api_config Configuration
+| Function            | Description |
+|---------------------|-------------|
+| WDG_DRV_GetConfig() | Read the active hardware configuration into `wdg_user_config_t`. |
+| WDG_DRV_SetWindow() | Enable or disable window mode and optionally update `windowValue`. |
+| WDG_DRV_SetMode()   | Update watchdog behavior in debug halt or deep-sleep mode. |
+| WDG_DRV_SetTimeout()| Write a new timeout reload value to the watchdog. |
+
+@subsection wdg_api_op Watchdog Operation
+| Function             | Description |
+|----------------------|-------------|
+| WDG_DRV_Trigger()    | Refresh the watchdog counter. |
+| WDG_DRV_GetCounter() | Read the current watchdog counter value. |
+
+@subsection wdg_api_int Interrupt Management
+| Function                | Description |
+|-------------------------|-------------|
+| WDG_DRV_SetInt()        | Enable or disable interrupt-before-reset mode. |
+| WDG_DRV_ClearIntFlag()  | Acknowledge a pending watchdog timeout interrupt. |
+
+@section wdg_notes Important Notes
+
+@subsection wdg_notes_clock Clock Dependency
+The driver does not enable clocks on behalf of the application. Ensure the WDG
+peripheral clock is enabled before calling WDG_DRV_Init().
+
+@subsection wdg_notes_lock Configuration Lock Behavior
+- When `updateEnable = false`, the watchdog configuration becomes locked after
+  initialization and cannot be changed again until the next system reset.
+- WDG_DRV_Deinit(), WDG_DRV_SetTimeout(), WDG_DRV_SetWindow(),
+  WDG_DRV_SetMode(), and WDG_DRV_SetInt() all return `STATUS_ERROR` once the
+  watchdog configuration is locked.
+
+@subsection wdg_notes_validation Timeout and Window Validation
+- WDG_DRV_Init() rejects configurations where `timeoutValue` is less than or
+  equal to `FEATURE_WDG_MINIMUM_TIMEOUT_VALUE`.
+- WDG_DRV_Init() also rejects configurations where window mode is enabled and
+  `windowValue >= timeoutValue`.
+- WDG_DRV_SetTimeout() and WDG_DRV_SetWindow() do not perform those numeric
+  checks at runtime; the caller must preserve a valid relationship.
+
+@subsection wdg_notes_refresh Refresh Timing
+- In normal mode, service the watchdog before the counter expires.
+- In window mode, service the watchdog only after the counter reaches the
+  programmed window threshold.
+- If interrupt-before-reset is enabled, clear the interrupt flag promptly and
+  decide whether to refresh the watchdog or allow a reset on the next timeout.
+
+@subsection wdg_notes_clock_source Clock Source Field
+On devices that support clock source selection, the public configuration
+structure includes `clockSource`. WDG_DRV_GetDefaultConfig() leaves this field
+unchanged, so applications that care about the source should assign it
+explicitly before initialization.
+
+@section wdg_integration Integration Guide
+
+@subsection wdg_integration_files Compilation Units
+The following source files must be added to the project build:
+@verbatim
+${SDK_PATH}/platform/drivers/src/wdg/wdg_driver.c
+${SDK_PATH}/platform/drivers/src/wdg/wdg_hw_access.c
+@endverbatim
+
+@subsection wdg_integration_include Include Paths
+Add the following directory to the toolchain include path:
+@verbatim
+${SDK_PATH}/platform/drivers/inc/
+@endverbatim
+
+@subsection wdg_integration_symbols Compile Symbols
+No special compile-time symbols are required for this module. Device-specific
+watchdog capability macros are supplied by the selected device header.
+
+@subsection wdg_integration_deps Dependencies
+- @ref clock_manager - Required to enable the watchdog peripheral clock.
+- @ref interrupt_manager - Required for watchdog IRQ enable, disable, and
+  critical-section handling.
+
 */

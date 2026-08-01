@@ -21,15 +21,12 @@
 #include "emu_hw_access.h"
 
 /*******************************************************************************
- * Code
+ * Initialization
  ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_Init
- * Description   : This function restores the EMU module to reset value.
- *
- *END**************************************************************************/
+/*!
+ * @brief Initialize the EMU peripheral registers to their reset values.
+ */
 void EMU_Init(EMU_Type *const base)
 {
     uint8_t idx = 0U;
@@ -47,7 +44,7 @@ void EMU_Init(EMU_Type *const base)
         base->EICHD[idx].DATA = 0x00000000U;
 #endif /* FEATURE_EMU_SUPPORT_64BIT_INJECTION */
         base->EICHD[idx].ADDR = 0x00000000U;
-        
+
         base->ERINFO[idx].CNT = 0x00000000U;
     }
 
@@ -55,92 +52,61 @@ void EMU_Init(EMU_Type *const base)
     base->ERIF = 0xFFFFFFFFU;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_ClearErrReportCnt
- * Description   : This function clear report count of EMU module.
- *
- *END**************************************************************************/
-void EMU_ClearErrReportCnt(EMU_Type *const base, uint8_t channel)
-{
-    DEV_ASSERT(channel < EMU_ERINFO_COUNT);
-    base->ERINFO[channel].CNT = 0x00U & EMU_ERINFO_CNT_CNT_MASK;
-}
+/*******************************************************************************
+ * Module Enable Control
+ ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_Disable
- * Description   : This function disable the EMU module.
- *
- *END**************************************************************************/
+/*!
+ * @brief Disable one EMU channel and clear the global enable latch.
+ */
 void EMU_Disable(EMU_Type *const base, uint8_t channel)
 {
     DEV_ASSERT(channel < EMU_EICHD_COUNT);
 
-    base->EICHCR &= (~((uint32_t)1U << channel)); //enable channel
-    base->EIGCR = 0x00; //enable Gen
+    base->EICHCR &= (~((uint32_t)1U << channel));
+    base->EIGCR = 0x00;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_Enable
- * Description   : This function enable the EMU module.
- *
- *END**************************************************************************/
+/*!
+ * @brief Enable one EMU channel and program the required global enable value.
+ */
 void EMU_Enable(EMU_Type *const base, uint8_t channel)
 {
     DEV_ASSERT(channel < EMU_EICHD_COUNT);
 
     base->EICHCR |= ((uint32_t)1U << channel);
-    #if ((defined FEATURE_EMU_GLOBAL_ENABLE_KEY) && ( FEATURE_EMU_GLOBAL_ENABLE_KEY == 1))
+#if ((defined FEATURE_EMU_GLOBAL_ENABLE_KEY) && ( FEATURE_EMU_GLOBAL_ENABLE_KEY == 1))
     base->EIGCR = 0x89abcdefU;
-    #else
+#else
     base->EIGCR = 0x01U;
-    #endif
+#endif
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_GetErrReportCnt
- * Description   : This function get the error count of EMU module.
- *
- *END**************************************************************************/
-uint32_t EMU_GetErrReportCnt(EMU_Type *const base, uint8_t channel)
-{
-    DEV_ASSERT(channel < EMU_ERINFO_COUNT);
-    return base->ERINFO[channel].CNT;
-}
+/*******************************************************************************
+ * Injection Configuration
+ ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_SetErrInjectAddr
- * Description   : This function set the inject error address of EMU module.
- *
- *END**************************************************************************/
+/*!
+ * @brief Program the SRAM word address used to trigger an injected ECC event.
+ */
 void EMU_SetErrInjectAddr(EMU_Type *const base, uint8_t channel, volatile uint32_t addr)
 {
     DEV_ASSERT(channel < EMU_EICHD_COUNT);
     base->EICHD[channel].ADDR = addr;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_SetErrInjectChkbit
- * Description   : This function set the inject error check bit of EMU module.
- *
- *END**************************************************************************/
+/*!
+ * @brief Program one check-bit index for single-bit injection.
+ */
 void EMU_SetErrInjectChkbit(EMU_Type *const base, uint8_t channel, emu_chkbit_type chkbit)
 {
     DEV_ASSERT(channel < EMU_EICHD_COUNT);
     base->EICHD[channel].CHKBIT = (uint32_t)EMU_EICHD_CHKBIT_CHKBIT_MASK & ((uint32_t)1U << chkbit);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_SetErrInjectChkMulti
- * Description   : This function set the multiple injection error check bits of EMU module.
- *
- *END**************************************************************************/
+/*!
+ * @brief Program a raw multi-bit check mask for one channel.
+ */
 void EMU_SetErrInjectChkMulti(EMU_Type *const base, uint8_t channel, emu_chkbit_type chkMulti)
 {
     DEV_ASSERT(channel < EMU_EICHD_COUNT);
@@ -148,12 +114,9 @@ void EMU_SetErrInjectChkMulti(EMU_Type *const base, uint8_t channel, emu_chkbit_
     base->EICHD[channel].CHKBIT = (uint32_t)EMU_EICHD_CHKBIT_CHKBIT_MASK & chkMulti;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_ClearChkbit
- * Description   : This function clear the inject error check bit of EMU module.
- *
- *END**************************************************************************/
+/*!
+ * @brief Clear the programmed check-bit injection mask for one channel.
+ */
 void EMU_ClearChkbit(EMU_Type *const base, uint8_t channel)
 {
     DEV_ASSERT(channel < EMU_EICHD_COUNT);
@@ -161,36 +124,30 @@ void EMU_ClearChkbit(EMU_Type *const base, uint8_t channel)
     base->EICHD[channel].CHKBIT = 0x00;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_SetErrInjectData
- * Description   : This function set the inject error data bit of EMU module.
- *
- *END**************************************************************************/
+/*!
+ * @brief Program one data-bit index for single-bit injection.
+ */
 void EMU_SetErrInjectData(EMU_Type *const base, uint8_t channel, emu_databit_type databit)
 {
     DEV_ASSERT(channel < EMU_EICHD_COUNT);
 
 #if defined(FEATURE_EMU_SUPPORT_64BIT_INJECTION) && (FEATURE_EMU_SUPPORT_64BIT_INJECTION == 1U)
-    if(databit < 32U)
+    if (databit < 32U)
     {
         base->EICHD[channel].DATAL = ((uint32_t)0x1U << databit);
     }
     else
     {
-        base->EICHD[channel].DATAH = ((uint32_t)0x1U << (databit-32U));
+        base->EICHD[channel].DATAH = ((uint32_t)0x1U << (databit - 32U));
     }
 #else
     base->EICHD[channel].DATA = ((uint32_t)0x1U << databit);
 #endif /* FEATURE_EMU_SUPPORT_64BIT_INJECTION */
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_SetErrInjectDataMulti
- * Description   : This function set the inject multi error data bits of EMU module.
- *
- *END**************************************************************************/
+/*!
+ * @brief Program a raw multi-bit data mask for one channel.
+ */
 void EMU_SetErrInjectDataMulti(EMU_Type *const base, uint8_t channel, emu_databit_type dataMulti)
 {
     DEV_ASSERT(channel < EMU_EICHD_COUNT);
@@ -203,12 +160,9 @@ void EMU_SetErrInjectDataMulti(EMU_Type *const base, uint8_t channel, emu_databi
 #endif /* FEATURE_EMU_SUPPORT_64BIT_INJECTION */
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_ClearData
- * Description   : This function clear the inject error data bit of EMU module.
- *
- *END**************************************************************************/
+/*!
+ * @brief Clear the programmed data-bit injection mask for one channel.
+ */
 void EMU_ClearData(EMU_Type *const base, uint8_t channel)
 {
     DEV_ASSERT(channel < EMU_EICHD_COUNT);
@@ -220,12 +174,31 @@ void EMU_ClearData(EMU_Type *const base, uint8_t channel)
 #endif /* FEATURE_EMU_SUPPORT_64BIT_INJECTION */
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_GetErrReportAddr
- * Description   : This function get the report error address of EMU module.
- *
- *END**************************************************************************/
+/*******************************************************************************
+ * Error Reporting
+ ******************************************************************************/
+
+/*!
+ * @brief Read the error report counter for one channel.
+ */
+uint32_t EMU_GetErrReportCnt(EMU_Type *const base, uint8_t channel)
+{
+    DEV_ASSERT(channel < EMU_ERINFO_COUNT);
+    return base->ERINFO[channel].CNT;
+}
+
+/*!
+ * @brief Clear the error report counter for one channel.
+ */
+void EMU_ClearErrReportCnt(EMU_Type *const base, uint8_t channel)
+{
+    DEV_ASSERT(channel < EMU_ERINFO_COUNT);
+    base->ERINFO[channel].CNT = 0x00U & EMU_ERINFO_CNT_CNT_MASK;
+}
+
+/*!
+ * @brief Read the latched report address for one channel.
+ */
 uint32_t EMU_GetErrReportAddr(EMU_Type *const base, uint8_t channel)
 {
     DEV_ASSERT(channel < EMU_EICHD_COUNT);
@@ -233,12 +206,21 @@ uint32_t EMU_GetErrReportAddr(EMU_Type *const base, uint8_t channel)
     return base->ERINFO[channel].ADDR;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_EnableInterruptSignalBit
- * Description   : This function enable the interrupt signal bit of EMU module.
- *
- *END**************************************************************************/
+/*!
+ * @brief Read the raw syndrome field for one channel.
+ */
+uint32_t EMU_GetSyndrome(EMU_Type *const base, uint8_t channel)
+{
+    return (base->ERINFO[channel].SYND & EMU_ERINFO_SYND_SYNDROME_MASK) >> EMU_ERINFO_SYND_SYNDROME_SHIFT;
+}
+
+/*******************************************************************************
+ * Interrupt Control
+ ******************************************************************************/
+
+/*!
+ * @brief Enable single-bit correction interrupt reporting for one channel.
+ */
 void EMU_EnableInterruptSignalBit(EMU_Type *const base, uint8_t channel)
 {
     DEV_ASSERT(channel < EMU_ERINFO_COUNT);
@@ -246,12 +228,9 @@ void EMU_EnableInterruptSignalBit(EMU_Type *const base, uint8_t channel)
     base->ERIE |= EMU_ERIE_SCIE((uint32_t)1U << channel); /*PRQA S 2985*/
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_DisableInterruptSignalBit
- * Description   : This function disable the interrupt signal bit of EMU module.
- *
- *END**************************************************************************/
+/*!
+ * @brief Disable single-bit correction interrupt reporting for one channel.
+ */
 void EMU_DisableInterruptSignalBit(EMU_Type *const base, uint8_t channel)
 {
     DEV_ASSERT(channel < EMU_ERINFO_COUNT);
@@ -259,12 +238,9 @@ void EMU_DisableInterruptSignalBit(EMU_Type *const base, uint8_t channel)
     base->ERIE &= ~EMU_ERIE_SCIE((uint32_t)1U << channel); /*PRQA S 2985*/
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_ClearInterruptFlagSignalBit
- * Description   : This function clear the interrupt signal bit flag of EMU module.
- *
- *END**************************************************************************/
+/*!
+ * @brief Clear the single-bit correction interrupt flag for one channel.
+ */
 void EMU_ClearInterruptFlagSignalBit(EMU_Type *const base, uint8_t channel)
 {
     DEV_ASSERT(channel < EMU_ERINFO_COUNT);
@@ -272,12 +248,9 @@ void EMU_ClearInterruptFlagSignalBit(EMU_Type *const base, uint8_t channel)
     base->ERIF = EMU_ERIF_SCIF((uint32_t)1U << channel); /*PRQA S 2985*/
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_EnableInterruptDoubleBit
- * Description   : This function enable the interrupt double bit of EMU module.
- *
- *END**************************************************************************/
+/*!
+ * @brief Enable double-bit interrupt reporting for one channel.
+ */
 void EMU_EnableInterruptDoubleBit(EMU_Type *const base, uint8_t channel)
 {
     DEV_ASSERT(channel < EMU_ERINFO_COUNT);
@@ -285,12 +258,9 @@ void EMU_EnableInterruptDoubleBit(EMU_Type *const base, uint8_t channel)
     base->ERIE |= EMU_ERIE_NCIE((uint32_t)1U << channel);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_DisableInterruptDoubleBit
- * Description   : This function disable the interrupt double bit of EMU module.
- *
- *END**************************************************************************/
+/*!
+ * @brief Disable double-bit interrupt reporting for one channel.
+ */
 void EMU_DisableInterruptDoubleBit(EMU_Type *const base, uint8_t channel)
 {
     DEV_ASSERT(channel < EMU_ERINFO_COUNT);
@@ -298,12 +268,9 @@ void EMU_DisableInterruptDoubleBit(EMU_Type *const base, uint8_t channel)
     base->ERIE &= ~EMU_ERIE_NCIE((uint32_t)1U << channel);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_ClearInterruptFlagDoubleBit
- * Description   : This function clear the interrupt double bit of EMU module.
- *
- *END**************************************************************************/
+/*!
+ * @brief Clear the double-bit interrupt flag for one channel.
+ */
 void EMU_ClearInterruptFlagDoubleBit(EMU_Type *const base, uint8_t channel)
 {
     DEV_ASSERT(channel < EMU_ERINFO_COUNT);
@@ -311,23 +278,9 @@ void EMU_ClearInterruptFlagDoubleBit(EMU_Type *const base, uint8_t channel)
     base->ERIF = EMU_ERIF_NCIF((uint32_t)1U << channel);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_GetSyndrome
- * Description   : This function get the syndrome of EMU module.
- *
- *END**************************************************************************/
-uint32_t EMU_GetSyndrome(EMU_Type *const base, uint8_t channel)
-{
-    return (base->ERINFO[channel].SYND & EMU_ERINFO_SYND_SYNDROME_MASK) >> EMU_ERINFO_SYND_SYNDROME_SHIFT;
-}
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_GetChannelSBInterruptFlag
- * Description   : This function gets single bit error correct check interrupt flag.
- *
- *END**************************************************************************/
+/*!
+ * @brief Query the single-bit correction interrupt flag field for one channel.
+ */
 uint8_t EMU_GetChannelSBInterruptFlag(EMU_Type *const base, uint8_t channel)
 {
     return (uint8_t)((((base->ERIF & EMU_ERIF_SCIF_MASK) >> EMU_ERIF_SCIF_SHIFT) >> channel));

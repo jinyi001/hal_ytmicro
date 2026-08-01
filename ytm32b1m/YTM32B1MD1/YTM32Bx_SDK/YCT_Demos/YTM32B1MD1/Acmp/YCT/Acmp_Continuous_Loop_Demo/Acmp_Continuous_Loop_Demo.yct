@@ -1075,6 +1075,7 @@
         "sdkVer": "dev",
         "useFreeRtos": false,
         "useSecureBoot": false,
+        "enableHFReset": true,
         "stack_top": "STACK_end",
         "vector_ram": "IVT_RAM_start",
         "vector_flash_region": ".isr_vector",

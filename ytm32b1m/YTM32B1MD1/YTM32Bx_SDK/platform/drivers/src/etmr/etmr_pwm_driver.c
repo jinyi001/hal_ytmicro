@@ -8,6 +8,12 @@
 /*!
  * @file etmr_pwm_driver.c
  * @version 1.4.1
+ *
+ * @brief eTMR PWM Driver — implementation.
+ *
+ * This file implements the PWM mode functions declared in etmr_pwm_driver.h,
+ * including PWM initialization, duty-cycle/period updates, fault configuration,
+ * and software trigger synchronization.
  */
 
 #include "etmr_pwm_driver.h"
@@ -23,15 +29,13 @@ static status_t eTMR_DRV_CalculateDutyCycle(uint32_t period,
                                             uint32_t *firstEdge,
                                             uint32_t *secondEdge);
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Initialize PWM channel output modes and polarity.
  *
- * Function Name : eTMR_DRV_InitPwmChannel
- * Description   : This function will initialize the PWM channels about the initial
- *                value, polarity, dead time, double switch, complementary mode,
- *                pwm source invert, pwm mode, val0 and val1 match interrupt enable.
- *
- * Implements: eTMR_DRV_InitPwmChannel_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @param[in] param     Pointer to PWM configuration parameters.
+ * @return Operation status.
+ */
 status_t eTMR_DRV_InitPwmChannel(uint32_t instance, const etmr_pwm_param_t *param)
 {
     eTMR_Type *etmrBase = g_etmrBase[instance];
@@ -46,7 +50,6 @@ status_t eTMR_DRV_InitPwmChannel(uint32_t instance, const etmr_pwm_param_t *para
     {
         channelId = param->pwmChannelConfig[index].hwChannelId;
         eTMR_SetChnOutInitVal(etmrBase, channelId, (uint32_t)param->pwmChannelConfig[index].channelInitVal);
-        eTMR_InitChnOutput(etmrBase, channelId);
     }
 
 #if defined(FEATURE_eTMR_DEADTIME_CONFIG_EACH_CHANNEL) && (FEATURE_eTMR_DEADTIME_CONFIG_EACH_CHANNEL == 0U)
@@ -129,14 +132,13 @@ status_t eTMR_DRV_InitPwmChannel(uint32_t instance, const etmr_pwm_param_t *para
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Initialize duty cycles for all configured PWM channels.
  *
- * Function Name : eTMR_DRV_InitPwmDutyCycleChannel
- * Description   : This function will initialize the duty cycle for the PWM signal
- *                 at the initialization.
- *
- * Implements: eTMR_DRV_InitPwmDutyCycleChannel_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @param[in] param     Pointer to PWM configuration parameters.
+ * @return Operation status.
+ */
 status_t eTMR_DRV_InitPwmDutyCycleChannel(uint32_t instance, const etmr_pwm_param_t *param)
 {
     status_t status = STATUS_SUCCESS;
@@ -167,13 +169,13 @@ status_t eTMR_DRV_InitPwmDutyCycleChannel(uint32_t instance, const etmr_pwm_para
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Configure fault protection settings.
  *
- * Function Name : eTMR_DRV_InitFault
- * Description   : This function will initialize fault parameters.
- *
- * Implements    : eTMR_DRV_InitFault_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @param[in] param     Pointer to fault configuration parameters.
+ * @return Operation status.
+ */
 status_t eTMR_DRV_InitFault(uint32_t instance, const etmr_fault_param_t *param)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -234,13 +236,13 @@ status_t eTMR_DRV_InitFault(uint32_t instance, const etmr_fault_param_t *param)
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Initialize counter, period, duty cycle and fault for PWM mode.
  *
- * Function Name : eTMR_DRV_InitPwm
- * Description   : This function will initialize the eTMR module in PWM mode.
- *
- * Implements    : eTMR_DRV_InitPwm_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @param[in] param     Pointer to PWM configuration parameters.
+ * @return Operation status.
+ */
 status_t eTMR_DRV_InitPwm(uint32_t instance, const etmr_pwm_param_t *param)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -305,13 +307,12 @@ status_t eTMR_DRV_InitPwm(uint32_t instance, const etmr_pwm_param_t *param)
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Stop all PWM channels and reset PWM configuration.
  *
- * Function Name : eTMR_DRV_DeinitPwm
- * Description   : This function will stop all PWM channels.
- *
- * Implements    : eTMR_DRV_DeinitPwm_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @return Operation status.
+ */
 status_t eTMR_DRV_DeinitPwm(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -355,13 +356,16 @@ status_t eTMR_DRV_DeinitPwm(uint32_t instance)
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Update PWM period and duty cycle simultaneously in ticks.
  *
- * Function Name : eTMR_DRV_UpdatePwmPeriodAndDuty
- * Description   : This function will update the PWM period and duty cycle fast.
- *
- * Implements    : eTMR_DRV_UpdatePwmPeriodAndDuty_Activity
- *END**************************************************************************/
+ * @param[in] instance        The eTMR peripheral instance number.
+ * @param[in] channel         The channel index.
+ * @param[in] periodTicks     New period in ticks.
+ * @param[in] dutyCycleTicks  New duty cycle in ticks.
+ * @param[in] offset          Offset in ticks for asymmetrical PWM.
+ * @return Operation status.
+ */
 status_t eTMR_DRV_UpdatePwmPeriodAndDuty(uint32_t instance,
                                          uint8_t channel,
                                          uint32_t periodTicks,
@@ -395,13 +399,15 @@ status_t eTMR_DRV_UpdatePwmPeriodAndDuty(uint32_t instance,
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Update duty cycle and phase offset for a single PWM channel.
  *
- * Function Name : eTMR_DRV_UpdatePwmChannel
- * Description   : The function will update the duty cycle of the PWM.
- *
- * Implements    : eTMR_DRV_UpdatePwmChannel_Activity
- *END**************************************************************************/
+ * @param[in] instance   The eTMR peripheral instance number.
+ * @param[in] channel    The channel number.
+ * @param[in] dutyCycle  New duty cycle value.
+ * @param[in] offset     Offset for asymmetrical PWM.
+ * @return Operation status.
+ */
 status_t eTMR_DRV_UpdatePwmChannel(uint32_t instance,
                                    uint8_t channel,
                                    uint32_t dutyCycle,
@@ -438,14 +444,14 @@ status_t eTMR_DRV_UpdatePwmChannel(uint32_t instance,
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Update PWM period while preserving configured duty-cycle ratios.
  *
- * Function Name : eTMR_DRV_UpdatePwmPeriod
- * Description   : This function will update the new frequency in Hz and it will 
- *                 keep the duty cycle of channels which have been configured
- *
- * Implements : eTMR_DRV_UpdatePwmPeriod_Activity
- *END**************************************************************************/
+ * @param[in] instance   The eTMR peripheral instance number.
+ * @param[in] unit       Period unit (Hz or ticks).
+ * @param[in] newPeriod  New period value.
+ * @return Operation status.
+ */
 status_t eTMR_DRV_UpdatePwmPeriod(uint32_t instance, etmr_pwm_period_unit_t unit, uint32_t newPeriod)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -519,13 +525,18 @@ status_t eTMR_DRV_UpdatePwmPeriod(uint32_t instance, etmr_pwm_period_unit_t unit
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Calculate VAL0 and VAL1 compare values for a PWM waveform.
  *
- * Function Name : eTMR_DRV_CalculateDutyCycle
- * Description   : This function will calculate the val0 and val1 value.
- *
- * Implements    : eTMR_DRV_CalculateDutyCycle_Activity
- *END**************************************************************************/
+ * @param[in] period         PWM period in ticks.
+ * @param[in] typeOfUpdate   Duty-cycle update mode.
+ * @param[in] alignMode      PWM alignment mode.
+ * @param[in] dutyCycle      Duty-cycle value.
+ * @param[in] offset         Offset value for asymmetrical PWM.
+ * @param[out] firstEdge     Pointer to the first compare edge.
+ * @param[out] secondEdge    Pointer to the second compare edge.
+ * @return Operation status.
+ */
 static status_t eTMR_DRV_CalculateDutyCycle(uint32_t period,
                                             etmr_pwm_update_option_t typeOfUpdate,
                                             etmr_pwm_align_mode_t alignMode,
@@ -846,14 +857,11 @@ static status_t eTMR_DRV_CalculateDutyCycle(uint32_t period,
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Issue a software trigger to synchronize buffered registers.
  *
- * Function Name : eTMR_DRV_SyncWithSoftTrigger
- * Description   : This function will generate software trigger to synchronize
- *                 registers(INIT, CHMASK, MOD, MID, CHx_VAL0, CHx_VAL1)
- *
- * Implements : eTMR_DRV_SyncWithSoftTrigger_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ */
 void eTMR_DRV_SyncWithSoftTrigger(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);

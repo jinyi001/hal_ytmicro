@@ -1,5 +1,6 @@
 /*!
-@defgroup ptu Programmable Delay Block (PTU)
+@defgroup ptu
+@ingroup mod_analog Programmable Delay Block (PTU)
 @details 
 The YTMicro SDK provides a peripheral driver for the Programmable Delay Block (PTU) module.
 

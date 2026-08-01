@@ -8,6 +8,12 @@
 /*!
  * @file etmr_oc_driver.c
  * @version 1.4.1
+ *
+ * @brief eTMR Output Compare Driver — implementation.
+ *
+ * This file implements the output compare mode functions declared in
+ * etmr_oc_driver.h. Channels are configured to change their output
+ * state when the counter matches VAL0 or VAL1 compare values.
  */
 
 #include "etmr_oc_driver.h"
@@ -15,16 +21,13 @@
 #include "interrupt_manager.h"
 
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Initialize the eTMR in output compare mode.
  *
- * Function Name : eTMR_DRV_InitOutputCompare
- * Description   : Configures the eTMR to generate timed pulses
- * When the eTMR counter matches the value of compareVal argument (this is
- * written into CHn_VAL, CHn_VAL1 register), the channel output is changed based on what is specified
- * in the compareMode argument.
- *
- * Implements    : eTMR_DRV_InitOutputCompare_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @param[in] param     Pointer to output compare configuration.
+ * @return Operation status.
+ */
 status_t eTMR_DRV_InitOutputCompare(uint32_t instance, const etmr_oc_param_t *param)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -117,13 +120,14 @@ status_t eTMR_DRV_InitOutputCompare(uint32_t instance, const etmr_oc_param_t *pa
     return retStatus;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief De-initialize output compare mode.
  *
- * Function Name : eTMR_DRV_DeinitOutputCompare
- * Description   : Disables compare match output control and clears compare configuration
- *
- * Implements    : eTMR_DRV_DeinitOutputCompare_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @param[in] param     Pointer to the output compare configuration used to
+ *                      identify which channels to de-initialize.
+ * @return Operation status.
+ */
 status_t eTMR_DRV_DeinitOutputCompare(uint32_t instance, const etmr_oc_param_t *param)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -176,14 +180,18 @@ status_t eTMR_DRV_DeinitOutputCompare(uint32_t instance, const etmr_oc_param_t *
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Update the compare match values and modes for a channel.
  *
- * Function Name : eTMR_DRV_UpdateOutputCompareChannel
- * Description   : Sets the next compare match value on the given channel starting
- *                 from the current counter value.
- *
- * Implements    : eTMR_DRV_UpdateOutputCompareChannel_Activity
- *END**************************************************************************/
+ * @param[in] instance          The eTMR peripheral instance number.
+ * @param[in] channel           Output compare channel index.
+ * @param[in] nextCmpMatchVal0  New VAL0 compare value.
+ * @param[in] nextCmpMatchVal1  New VAL1 compare value.
+ * @param[in] val0CmpMode       Output action on VAL0 match.
+ * @param[in] val1CmpMode       Output action on VAL1 match.
+ * @param[in] softwareTrigger   `true` to issue a software trigger for immediate synchronization.
+ * @return Operation status.
+ */
 status_t eTMR_DRV_UpdateOutputCompareChannel(uint32_t instance,
                                              uint8_t channel,
                                              uint16_t nextCmpMatchVal0,

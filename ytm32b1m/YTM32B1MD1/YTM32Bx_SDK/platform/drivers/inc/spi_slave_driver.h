@@ -7,7 +7,11 @@
 
 /*!
  * @file spi_slave_driver.h
- * @version 1.4.1
+ * @brief SPI slave mode driver API declarations.
+ *
+ * Provides initialization and data transfer functions for operating
+ * the SPI peripheral in slave mode. Supports interrupt-driven
+ * (blocking and non-blocking) and DMA-based transfer mechanisms.
  */
 
 /*!
@@ -23,7 +27,7 @@
 #include "spi_shared_function.h"
 
 /*!
- * @addtogroup spi_driver
+ * @addtogroup spi
  */
 
 /*******************************************************************************
@@ -31,8 +35,11 @@
  ******************************************************************************/
 
 /*!
- * @brief User configuration structure for the SPI slave driver.
- * Implements : spi_slave_config_t_Class
+ * @brief SPI slave mode configuration structure.
+ *
+ * Contains all user-configurable parameters for slave mode operation.
+ * Pass this structure to SPI_DRV_SlaveInit() to configure the SPI
+ * slave instance.
  */
 typedef struct
 {
@@ -60,77 +67,76 @@ extern "C" {
 #endif
 
 /*!
- * @brief Return default configuration for SPI master.
- *
- * Initializes a structured provided by user with the configuration
- * of an interrupt based SPI transfer. 
- *
+ * @name Initialization and De-initialization
+ * @{
  */
 
+/*!
+ * @brief Fill the slave configuration structure with default values.
+ *
+ * Populates all fields of the spi_slave_config_t structure with safe
+ * defaults: 8-bit frames, PCS0, interrupt mode.
+ *
+ * @param[out] spiConfig  Pointer to the configuration structure to fill.
+ */
 void SPI_DRV_SlaveGetDefaultConfig(spi_slave_config_t *spiConfig);
 
 /*!
- * @brief Initializes a SPI instance for a slave mode operation, using interrupt mechanism.
+ * @brief Initialize the SPI instance in slave mode.
  *
- * This function un-gates the clock to the SPI module, initializes the SPI for
- * slave mode. After it is  initialized, the SPI module is configured in slave mode and the
- * user can start transmitting and receiving data by calling send, receive, and transfer functions.
- * This function indicates SPI slave uses an interrupt mechanism.
+ * Resets the SPI module, configures it for slave operation, enables
+ * interrupts, and activates the module.
  *
- * @param[in] instance The instance number of the SPI peripheral.
- * @param[in] spiState The pointer to the SPI slave driver state structure.
- * @param[in] slaveConfig The configuration structure spi_slave_user_config_t which
- *      configures the data bus format.
+ * @param[in] instance     SPI peripheral instance number.
+ * @param[in] spiState     Pointer to the runtime state structure
+ *                         (user-allocated, driver-populated).
+ * @param[in] slaveConfig  Pointer to the slave configuration.
+ * @return STATUS_SUCCESS on success, error code on failure.
  *
- * @return operation status
- *         - An error code :        Operation failure was occurred.
- *         - STATUS_SUCCESS:        Operation was successful.
+ * @pre The SPI peripheral clock must be enabled via clock_manager.
+ * @post The SPI module is enabled and ready for transfers.
  */
 status_t SPI_DRV_SlaveInit(uint32_t instance,
                            spi_state_t *spiState,
                            const spi_slave_config_t *slaveConfig);
 
 /*!
- * @brief Shuts down an SPI instance interrupt mechanism.
+ * @brief De-initialize the SPI slave instance.
  *
- * Disables the SPI module, gates its clock, and changes the SPI slave driver state to NonInit for the
- * SPI slave module which is initialized with interrupt mechanism. After de-initialization, the
- * user can re-initialize the SPI slave module with other mechanisms.
+ * Resets the SPI module, disables its interrupt, destroys the
+ * semaphore, and clears the state pointer.
  *
- * @param[in] instance The instance number of the SPI peripheral.
- * @return operation status
- *         - STATUS_SUCCESS:     If driver starts to send/receive data successfully.
- *         - STATUS_ERROR:       If driver is error and needs to clean error.
- *         - STATUS_BUSY:        If a transfer is in progress
+ * @param[in] instance  SPI peripheral instance number.
+ * @return STATUS_SUCCESS on success, STATUS_ERROR if busy.
+ *
+ * @pre No transfer should be in progress.
+ * @post The SPI module is disabled and its state is cleared.
  */
 status_t SPI_DRV_SlaveDeinit(uint32_t instance);
 
+/*@}*/
+
 /*!
- * @brief Transfers data on SPI bus using a blocking call.
+ * @name Data Transfer
+ * @{
+ */
+
+/*!
+ * @brief Perform an interrupt-driven blocking slave transfer.
  *
- * This function checks the driver status and mechanism and transmits/receives data through the SPI
- * bus. If the sendBuffer is NULL, the transmit process is ignored. If the receiveBuffer is NULL, the
- * receive process is ignored. If both the receiveBuffer and the sendBuffer are available, the transmit and the
- * receive progress is processed. If only the receiveBuffer is available, the receive is
- * processed. Otherwise, the transmit is processed. This function only returns when the
- * processes are completed. This function uses an interrupt mechanism.
- * Depending on frame size sendBuffer and receiveBuffer must be aligned like this:
- * -1 byte if frame size <= 8 bits 
- * -2 bytes if 8 bits < frame size <= 16 bits 
- * -4 bytes if 16 bits < frame size   
+ * Prepares the TX and RX buffers and waits for the master to drive
+ * the clock. The function blocks until all data is transferred or
+ * the timeout expires.
  *
- * @param[in] instance The instance number of SPI peripheral
- * @param[in] sendBuffer The pointer to data that user wants to transmit.
- * @param[in] receiveBuffer The pointer to data that user wants to store received data.
- * @param[in] transferByteCount The number of bytes to send and receive which is equal to size of send or receive buffers
- * @param[in] timeout The maximum number of milliseconds that function waits before
- *              timed out reached.
+ * @param[in]  instance          SPI peripheral instance number.
+ * @param[in]  sendBuffer        Pointer to TX data (NULL to skip TX).
+ * @param[out] receiveBuffer     Pointer to RX buffer (NULL to skip RX).
+ * @param[in]  transferByteCount Number of bytes to transfer.
+ * @param[in]  timeout           Timeout in milliseconds.
+ * @return STATUS_SUCCESS on success, STATUS_BUSY if already
+ *         transferring, STATUS_TIMEOUT if timed out.
  *
- * @return  operation status
- *          - STATUS_SUCCESS:    If driver starts to send/receive data successfully.
- *          - STATUS_ERROR:      If driver is error and needs to clean error.
- *          - STATUS_BUSY:       If a transfer is in progress
- *          - STATUS_TIMEOUT:    If time out reached while transferring is in progress.
+ * @note The transferByteCount must be a multiple of bytes-per-frame.
  */
 status_t SPI_DRV_SlaveTransferBlocking(uint32_t instance,
                                        const uint8_t *sendBuffer,
@@ -139,67 +145,61 @@ status_t SPI_DRV_SlaveTransferBlocking(uint32_t instance,
                                        uint32_t timeout);
 
 /*!
- * @brief Starts the transfer data on SPI bus using a non-blocking call.
+ * @brief Start a non-blocking slave transfer.
  *
- * This function checks the driver status and mechanism and transmits/receives data through the SPI
- * bus. If the sendBuffer is NULL, the transmit process is ignored. If the receiveBuffer is NULL, the
- * receive process is ignored. If both the receiveBuffer and the sendBuffer are available, the transmit and the
- * receive progress is processed. If only the receiveBuffer is available, the receive is
- * processed. Otherwise, the transmit is processed. This function only returns when the
- * processes are completed. This function uses an interrupt mechanism.
- * Depending on frame size sendBuffer and receiveBuffer must be aligned like this:
- * -1 byte if frame size <= 8 bits 
- * -2 bytes if 8 bits < frame size <= 16 bits 
- * -4 bytes if 16 bits < frame size
+ * Prepares the TX and RX buffers and returns immediately. The actual
+ * data transfer occurs when the master drives the clock. Use
+ * SPI_DRV_SlaveGetTransferStatus() to poll for completion, or
+ * register a callback via the configuration structure.
  *
- * @param[in] instance The instance number of SPI peripheral
- * @param[in] sendBuffer The pointer to data that user wants to transmit.
- * @param[in] receiveBuffer The pointer to data that user wants to store received data.
- * @param[in] transferByteCount The number of bytes to send and receive which is equal to size of send or receive buffers
+ * @param[in]  instance          SPI peripheral instance number.
+ * @param[in]  sendBuffer        Pointer to TX data (NULL to skip TX).
+ * @param[out] receiveBuffer     Pointer to RX buffer (NULL to skip RX).
+ * @param[in]  transferByteCount Number of bytes to transfer.
+ * @return STATUS_SUCCESS on success, STATUS_BUSY if already
+ *         transferring, STATUS_ERROR on failure.
  *
- * @return  operation status
- *          - STATUS_SUCCESS:   If driver starts to send/receive data successfully.
- *          - STATUS_ERROR:     If driver is error and needs to clean error.
- *          - STATUS_BUSY:      If a transfer is in progress
+ * @note The transferByteCount must be a multiple of bytes-per-frame.
  */
 status_t SPI_DRV_SlaveTransfer(uint32_t instance,
                                const uint8_t *sendBuffer,
                                uint8_t *receiveBuffer,
                                uint16_t transferByteCount);
 
+/*@}*/
+
 /*!
- * @brief Aborts the transfer that started by a non-blocking call transfer function.
+ * @name Transfer Management
+ * @{
+ */
+
+/*!
+ * @brief Abort an in-progress slave transfer.
  *
- * This function stops the transfer which was started by the calling the SPI_DRV_SlaveTransfer() function.
+ * Stops the current transfer, disables interrupts/DMA, and resets
+ * the transfer state.
  *
- * @param[in] instance The instance number of SPI peripheral
- *
- * @return  operation status
- *          - STATUS_SUCCESS:   If everything is OK.
- *
+ * @param[in] instance  SPI peripheral instance number.
+ * @return STATUS_SUCCESS.
  */
 status_t SPI_DRV_SlaveAbortTransfer(uint32_t instance);
 
 /*!
- * @brief Returns whether the previous transfer is finished.
+ * @brief Query the status of an ongoing slave transfer.
  *
- * When performing an a-sync transfer, the user can call this function to ascertain
- * the state of the current transfer: in progress (or busy) or complete (success).
- * In addition, if the transfer is still in progress, the user can get the number
- * of bytes that have been transferred up to now.
+ * Returns whether the transfer is still in progress or has completed,
+ * and optionally reports the number of bytes remaining.
  *
- * @param[in] instance The instance number of the SPI peripheral.
- * @param[in] bytesRemained Pointer to value that is filled in with the number of
- *  frames that have been sent in the active transfer. A frame is defined as the
- *  number of bits per frame.
- *
- * @return operation status
- *         - STATUS_SUCCESS:    The transfer has completed successfully.
- *         - STATUS_BUSY:       The transfer is still in progress.
- *         - STATUS_ERROR:      If driver is error and needs to clean error.
+ * @param[in]  instance       SPI peripheral instance number.
+ * @param[out] bytesRemained  Pointer to store remaining byte count
+ *                            (may be NULL).
+ * @return STATUS_SUCCESS if complete, STATUS_BUSY if in progress,
+ *         STATUS_ERROR if an error occurred.
  */
 status_t SPI_DRV_SlaveGetTransferStatus(uint32_t instance,
                                         uint32_t *bytesRemained);
+
+/*@}*/
 
 #if defined(__cplusplus)
 }
@@ -209,6 +209,5 @@ status_t SPI_DRV_SlaveGetTransferStatus(uint32_t instance,
 /*! @} */
 
 
-#endif /* __SPI_SLAVE_DRIVER_H__ */
-
+#endif /* SPI_SLAVE_DRIVER_H */
 

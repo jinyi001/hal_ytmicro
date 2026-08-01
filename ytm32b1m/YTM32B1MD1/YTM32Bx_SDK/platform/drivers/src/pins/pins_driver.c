@@ -8,6 +8,12 @@
 /*!
  * @file pins_driver.c
  * @version 1.4.1
+ *
+ * @brief PINS Driver — implementation of the public PINS_DRV_* API.
+ *
+ * This file implements the driver-layer wrappers declared in pins_driver.h.
+ * Each function forwards the request to the corresponding GPIO or PCTRL
+ * hardware access helper without changing the application-facing API.
  */
 
 #include "device_registers.h"
@@ -15,25 +21,17 @@
 #include "pins_port_hw_access.h"
 
 /*******************************************************************************
- * Definitions
+ * Initialization
  ******************************************************************************/
 
-/*******************************************************************************
- * Variables
- ******************************************************************************/
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_Init
- * Description   : This function configures the pins with the options provided
- * in the given structure.
- *
- * Implements    : PINS_DRV_Init_Activity
- *END**************************************************************************/
+/*!
+ * @brief Initialize a list of pins from an array of configuration records.
+ */
 status_t PINS_DRV_Init(uint32_t pinCount,
                        const pin_settings_config_t config[])
 {
     uint32_t i;
+
     for (i = 0U; i < pinCount; i++)
     {
         PINS_Init(&config[i]);
@@ -42,30 +40,25 @@ status_t PINS_DRV_Init(uint32_t pinCount,
     return STATUS_SUCCESS;
 }
 
+/*******************************************************************************
+ * Port Control
+ ******************************************************************************/
+
 #if FEATURE_PINS_HAS_PULL_SELECTION
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_SetPullSel
- * Description   : This function configures the internal resistor.
- *
- * Implements    : PINS_DRV_SetPullSel_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configure the internal pull resistor for a pin.
+ */
 void PINS_DRV_SetPullSel(PCTRL_Type * const base,
                          uint32_t pin,
                          port_pull_config_t pullConfig)
 {
     PINS_SetPullSel(base, pin, pullConfig);
 }
-
 #endif /* FEATURE_PINS_HAS_PULL_SELECTION */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_SetMuxModeSel
- * Description   : This function configures the pin muxing.
- *
- * Implements    : PINS_DRV_SetMuxModeSel_Activity
- *END**************************************************************************/
+/*!
+ * @brief Select the mux mode for a pin.
+ */
 void PINS_DRV_SetMuxModeSel(PCTRL_Type * const base,
                             uint32_t pin,
                             port_mux_t mux)
@@ -73,13 +66,13 @@ void PINS_DRV_SetMuxModeSel(PCTRL_Type * const base,
     PINS_SetMuxModeSel(base, pin, mux);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_SetPinIntSel
- * Description   : This function configures the gpio pin interrupt/DMA request.
- *
- * Implements    : PINS_DRV_SetPinIntSel_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Interrupt & Digital Filter Control
+ ******************************************************************************/
+
+/*!
+ * @brief Configure the interrupt or DMA trigger mode of a pin.
+ */
 void PINS_DRV_SetPinIntSel(GPIO_Type * const base,
                            uint32_t pin,
                            gpio_interrupt_config_t intConfig)
@@ -87,26 +80,18 @@ void PINS_DRV_SetPinIntSel(GPIO_Type * const base,
     PINS_SetPinIntSel(base, pin, intConfig);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_GetPinIntSel
- * Description   : This function gets the current gpio pin interrupt/DMA request configuration.
- *
- * Implements    : PINS_DRV_GetPinIntSel_Activity
- *END**************************************************************************/
+/*!
+ * @brief Read the current interrupt or DMA trigger configuration of a pin.
+ */
 gpio_interrupt_config_t PINS_DRV_GetPinIntSel(const GPIO_Type * const base,
                                               uint32_t pin)
 {
     return PINS_GetPinIntSel(base, pin);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_ClearPinIntFlagCmd
- * Description   : This function clears the individual pin-interrupt status flag.
- *
- * Implements    : PINS_DRV_ClearPinIntFlagCmd_Activity
- *END**************************************************************************/
+/*!
+ * @brief Clear the interrupt status flag of one pin.
+ */
 void PINS_DRV_ClearPinIntFlagCmd(GPIO_Type * const base,
                                  uint32_t pin)
 {
@@ -114,95 +99,66 @@ void PINS_DRV_ClearPinIntFlagCmd(GPIO_Type * const base,
 }
 
 #if defined(FEATURE_PINS_HAS_DIGITAL_FILTER) && (FEATURE_PINS_HAS_DIGITAL_FILTER)
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_EnableDigitalFilter
- * Description   : This function enables digital filter feature for digital pin muxing.
- *
- * Implements    : PINS_DRV_EnableDigitalFilter_Activity
- *END**************************************************************************/
+/*!
+ * @brief Enable the digital filter for one pin.
+ */
 void PINS_DRV_EnableDigitalFilter(GPIO_Type * const base,
                                   uint32_t pin)
 {
     PINS_EnableDigitalFilter(base, pin);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_DisableDigitalFilter
- * Description   : This function disables digital filter feature for digital
- * pin muxing.
- *
- * Implements    : PINS_DRV_DisableDigitalFilter_Activity
- *END**************************************************************************/
+/*!
+ * @brief Disable the digital filter for one pin.
+ */
 void PINS_DRV_DisableDigitalFilter(GPIO_Type * const base,
                                    uint32_t pin)
 {
     PINS_DisableDigitalFilter(base, pin);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_ConfigDigitalFilter
- * Description   : This function configures digital filter for port with
- * given configuration.
- *
- * Implements    : PINS_DRV_ConfigDigitalFilter_Activity
- *END**************************************************************************/
+/*!
+ * @brief Program the digital filter settings for one pin.
+ */
 void PINS_DRV_ConfigDigitalFilter(GPIO_Type * const base,
-                                  const gpio_digital_filter_config_t * const config, uint32_t pin)
+                                  const gpio_digital_filter_config_t * const config,
+                                  uint32_t pin)
 {
     PINS_ConfigDigitalFilter(base, config, pin);
 }
 #endif /* FEATURE_PINS_HAS_DIGITAL_FILTER */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_GetPortIntFlag
- * Description   : This function reads the entire gpio interrupt status flag.
- *
- * Implements    : PINS_DRV_GetPortIntFlag_Activity
- *END**************************************************************************/
+/*!
+ * @brief Read the interrupt status flags for an entire GPIO port.
+ */
 uint32_t PINS_DRV_GetPortIntFlag(const GPIO_Type * const base)
 {
     return PINS_GetPortIntFlag(base);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_ClearPortIntFlagCmd
- * Description   : This function clears the entire port interrupt status flag.
- *
- * Implements    : PINS_DRV_ClearPortIntFlagCmd_Activity
- *END**************************************************************************/
+/*!
+ * @brief Clear all interrupt status flags for a GPIO port.
+ */
 void PINS_DRV_ClearPortIntFlagCmd(GPIO_Type * const base)
 {
     PINS_ClearPortIntFlagCmd(base);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_GetPinsDirection
- * Description   : This function returns the current pins directions for a port. Pins
- * corresponding to bits with value of '1' are configured as output and
- * pins corresponding to bits with value of '0' are configured as input.
- *
- * Implements    : PINS_DRV_GetPinsDirection_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * GPIO Direction Control
+ ******************************************************************************/
+
+/*!
+ * @brief Read the current direction mask of a GPIO port.
+ */
 pins_channel_type_t PINS_DRV_GetPinsDirection(const GPIO_Type * const base)
 {
     return PINS_GPIO_GetPinsDirection(base);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_SetPinDirection
- * Description   : This function configures the direction for the given pin, with the
- * given value('1' for pin to be configured as output and '0' for pin to
- * be configured as input).
- *
- * Implements    : PINS_DRV_SetPinDirection_Activity
- *END**************************************************************************/
+/*!
+ * @brief Set the direction of one GPIO pin.
+ */
 void PINS_DRV_SetPinDirection(GPIO_Type * const base,
                               pins_channel_type_t pin,
                               pin_direction_t direction)
@@ -210,16 +166,9 @@ void PINS_DRV_SetPinDirection(GPIO_Type * const base,
     PINS_GPIO_SetPinDirection(base, pin, direction);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_SetPinsDirection
- * Description   : This function sets the direction configuration for all pins
- * in a port. Pins corresponding to bits with value of '1' will be configured as
- * output and pins corresponding to bits with value of '0' will be configured as
- * input.
- *
- * Implements    : PINS_DRV_SetPinsDirection_Activity
- *END**************************************************************************/
+/*!
+ * @brief Set the direction mask of an entire GPIO port.
+ */
 void PINS_DRV_SetPinsDirection(GPIO_Type * const base,
                                pins_channel_type_t pins)
 {
@@ -227,46 +176,31 @@ void PINS_DRV_SetPinsDirection(GPIO_Type * const base,
 }
 
 #if FEATURE_PINS_HAS_INPUT_DISABLE
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_SetPortInputDisable
- * Description   : This function sets the pins input state for a port.
- * Pins corresponding to bits with value of '1' will not be configured
- * as input and pins corresponding to bits with value of '0' will be configured
- * as input.
- *
- * Implements    : PINS_DRV_SetPortInputDisable_Activity
- *END**************************************************************************/
+/*!
+ * @brief Enable or disable the input path for selected pins.
+ */
 void PINS_DRV_SetPortInputDisable(GPIO_Type * const base,
                                   pins_channel_type_t pins)
 {
     PINS_GPIO_SetPortInputDisable(base, pins);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_GetPortInputDisable
- * Description   : This function returns the current pins input state for a port. Pins
- * corresponding to bits with value of '1' are not configured as input and
- * pins corresponding to bits with value of '0' are configured as input.
- *
- * Implements    : PINS_DRV_GetPortInputDisable_Activity
- *END**************************************************************************/
+/*!
+ * @brief Read the input-disable mask of a GPIO port.
+ */
 pins_channel_type_t PINS_DRV_GetPortInputDisable(const GPIO_Type * const base)
 {
     return PINS_GPIO_GetPortInputDisable(base);
 }
 #endif /* FEATURE_PINS_HAS_INPUT_DISABLE */
 
+/*******************************************************************************
+ * GPIO Data Access
+ ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_WritePin
- * Description   : This function writes the given pin from a port, with the given value
- * ('0' represents LOW, '1' represents HIGH).
- *
- * Implements    : PINS_DRV_WritePin_Activity
- *END**************************************************************************/
+/*!
+ * @brief Write one GPIO pin with a logic level.
+ */
 void PINS_DRV_WritePin(GPIO_Type * const base,
                        pins_channel_type_t pin,
                        pins_level_type_t value)
@@ -274,105 +208,70 @@ void PINS_DRV_WritePin(GPIO_Type * const base,
     PINS_GPIO_WritePin(base, pin, value);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_WritePins
- * Description   : This function writes all pins configured as output with the values given in
- * the parameter pins. '0' represents LOW, '1' represents HIGH.
- *
- * Implements    : PINS_DRV_WritePins_Activity
- *END**************************************************************************/
+/*!
+ * @brief Write the output register of an entire GPIO port.
+ */
 void PINS_DRV_WritePins(GPIO_Type * const base,
                         pins_channel_type_t pins)
 {
     PINS_GPIO_WritePins(base, pins);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_GetPinsOutput
- * Description   : This function returns the current output that is written to a port. Only pins
- * that are configured as output will have meaningful values.
- *
- * Implements    : PINS_DRV_GetPinsOutput_Activity
- *END**************************************************************************/
+/*!
+ * @brief Read the current output register value of a GPIO port.
+ */
 pins_channel_type_t PINS_DRV_GetPinsOutput(const GPIO_Type * const base)
 {
     return PINS_GPIO_GetPinsOutput(base);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_SetPins
- * Description   : This function configures output pins listed in parameter pins (bits that are
- * '1') to have a value of 'set' (HIGH). Pins corresponding to '0' will be
- * unaffected.
- *
- * Implements    : PINS_DRV_SetPins_Activity
- *END**************************************************************************/
+/*!
+ * @brief Set selected GPIO output pins to logic high.
+ */
 void PINS_DRV_SetPins(GPIO_Type * const base,
                       pins_channel_type_t pins)
 {
     PINS_GPIO_SetPins(base, pins);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_ClearPins
- * Description   : This function configures output pins listed in parameter pins (bits that are
- * '1') to have a 'cleared' value (LOW). Pins corresponding to '0' will be
- * unaffected.
- *
- * Implements    : PINS_DRV_ClearPins_Activity
- *END**************************************************************************/
+/*!
+ * @brief Clear selected GPIO output pins to logic low.
+ */
 void PINS_DRV_ClearPins(GPIO_Type * const base,
                         pins_channel_type_t pins)
 {
     PINS_GPIO_ClearPins(base, pins);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_TogglePins
- * Description   : This function toggles output pins listed in parameter pins (bits that are
- * '1'). Pins corresponding to '0' will be unaffected.
- *
- * Implements    : PINS_DRV_TogglePins_Activity
- *END**************************************************************************/
+/*!
+ * @brief Toggle selected GPIO output pins.
+ */
 void PINS_DRV_TogglePins(GPIO_Type * const base,
                          pins_channel_type_t pins)
 {
     PINS_GPIO_TogglePins(base, pins);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_ReadPins
- * Description   : This function returns the current input values from a port. Only pins
- * configured as input will have meaningful values.
- *
- * Implements    : PINS_DRV_ReadPins_Activity
- *END**************************************************************************/
+/*!
+ * @brief Read the input value of an entire GPIO port.
+ */
 pins_channel_type_t PINS_DRV_ReadPins(const GPIO_Type * const base)
 {
     return PINS_GPIO_ReadPins(base);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : PINS_DRV_ReadPin
- * Description   : This function returns the current input values from a pin. Only pins
- * configured as input will have meaningful values.
- *
- * Implements    : PINS_DRV_ReadPin_Activity
- *END**************************************************************************/
-pins_level_type_t PINS_DRV_ReadPin(const GPIO_Type * const base, pins_channel_type_t pin)
+/*!
+ * @brief Read the input value of one GPIO pin.
+ */
+pins_level_type_t PINS_DRV_ReadPin(const GPIO_Type * const base,
+                                   pins_channel_type_t pin)
 {
     uint32_t portValue = 0x0U;
     pins_level_type_t pinValue = 0x0U;
 
     portValue = PINS_GPIO_ReadPins(base);
     pinValue = (pins_level_type_t)((portValue >> pin) & 0x01U);
+
     return pinValue;
 }
 

@@ -8,6 +8,7 @@
 /*!
  * @file devassert.h
  * @version 1.4.1
+ * @brief Shared development-time assertion support for platform/devices.
  */
 
 #ifndef DEVASSERT_H
@@ -15,48 +16,69 @@
 
 #include <stdbool.h>
 
-/**
-\page Error_detection_and_reporting Error detection and reporting
+/*!
+ * @addtogroup devices_devassert
+ * @brief Development-time assertion helpers for shared device support code.
+ * @details
+ * This header provides the `DEV_ASSERT()` contract used throughout the shared
+ * device layer to validate input parameters and check static invariants.
+ * Because a failed validation usually indicates a software defect in the
+ * application or integration code rather than a recoverable runtime error,
+ * enabling these checks is recommended during development.
+ *
+ * The default implementation is controlled by the following compile-time
+ * symbols:
+ * - `DEV_ERROR_DETECT`
+ *   - Defined: validations are enabled. A failed condition triggers
+ *     `BKPT_ASM` and then halts execution in an infinite loop so the fault
+ *     can be inspected in a debugger.
+ *   - Undefined: `DEV_ASSERT()` becomes `((void)0)`, removing the runtime
+ *     checking overhead from optimized production builds.
+ * - `CUSTOM_DEVASSERT`
+ *   - Define this symbol as a quoted header name such as
+ *     `"custom_devassert.h"` to provide an application-specific backend.
+ *     This allows the project to replace the default breakpoint behavior with
+ *     logging, reset, safe-state entry, or another policy.
+ * @{
+ */
 
-YTM32 SDK drivers can use a mechanism to validate data coming from upper software layers (application code) by performing
-a number of checks on input parameters' range or other invariants that can be statically checked (not dependent on
-runtime conditions). A failed validation is indicative of a software bug in application code, therefore it is important
-to use this mechanism during development.
-
-The validation is performed by using DEV_ASSERT macro.
-A default implementation of this macro is provided in this file. However, application developers can provide their own
-implementation in a custom file. This requires defining the CUSTOM_DEVASSERT symbol with the specific file name in the
-project configuration (for example: -DCUSTOM_DEVASSERT="custom_devassert.h")
-
-The default implementation accommodates two behaviors, based on DEV_ERROR_DETECT symbol:
- - When DEV_ERROR_DETECT symbol is defined in the project configuration (for example: -DDEV_ERROR_DETECT), the validation
-   performed by the DEV_ASSERT macro is enabled, and a failed validation triggers a software breakpoint and further execution is
-   prevented (application spins in an infinite loop)
-   This configuration is recommended for development environments, as it prevents further execution and allows investigating
-   potential problems from the point of error detection.
- - When DEV_ERROR_DETECT symbol is not defined, the DEV_ASSERT macro is implemented as no-op, therefore disabling all validations.
-   This configuration can be used to eliminate the overhead of development-time checks.
-
-It is the application developer's responsibility to decide the error detection strategy for production code: one can opt to
-disable development-time checking altogether (by not defining DEV_ERROR_DETECT symbol), or one can opt to keep the checks
-in place and implement a recovery mechanism in case of a failed validation, by defining CUSTOM_DEVASSERT to point
-to the file containing the custom implementation.
-*/
-
+/*!
+ * @brief Use an application-provided `DEV_ASSERT()` implementation.
+ *
+ * Define `CUSTOM_DEVASSERT` as a quoted header name when the application wants
+ * to provide its own assertion backend. When this symbol is defined, the
+ * custom header is included directly and the default breakpoint-based
+ * implementation is bypassed entirely.
+ */
 #if defined (CUSTOM_DEVASSERT)
-    /* If the CUSTOM_DEVASSERT symbol is defined, then add the custom implementation */
+    /* Include the application-provided assertion backend. */
     #include CUSTOM_DEVASSERT
 #elif defined (DEV_ERROR_DETECT)
-    /* Implement default assert macro */
+    /*!
+     * @brief Trap execution when a development assertion fails.
+     *
+     * @param[in] x Condition to validate.
+     *
+     * When @a x is false, the function triggers `BKPT_ASM` and then loops
+     * forever so the failure can be inspected in a debugger.
+     */
 static inline void DevAssert(volatile bool x)
 {
     if(x) { } else { BKPT_ASM; for(;;) {} }
 }
+
+    /*!
+     * @brief Validate a development-time assumption.
+     */
     #define DEV_ASSERT(x) DevAssert(x)
 #else
-    /* Assert macro does nothing */
+    /*!
+     * @brief Compile `DEV_ASSERT()` to a no-op when runtime checking is disabled.
+     */
     #define DEV_ASSERT(x) ((void)0)
 #endif
+
+/*! @} */ /* End of devices_devassert */
 
 #endif /* DEVASSERT_H */
 

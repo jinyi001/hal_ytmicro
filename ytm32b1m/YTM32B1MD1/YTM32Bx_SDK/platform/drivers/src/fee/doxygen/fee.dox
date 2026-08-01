@@ -1,101 +1,319 @@
 /*!
-@defgroup fee Asynchronous Flash Emulation EEPROM (Fee)
-@brief 
+@defgroup fee
+@ingroup mod_flash Asynchronous Flash EEPROM Emulation (FEE)
+@brief Flash-backed logical block storage module for the YTMicro SDK.
+
 @details
-The Flash EEPROM Emulation (FEE) module is designed to emulate the behavior of an 
-Electrically Erasable Programmable Read-Only Memory (EEPROM) using the Flash memory 
-present in the microcontroller.
+The Flash EEPROM Emulation (FEE) module stores application data as logical
+blocks inside flash memory and presents an EEPROM-like programming model to the
+upper software layers. The implementation uses cluster metadata, validation
+flags, and background scan or swap jobs to maintain the newest valid copy of
+each logical block while delegating physical flash access to the FLS backend.
 
-## Fee Driver
-The feature of Fee:
-     - The user data is configured in blocks, and the block data length can be configured
-       as requirement.
-     - The data can be erased and write in block, and read special byte in a block.
+@section fee_features Key Features
+- Stores user data as configured logical blocks with per-block size, ownership,
+  and immediate-data attributes.
+- Uses cluster headers and block headers to track valid, invalid, inconsistent,
+  and never-written block states.
+- Supports asynchronous read, write, invalidate, and maintenance operations
+  driven by Fee_MainFunction().
+- Integrates the FLS backend through the module configuration so Fee_Init()
+  initializes the required flash driver instance directly.
+- Provides reserved-area handling for immediate blocks during cluster swap.
+- Supports a reduced-overhead light mode and a full standard mode build.
 
-Some platforms may be designed to have only PFLASH or both PFLASH and DFLASH.
+@section fee_modes Supported Modes
 
- For chips support DFLASH, it is recommended to use DFLASH for implementing Fee.  
+| Mode | Enable Condition | Behavior |
+|------|------------------|----------|
+| Standard Mode | `FEE_LIGHT_MODE` undefined or `0` | Uses full block and cluster metadata, supports Fee_InvalidateBlock() and Fee_EraseImmediateBlock(), and keeps separate validation / invalidation flag areas. |
+| Light Mode | `FEE_LIGHT_MODE == 1` | Uses reduced metadata overhead, serializes 24-bit flash addresses, and removes the invalidate / erase-immediate public services. |
 
- For chips don't support DFLASH, if Fee function is indispensable, it needs to use 
- a separate PFLASH block to implement FEE. The Fee can't be saved in the same block 
- with code. After implementing FEE, you may need to sacrifice OTA functionality.
+@section fee_arch Module Architecture
 
-The driver includes general APIs to handle specific operations on Fee module.
-The user can use those APIs directly in the application.
+@verbatim
+┌─────────────────────────────────────────────────────┐
+│                  Application Code                   │
+│       (calls Fee_Init / Fee_Read / Fee_Write)       │
+├─────────────────────────────────────────────────────┤
+│                 FEE Driver Layer                    │
+│  ● Public API in fee.h / fee.c                      │
+│  ● Logical block management, status reporting       │
+│  ● Scan, swap, validation, and reserved-area flow   │
+├─────────────────────────────────────────────────────┤
+│              FEE Internal Job Pipeline              │
+│  ● Header serialization / parsing helpers           │
+│  ● Cluster scan state machine                       │
+│  ● Cluster swap and block migration jobs            │
+├─────────────────────────────────────────────────────┤
+│              FLS Async Driver Layer                 │
+│  ● Flash read / write / erase scheduling            │
+│  ● Job completion callbacks back into FEE           │
+├─────────────────────────────────────────────────────┤
+│                Flash Memory Hardware                │
+└─────────────────────────────────────────────────────┘
+@endverbatim
 
-### Important note when use Fee module: ###
-- When configure the Fee, the total size(include the block data size, head size and 
-  cluster reserved size) of blocks in a cluster must be less than the cluster size.
+@subsection fee_arch_driver Driver Layer
+Application code uses the public API declared in fee.h. Requests are accepted
+as asynchronous jobs and complete only after Fee_MainFunction() advances the
+internal state machine to MEMIF_IDLE.
 
-- When configure the Fls module for Fee, the configuration item <tt>FlsJobEndNotification</tt> 
-  need to be configured ad <tt>Fee_JobEndNotification</tt>, the configuration item
-  <tt>FlsJobErrorNotification</tt> need to be configured as <tt>Fee_JobErrorNotification</tt>.
+@subsection fee_arch_jobs Internal Job Pipeline
+The internal scheduler manages cluster discovery during initialization, parses
+flash metadata, moves valid blocks during swap, and commits validation or
+invalidation markers after each flash operation completes.
 
-- The Fls driver must be initialized before Fee initialized and used, the <tt>FLS_MainFunction</tt>
-  needs to be called synchronously with <tt>Fee_MainFunction</tt>. The Fls and Fee can be initialized 
-  as following.
+@subsection fee_arch_fls FLS Backend Contract
+The `flashConfigPtr` field of Fee_ModuleUserConfig_t provides the FLS
+configuration used by Fee_Init(). That FLS configuration must route its job-end
+and job-error callbacks to Fee_JobEndNotification() and
+Fee_JobErrorNotification().
 
- @code
-    /*Fls init*/
-    Fls_Init(&Fls_Config);
+@section fee_config Configuration Parameters
 
-    /*Fee init*/
-    Fee_Init(NULL_PTR);
-    do
+@subsection fee_config_module Fee_ModuleUserConfig_t Fields
+| Field | Type | Description | Default / Source |
+|-------|------|-------------|------------------|
+| blockCnt | `uint16_t` | Number of logical blocks described by `blockConfigPtr`. | Board configuration |
+| clusterCnt | `uint8_t` | Number of configured cluster groups. | Board configuration |
+| clusterConfigPtr | `const Fee_ClusterGroupType *` | Pointer to the cluster-group table used by the FEE runtime. | Board configuration |
+| blockConfigPtr | `const Fee_BlockConfigType *` | Pointer to the logical-block table used to resolve block IDs and sizes. | Board configuration |
+| flashConfigPtr | `const Fls_ConfigType *` | Pointer to the FLS configuration that Fee_Init() forwards to Fls_Init(). | Board configuration |
+
+@subsection fee_config_block Fee_BlockConfigType Fields
+| Field | Type | Description |
+|-------|------|-------------|
+| BlockNumber | `uint16_t` | Public logical block identifier used by Fee_Read(), Fee_Write(), and maintenance APIs. |
+| BlockSize | `uint16_t` | Payload size in bytes for the block. |
+| ClrGrp | `uint8_t` | Cluster-group index that stores the block. |
+| ImmediateData | `bool` | Marks the block as immediate data that uses reserved-area handling. |
+| BlockAssignment | `Fee_BlockAssignmentType` | Declares whether the block belongs to shared, application, or bootloader storage. |
+
+@subsection fee_config_cluster Fee_ClusterGroupType and Fee_ClusterType Fields
+| Structure | Field | Type | Description |
+|-----------|-------|------|-------------|
+| Fee_ClusterGroupType | ClrPtr | `const Fee_ClusterType *const` | Pointer to the cluster list owned by the group. |
+| Fee_ClusterGroupType | ClrCount | `uint32_t` | Number of clusters in the group. |
+| Fee_ClusterGroupType | ReservedSize | `Fls_LengthType` | Bytes reserved for immediate-data updates while swap is active. |
+| Fee_ClusterType | StartAddr | `Fls_AddressType` | Start address of the physical cluster in flash. |
+| Fee_ClusterType | Length | `Fls_LengthType` | Cluster size in bytes. |
+
+@subsection fee_config_macros Build-Time Feature Switches
+| Macro | Description |
+|-------|-------------|
+| `FEE_LIGHT_MODE` | Selects reduced-overhead light mode when set to `1`. |
+| `FEE_VERSION_INFO_API` | Enables Fee_GetVersionInfo() when set to `STD_ON`. |
+| `FEE_NUMBER_OF_CLUSTER_GROUPS` | Number of cluster groups generated by the board configuration. |
+| `FEE_CRT_CFG_NR_OF_BLOCKS` | Number of logical blocks generated by the board configuration. |
+| `FEE_VIRTUAL_PAGE_SIZE` | Alignment unit used by the logical block layout. |
+| `FEE_DATA_BUFFER_SIZE` | Size of the shared internal data buffer used by scan and swap jobs. |
+
+@section fee_usage Usage Patterns
+
+@subsection fee_usage_init Pattern 1: Initialize the Driver and Wait for the Initial Scan
+Use this pattern during system startup. Fee_Init() schedules the initial scan
+immediately, so the application must keep polling until the module becomes idle.
+
+@code{.c}
+#include "sdk_project_config.h"
+
+static void Fee_WaitUntilIdle(void)
+{
+    while (Fee_GetStatus() != MEMIF_IDLE)
     {
-    Fls_MainFunction();
-    Fee_MainFunction();
-    }while(MEMIF_IDLE!=Fee_GetStatus());
- @endcode
+        Fee_MainFunction();
+    }
+}
 
-- We also can call <tt>Fee_Init</tt> during the MCU initialization, and call the 
-<tt>Fee_MainFunction</tt> in periodic task as following. In this way ,the initialization 
-of Fee actually done in a periodic task, and the Fee can't be operate(write,read,erase,
-compare...) before the initialization completed. 
+void App_InitStorage(void)
+{
+    Fee_Init(&Fee_ModuleConfig);
+    Fee_WaitUntilIdle();
+}
+@endcode
 
- @code
-    /*MCU Init*/
-    Fee_Init(NULL_PTR);
+@subsection fee_usage_rw Pattern 2: Write a Full Block and Read It Back
+Accepted read and write requests are asynchronous. Poll Fee_MainFunction() after
+each accepted request until the module returns to MEMIF_IDLE.
 
-    /*the periodic task*/
-    while(1)
+@code{.c}
+#include "sdk_project_config.h"
+
+uint8_t txBuffer[32] = {0x10U, 0x20U, 0x30U, 0x40U};
+uint8_t rxBuffer[32] = {0U};
+
+static void Fee_WaitUntilIdle(void)
+{
+    while (Fee_GetStatus() != MEMIF_IDLE)
     {
-    Fls_MainFunction();
-    Fee_MainFunction();
-    } 
- @endcode
+        Fee_MainFunction();
+    }
+}
 
-- The <tt>Fee_MainFunction</tt> need be called periodically or repeatedly called after an 
-  asynchronous operation functions.
+void App_UpdateCounterBlock(void)
+{
+    if (Fee_Write(FeeConf_FeeBlockConfiguration_FeeBlockConfiguration_0,
+                  txBuffer) == E_OK)
+    {
+        Fee_WaitUntilIdle();
+    }
 
-- We can call <tt>Fee_GetStatus</tt> to check the Fee driver status. We need insure the Fee
-  is IDLE when call an asynchronous operation functions of Fee.
+    if (Fee_Read(FeeConf_FeeBlockConfiguration_FeeBlockConfiguration_0,
+                 0U,
+                 rxBuffer,
+                 sizeof(rxBuffer)) == E_OK)
+    {
+        Fee_WaitUntilIdle();
+    }
+}
+@endcode
 
-## Integration guideline ##
- 
-### Compilation units ###
+@subsection fee_usage_periodic Pattern 3: Periodic Background Processing in a Super Loop
+When FEE is used by application tasks over time, poll the module regularly and
+gate new requests on MEMIF_IDLE.
 
-The following files need to be compiled in the project:
-\verbatim
-${SDK_PATH}\platform\drivers\src\Fee\Fee.c
-${SDK_PATH}\platform\drivers\src\Fee\fls_async_driver.c
-${SDK_PATH}\platform\drivers\src\Fee\fls_hw_access.c
-\endverbatim
+@code{.c}
+void App_MainLoop(void)
+{
+    for (;;)
+    {
+        Fee_MainFunction();
 
-### Include path ###
+        if (Fee_GetStatus() == MEMIF_IDLE)
+        {
+            /* Queue the next read or write request here. */
+        }
+    }
+}
+@endcode
 
-The following paths need to be added to the include path of the toolchain:
-\verbatim
-${SDK_PATH}\platform\drivers\inc\
-\endverbatim
+@subsection fee_usage_maint Pattern 4: Standard-Mode Block Maintenance
+Standard mode adds logical-block invalidation and immediate-block erase support.
 
-### Compile symbols ###
+@code{.c}
+#if !defined(FEE_LIGHT_MODE) || (FEE_LIGHT_MODE == 0U)
+static void Fee_WaitUntilIdle(void)
+{
+    while (Fee_GetStatus() != MEMIF_IDLE)
+    {
+        Fee_MainFunction();
+    }
+}
 
-No special symbols are required for this component
+void App_RefreshImmediateBlock(void)
+{
+    if (Fee_EraseImmediateBlock(FeeConf_FeeBlockConfiguration_FeeBlockConfiguration_2) == E_OK)
+    {
+        Fee_WaitUntilIdle();
+    }
 
-### Dependencies ###
+    if (Fee_InvalidateBlock(FeeConf_FeeBlockConfiguration_FeeBlockConfiguration_1) == E_OK)
+    {
+        Fee_WaitUntilIdle();
+    }
+}
+#endif
+@endcode
 
-\ref clock_manager
+@section fee_api API Quick Reference
 
+@subsection fee_api_runtime Initialization & Runtime Control
+| Function | Description |
+|----------|-------------|
+| Fee_Init() | Initialize the FEE runtime, FLS backend, and initial cluster scan. |
+| Fee_MainFunction() | Advance the asynchronous state machine and backend flash work. |
+| Fee_Cancel() | Cancel the currently active FEE job when the driver is busy. |
+
+@subsection fee_api_status Job Status & Version Information
+| Function | Description |
+|----------|-------------|
+| Fee_GetJobResult() | Return the result of the last accepted FEE job. |
+| Fee_GetStatus() | Return the current MEMIF module state. |
+| Fee_GetVersionInfo() | Return version metadata when `FEE_VERSION_INFO_API == STD_ON`. |
+
+@subsection fee_api_data Data Transfer
+| Function | Description |
+|----------|-------------|
+| Fee_Read() | Start an asynchronous read from a logical block. |
+| Fee_Write() | Start an asynchronous write of a full logical block. |
+
+@subsection fee_api_maint Block Maintenance
+| Function | Description |
+|----------|-------------|
+| Fee_InvalidateBlock() | Mark the current logical block instance invalid in standard mode. |
+| Fee_EraseImmediateBlock() | Re-prepare an immediate block for the next write in standard mode. |
+
+@subsection fee_api_callbacks Flash Callback Hooks
+| Function | Description |
+|----------|-------------|
+| Fee_JobEndNotification() | Continue the FEE state machine after a successful FLS step. |
+| Fee_JobErrorNotification() | Enter the FEE error path after a failed FLS step. |
+
+@section fee_notes Important Notes
+
+@subsection fee_notes_async Asynchronous Completion Model
+- `E_OK` from Fee_Read(), Fee_Write(), Fee_InvalidateBlock(), or
+  Fee_EraseImmediateBlock() only means the request was accepted.
+- Completion is reported through Fee_GetStatus() and Fee_GetJobResult() after
+  Fee_MainFunction() advances the internal state machine.
+
+@subsection fee_notes_callbacks Callback Wiring
+- The FLS configuration passed through `flashConfigPtr` must use
+  Fee_JobEndNotification() and Fee_JobErrorNotification() as its completion
+  callbacks.
+- If those callbacks are not wired correctly, scan, swap, write, and erase jobs
+  cannot advance beyond the first flash transaction.
+
+@subsection fee_notes_sizing Cluster and Reserved-Area Planning
+- The effective storage demand of a cluster group includes block payload size,
+  block header overhead, cluster header overhead, and `ReservedSize`.
+- The configured cluster capacity must be large enough to hold the active data
+  set plus any reserved space required by immediate blocks.
+
+@subsection fee_notes_light Light-Mode Restrictions
+- `Fee_InvalidateBlock()` and `Fee_EraseImmediateBlock()` are unavailable when
+  `FEE_LIGHT_MODE == 1`.
+- Light mode reduces metadata overhead and uses 24-bit address serialization,
+  so migration between light mode and standard mode requires a dedicated flash
+  reformat strategy.
+
+@subsection fee_notes_buffers Buffer and Request Constraints
+- Fee_Write() expects a buffer that contains the complete configured payload for
+  the selected logical block.
+- Fee_Read() offset and length parameters must stay inside the configured block
+  size.
+- The driver only accepts new requests while Fee_GetStatus() reports MEMIF_IDLE.
+
+@section fee_integration Integration Guide
+
+@subsection fee_integration_units Compilation Units
+Compile the following source files into the project:
+@verbatim
+${SDK_PATH}/platform/drivers/src/fee/fee.c
+${SDK_PATH}/platform/drivers/src/fee/fls_async_driver.c
+${SDK_PATH}/platform/drivers/src/fee/fls_hw_access.c
+@endverbatim
+
+@subsection fee_integration_include Include Paths
+Add the following include paths to the toolchain:
+@verbatim
+${SDK_PATH}/platform/drivers/inc
+${SDK_PATH}/platform/drivers/src/fee
+${SDK_PATH}/demos/<board>/fee/board
+@endverbatim
+
+@subsection fee_integration_symbols Compile Symbols
+Common build-time options:
+- `FEE_LIGHT_MODE=1` to enable the reduced-overhead light mode.
+- `FEE_VERSION_INFO_API=STD_ON` to expose Fee_GetVersionInfo().
+
+@subsection fee_integration_deps Dependencies
+- Board-generated `fee_config.h` / `fee_config.c` with logical block, cluster,
+  and FLS configuration objects.
+- Periodic execution of Fee_MainFunction() from the system scheduler or super
+  loop.
+- Flash memory ranges dedicated to FEE storage and excluded from application
+  code placement.
 
 @}*/

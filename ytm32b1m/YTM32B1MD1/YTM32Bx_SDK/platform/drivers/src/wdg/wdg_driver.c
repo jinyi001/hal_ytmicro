@@ -8,6 +8,14 @@
 /*!
  * @file wdg_driver.c
  * @version 1.4.1
+ *
+ * @brief WDG Driver — implementation of the public API.
+ *
+ * This file implements the instance-based WDG driver declared in
+ * `wdg_driver.h`. The implementation validates startup parameters, delegates
+ * hardware configuration to the watchdog access layer, manages instance IRQ
+ * routing, and provides helpers for runtime watchdog control and interrupt
+ * handling.
  */
 
 #include "wdg_hw_access.h"
@@ -26,13 +34,13 @@ static const IRQn_Type s_wdgIrqId[] = WDG_IRQS;
 /*******************************************************************************
  * Code
  ******************************************************************************/
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Initialize a WDG instance with user-provided settings.
  *
- * Function Name : WDG_DRV_Init
- * Description   : initialize the WDG driver
- *
- * Implements    : WDG_DRV_Init_Activity
- *END**************************************************************************/
+ * @param[in] instance       WDG instance index (0-based).
+ * @param[in] userConfigPtr  Pointer to the watchdog configuration structure.
+ * @return Execution status.
+ */
 status_t WDG_DRV_Init(uint32_t instance, const wdg_user_config_t *userConfigPtr)
 {
     DEV_ASSERT(instance < WDG_INSTANCE_COUNT);
@@ -60,13 +68,12 @@ status_t WDG_DRV_Init(uint32_t instance, const wdg_user_config_t *userConfigPtr)
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Attempt to stop the watchdog and restore reset values.
  *
- * Function Name : WDG_DRV_Deinit
- * Description   : De-initialize the WDG driver
- *
- * Implements    : WDG_DRV_Deinit_Activity
- *END**************************************************************************/
+ * @param[in] instance  WDG instance index (0-based).
+ * @return Execution status.
+ */
 status_t WDG_DRV_Deinit(uint32_t instance)
 {
     DEV_ASSERT(instance < WDG_INSTANCE_COUNT);
@@ -95,13 +102,12 @@ status_t WDG_DRV_Deinit(uint32_t instance)
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Read the current WDG configuration from hardware.
  *
- * Function Name : WDG_DRV_GetConfig
- * Description   : get the current configuration of the WDG driver
- *
- * Implements    : WDG_DRV_GetConfig_Activity
- *END**************************************************************************/
+ * @param[in] instance  WDG instance index (0-based).
+ * @param[out] config   Pointer to the structure that receives the current configuration.
+ */
 void WDG_DRV_GetConfig(uint32_t instance, wdg_user_config_t *const config)
 {
     DEV_ASSERT(instance < WDG_INSTANCE_COUNT);
@@ -111,13 +117,11 @@ void WDG_DRV_GetConfig(uint32_t instance, wdg_user_config_t *const config)
     WDG_GetConfig(baseAddr, config);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Populate a configuration structure with the driver's software defaults.
  *
- * Function Name : WDG_DRV_GetDefaultConfig
- * Description   : get default configuration of the WDG driver
- *
- * Implements    : WDG_DRV_GetDefaultConfig_Activity
- *END**************************************************************************/
+ * @param[out] config  Pointer to the configuration structure to populate.
+ */
 void WDG_DRV_GetDefaultConfig(wdg_user_config_t *const config)
 {
     DEV_ASSERT(config != NULL);
@@ -135,13 +139,13 @@ void WDG_DRV_GetDefaultConfig(wdg_user_config_t *const config)
     config->windowValue = FEATURE_WDG_WVR_RESET_VALUE;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Enable or disable interrupt-before-reset mode.
  *
- * Function Name : WDG_DRV_SetInt
- * Description   : enable/disable the WDG timeout interrupt
- *
- * Implements    : WDG_DRV_SetInt_Activity
- *END**************************************************************************/
+ * @param[in] instance  WDG instance index (0-based).
+ * @param[in] enable    `true` to enable interrupt-before-reset mode.
+ * @return Execution status.
+ */
 status_t WDG_DRV_SetInt(uint32_t instance, bool enable)
 {
     DEV_ASSERT(instance < WDG_INSTANCE_COUNT);
@@ -166,13 +170,11 @@ status_t WDG_DRV_SetInt(uint32_t instance, bool enable)
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Clear the pending watchdog interrupt flag.
  *
- * Function Name : WDG_DRV_ClearIntFlag
- * Description   : Clear interrupt flag of the WDG
- *
- * Implements    : WDG_DRV_ClearIntFlag_Activity
- *END**************************************************************************/
+ * @param[in] instance  WDG instance index (0-based).
+ */
 void WDG_DRV_ClearIntFlag(uint32_t instance)
 {
     DEV_ASSERT(instance < WDG_INSTANCE_COUNT);
@@ -182,13 +184,11 @@ void WDG_DRV_ClearIntFlag(uint32_t instance)
     WDG_ClearIntFlag(base);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Refresh the watchdog counter.
  *
- * Function Name : WDG_DRV_Trigger
- * Description   : Refreshes the WDG counter
- *
- * Implements    : WDG_DRV_Trigger_Activity
- *END**************************************************************************/
+ * @param[in] instance  WDG instance index (0-based).
+ */
 void WDG_DRV_Trigger(uint32_t instance)
 {
     DEV_ASSERT(instance < WDG_INSTANCE_COUNT);
@@ -197,13 +197,12 @@ void WDG_DRV_Trigger(uint32_t instance)
     WDG_Trigger(base);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Read the current watchdog counter value.
  *
- * Function Name : WDG_DRV_GetCounter
- * Description   : Get the value of the WDG counter.
- *
- * Implements    : WDG_DRV_GetCounter_Activity
- *END**************************************************************************/
+ * @param[in] instance  WDG instance index (0-based).
+ * @return Current watchdog counter value.
+ */
 uint32_t WDG_DRV_GetCounter(uint32_t instance)
 {
     DEV_ASSERT(instance < WDG_INSTANCE_COUNT);
@@ -212,13 +211,14 @@ uint32_t WDG_DRV_GetCounter(uint32_t instance)
     return (uint32_t)base->CNTCVR;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Enable or disable window mode and optionally update the window value.
  *
- * Function Name : WDG_DRV_SetWindow
- * Description   : Set window mode and window value of the WDG.
- *
- * Implements    : WDG_DRV_SetWindow_Activity
- *END**************************************************************************/
+ * @param[in] instance     WDG instance index (0-based).
+ * @param[in] enable       `true` enables window mode.
+ * @param[in] windowValue  Window threshold written when window mode is enabled.
+ * @return Execution status.
+ */
 status_t WDG_DRV_SetWindow(uint32_t instance, bool enable, uint32_t windowValue)
 {
     DEV_ASSERT(instance < WDG_INSTANCE_COUNT);
@@ -246,13 +246,14 @@ status_t WDG_DRV_SetWindow(uint32_t instance, bool enable, uint32_t windowValue)
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Update watchdog behavior in debug halt or deep-sleep mode.
  *
- * Function Name : WDG_DRV_SetMode
- * Description   : Set mode operation of the WDG.
- *
- * Implements    : WDG_DRV_SetMode_Activity
- *END**************************************************************************/
+ * @param[in] instance  WDG instance index (0-based).
+ * @param[in] enable    `true` keeps the watchdog active in the selected mode.
+ * @param[in] setMode   Runtime mode selector to update.
+ * @return Execution status.
+ */
 status_t WDG_DRV_SetMode(uint32_t instance, bool enable, wdg_set_mode_t setMode)
 {
     DEV_ASSERT(instance < WDG_INSTANCE_COUNT);
@@ -285,13 +286,13 @@ status_t WDG_DRV_SetMode(uint32_t instance, bool enable, wdg_set_mode_t setMode)
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Write a new timeout reload value to the watchdog.
  *
- * Function Name : WDG_DRV_SetTimeout
- * Description   : Set time value of the WDG timeout.
- *
- * Implements    : WDG_DRV_SetTimeout_Activity
- *END**************************************************************************/
+ * @param[in] instance  WDG instance index (0-based).
+ * @param[in] timeout   Timeout reload value.
+ * @return Execution status.
+ */
 status_t WDG_DRV_SetTimeout(uint32_t instance, uint32_t timeout)
 {
     DEV_ASSERT(instance < WDG_INSTANCE_COUNT);

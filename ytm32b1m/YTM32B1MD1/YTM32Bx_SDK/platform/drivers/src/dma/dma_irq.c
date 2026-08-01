@@ -12,13 +12,6 @@
 
 #include "dma_irq.h"
 
-/*******************************************************************************
- * Variables
- ******************************************************************************/
-
-/*******************************************************************************
- * Prototypes
- ******************************************************************************/
 #ifdef FEATURE_DMA_ORED_IRQ_LINES_16_CHN
 void DMA0_15_IRQHandler(void);
 #if (FEATURE_DMA_VIRTUAL_CHANNELS > 16U)
@@ -91,10 +84,6 @@ void DMA31_IRQHandler(void);
 void DMA_Error_IRQHandler(void);
 
 #endif
-
-/*******************************************************************************
- * Code
- ******************************************************************************/
 
 #ifdef FEATURE_DMA_ORED_IRQ_LINES_16_CHN
 
@@ -411,6 +400,7 @@ void DMA15_IRQHandler(void)
 
 #endif /* (FEATURE_DMA_VIRTUAL_CHANNELS > 8U) */
 #if (FEATURE_DMA_VIRTUAL_CHANNELS > 16U)
+/*! @brief DMA IRQ handler with the same name in the startup code*/
 void DMA16_IRQHandler(void)
 {
     DMA_DRV_IRQHandler(16U);
@@ -582,7 +572,3 @@ void DMA_Error_IRQHandler(void)
 #endif /* CPU_YTM32B1HB0 */
 
 #endif /* FEATURE_DMA_HAS_ERROR_IRQ */
-
-/*******************************************************************************
- * EOF
- ******************************************************************************/

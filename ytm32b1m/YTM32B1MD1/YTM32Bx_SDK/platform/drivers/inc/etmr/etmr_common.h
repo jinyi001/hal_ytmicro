@@ -8,6 +8,13 @@
 /*!
  * @file etmr_common.h
  * @version 1.4.1
+ *
+ * @brief eTMR Common Driver — public API declarations and shared data types.
+ *
+ * This header defines the shared enumerations, structures, and driver
+ * state used by all eTMR sub-modules (PWM, IC, OC, MC, QD). It also
+ * declares the common API functions for initialization, counter control,
+ * synchronization, interrupt management, and status flag access.
  */
 
 /*!
@@ -64,7 +71,6 @@ extern IRQn_Type g_etmrIrqId[eTMR_INSTANCE_COUNT][FEATURE_eTMR_CHANNEL_INTERRUPT
 /**
  * @brief eTMR Channel Mode
  *
- * Implements : etmr_channel_mode_t_Class
  */
 typedef enum
 {
@@ -77,7 +83,6 @@ typedef enum
 /**
  * @brief eTMR PWM mode
  *
- * Implements : etmr_pwm_mode_t_Class
  */
 typedef enum
 {
@@ -88,7 +93,6 @@ typedef enum
 /*!
  * @brief eTMR Configure type of PWM update in the duty cycle or in ticks
  *
- * Implements : etmr_pwm_update_option_t_Class
  */
 typedef enum
 {
@@ -99,7 +103,6 @@ typedef enum
 /*!
  * @brief eTMR PWM period unit
  *
- * Implements : etmr_pwm_period_unit_t_Class
  */
 typedef enum
 {
@@ -110,7 +113,6 @@ typedef enum
 /*!
  * @brief eTMR PWM align mode
  *
- * Implements : etmr_pwm_align_mode_t_Class
  */
 typedef enum
 {
@@ -123,7 +125,6 @@ typedef enum
 /*!
  * @brief eTMR clock source selection
  *
- * Implements : etmr_clock_source_t_Class
  */
 typedef enum
 {
@@ -135,7 +136,6 @@ typedef enum
 /*!
  * @brief eTMR quadrature decoder modes, phase encode or count and direction mode
  *
- * Implements: etmr_qd_mode_t_Class
  */
 typedef enum
 {
@@ -148,7 +148,6 @@ typedef enum
 /*!
  * @brief eTMR quadrature decoder clock prescaler
  *
- * Implements: etmr_qd_clock_prs_t_Class
  */
 typedef enum
 {
@@ -165,7 +164,6 @@ typedef enum
 /*!
  * @brief eTMR CHMASK register sync selection
  *
- * Implements: etmr_sync_sel_t_Class
  */
 typedef enum
 {
@@ -183,7 +181,6 @@ typedef enum
 /*!
  * @brief eTMR counter sync selection
  *
- * Implements: etmr_cnt_sync_sel_t_Class
  */
 typedef enum
 {
@@ -200,7 +197,6 @@ typedef enum
 /*!
  * @brief eTMR register sync selection
  *
- * Implements: etmr_reg_sync_sel_t_Class
  */
 typedef enum
 {
@@ -217,7 +213,6 @@ typedef enum
 /*!
  * @brief eTMR register loading trigger source
  *
- * Implements: etmr_sync_trig_src_t_Class
  */
 typedef enum
 {
@@ -248,7 +243,6 @@ typedef enum
 /*!
  * @brief List of eTMR interrupts
  *
- * Implements : etmr_interrupt_option_t_Class
  */
 typedef enum
 {
@@ -267,7 +261,6 @@ typedef enum
 /*!
  * @brief List of eTMR flags
  *
- * Implements : etmr_status_flag_t_Class
  */
 typedef enum
 {
@@ -291,7 +284,6 @@ typedef enum
 /*!
  * @brief eTMR Initial counter value source
  *
- * Implements : etmr_counter_init_src_t_Class
  */
 typedef enum
 {
@@ -303,7 +295,6 @@ typedef enum
 /*!
  * @brief eTMR channel val0 and val1 trigger enablement
  *
- * Implements: etmr_trig_ch_param_t_Class
  */
 typedef struct
 {
@@ -315,7 +306,6 @@ typedef struct
 /*!
  * @brief eTMR trigger configurations
  *
- * Implements: etmr_trig_config_t_Class
  */
 typedef struct
 {
@@ -333,7 +323,6 @@ typedef struct
 /*!
  * @brief eTMR Registers sync configurations
  *
- * Implements : etmr_pwm_sync_t_Class
  */
 typedef struct
 {
@@ -352,7 +341,6 @@ typedef struct
 /*!
  * @brief Configuration structure that the user needs to set
  *
- * Implements : etmr_user_config_t_Class
  */
 typedef struct
 {
@@ -368,7 +356,6 @@ typedef struct
 /*!
  * @brief eTMR channel mode state
  *
- * Implements: etmr_channel_state_t_Class
  */
 typedef enum
 {
@@ -382,7 +369,6 @@ typedef enum
 /*!
  * @brief eTMR input capture edge mode as rising edge or falling edge
  *
- * Implements : etmr_ic_capture_edge_t_Class
  */
 typedef enum
 {
@@ -395,7 +381,6 @@ typedef enum
 /*!
  * @brief eTMR input capture measurement type
  *
- * Implements : etmr_ic_measurement_type_t_Class
  */
 typedef enum
 {
@@ -407,7 +392,6 @@ typedef enum
 /*!
  * @brief eTMR state structure of the driver
  *
- * Implements : etmr_state_t_Class
  */
 typedef struct
 {
@@ -448,8 +432,14 @@ extern "C" {
 #endif
 
 /*******************************************************************************
- * Functions
+ * API
  ******************************************************************************/
+
+/*!
+ * @name Initialization & De-initialization
+ * @{
+ */
+
 /*!
  * @brief Disable eTMR counter
  *
@@ -463,6 +453,58 @@ void eTMR_DRV_Disable(uint32_t instance);
  * @param[in] instance  The eTMR peripheral instance number.
  */
 void eTMR_DRV_Enable(uint32_t instance);
+
+/*!
+ * @brief Initialize the eTMR driver.
+ *
+ * Configures clock source, prescaler, debug mode, synchronization,
+ * output trigger, and overflow interrupt based on the user config.
+ *
+ * @param[in]  instance The eTMR peripheral instance number.
+ * @param[in]  info     Pointer to the user configuration structure.
+ * @param[out] state    Pointer to the driver state structure.
+ * @return Operation status.
+ * @retval STATUS_SUCCESS Completed successfully.
+ * @retval STATUS_ERROR   Error occurred.
+ */
+status_t eTMR_DRV_Init(uint32_t instance, const etmr_user_config_t *info, etmr_state_t *state);
+
+/*!
+ * @brief Shut down the eTMR driver.
+ *
+ * Resets all registers to default, clears the driver state, and
+ * disables the eTMR counter.
+ *
+ * @param[in] instance The eTMR peripheral instance number.
+ * @return Operation status.
+ * @retval STATUS_SUCCESS Completed successfully.
+ * @retval STATUS_ERROR   Error occurred.
+ */
+status_t eTMR_DRV_Deinit(uint32_t instance);
+
+/*!
+ * @brief Populate a user configuration structure with default values.
+ *
+ * Fills the structure with safe defaults: internal clock, prescaler 0,
+ * no sync, no output trigger, TOF interrupt disabled.
+ *
+ * @param[out] config Pointer to the structure to be filled.
+ */
+void eTMR_DRV_GetDefaultConfig(etmr_user_config_t *const config);
+
+/*!
+ * @brief Reset all eTMR registers to their default values.
+ *
+ * @param[in] instance The eTMR peripheral instance number.
+ */
+void eTMR_DRV_Reset(uint32_t instance);
+
+/*! @} */
+
+/*!
+ * @name Counter Control
+ * @{
+ */
 
 /*!
  * @brief Set eTMR global time base feature.
@@ -481,395 +523,371 @@ void eTMR_DRV_SetGlobalTimeBase(uint32_t instance, bool enable);
 void eTMR_DRV_GenGlobalSignal(uint32_t instance, bool enable);
 
 /*!
- * @brief Initializes the eTMR driver.
+ * @brief Retrieve the frequency of the clock source feeding the counter.
  *
  * @param[in] instance The eTMR peripheral instance number.
- * @param[in] info The eTMR user configuration structure, see #etmr_user_config_t.
- * @param[out] state The eTMR state structure of the driver.
- * @return operation status
- *        - STATUS_SUCCESS : Completed successfully.
- *        - STATUS_ERROR : Error occurred.
+ * @return Clock frequency in Hz (0 if counter is disabled).
  */
-status_t eTMR_DRV_Init(uint32_t instance, const etmr_user_config_t *info, etmr_state_t *state);
+uint32_t eTMR_DRV_GetFrequency(uint32_t instance);
 
 /*!
- * @brief Shuts down the eTMR driver.
+ * @brief Convert a frequency in Hz to a period value in timer ticks.
+ *
+ * @param[in] instance   The eTMR peripheral instance number.
+ * @param[in] freqencyHz Frequency value in Hz.
+ * @return Period value in ticks.
+ */
+uint32_t eTMR_DRV_ConvertFreqToPeriodTicks(uint32_t instance, uint32_t freqencyHz);
+
+/*!
+ * @brief Get the current eTMR counter value.
  *
  * @param[in] instance The eTMR peripheral instance number.
- * @return operation status
- *        - STATUS_SUCCESS : Completed successfully.
- *        - STATUS_ERROR : Error occurred.
+ * @return Current counter value.
  */
-status_t eTMR_DRV_Deinit(uint32_t instance);
+uint32_t eTMR_DRV_GetCntVal(uint32_t instance);
 
 /*!
- * @brief This function will get the default configuration values
- *        in the structure which is used as a common use-case.
- * @param[out] config Pointer to the structure in which the
- *                    configuration will be saved.
- */
-void eTMR_DRV_GetDefaultConfig(etmr_user_config_t *const config);
-
-/*!
- * @brief This function will mask the output of the channels and at match events will be ignored
- * by the masked channels.
+ * @brief Set the counter initial value (INIT register).
  *
- * @param [in] instance The eTMR peripheral instance number.
- * @param [in] maskEn The set of channel mask enable
- * @param [in] maskVal The set of channel mask value
- * @param [in] softwareTrigger If true a software trigger is generate to update PWM parameters.
- * @return success
- *        - STATUS_SUCCESS : Completed successfully.
- */
-status_t eTMR_DRV_SetChnOutMask(uint32_t instance, uint8_t maskEn, uint16_t maskVal, bool softwareTrigger);
-
-/*!
- * @brief This function configure the initial counter value. The counter will get this
- * value after an overflow event.
- *
- * @param [in] instance The eTMR peripheral instance number.
- * @param [in] counterValue Initial counter value.
- * @param [in] softwareTrigger If true a software trigger is generate to update parameters.
- * @return success
- *        - STATUS_SUCCESS : Completed successfully.
+ * @param[in] instance       The eTMR peripheral instance number.
+ * @param[in] counterValue   Initial counter value.
+ * @param[in] softwareTrigger If true, generate a software trigger to update.
+ * @return STATUS_SUCCESS always.
  */
 status_t eTMR_DRV_SetCounterInit(uint32_t instance, uint32_t counterValue, bool softwareTrigger);
 
 /*!
- * @brief This function configure the maximum counter value.
+ * @brief Set the counter modulus value (MOD register).
  *
- * @param [in] instance The eTMR peripheral instance number.
- * @param [in] counterValue Maximum counter value
- * @param [in] softwareTrigger If true a software trigger is generate to update parameters.
- * @return success
- *        - STATUS_SUCCESS : Completed successfully.
+ * @param[in] instance       The eTMR peripheral instance number.
+ * @param[in] counterValue   Maximum counter value.
+ * @param[in] softwareTrigger If true, generate a software trigger to update.
+ * @return STATUS_SUCCESS always.
  */
 status_t eTMR_DRV_SetCounterMod(uint32_t instance, uint32_t counterValue, bool softwareTrigger);
 
 #if FEATURE_eTMR_HAS_MID
 /*!
- * @brief This function configure the middle counter value.
+ * @brief Set the counter middle value (MID register).
  *
- * @param [in] instance The eTMR peripheral instance number.
- * @param [in] counterValue Middle counter value
- * @return success
- *        - STATUS_SUCCESS : Completed successfully.
+ * @param[in] instance     The eTMR peripheral instance number.
+ * @param[in] counterValue Middle counter value.
+ * @param[in] softwareTrigger If true, generate a software trigger to update.
+ * @return STATUS_SUCCESS always.
  */
-status_t eTMR_DRV_SetCounterMid(uint32_t instance, uint32_t counterValue);
+status_t eTMR_DRV_SetCounterMid(uint32_t instance, uint32_t counterValue, bool softwareTrigger);
 
 /*!
- * @brief This function is to get the middle value of counter.
+ * @brief Get the counter middle value.
  *
- * @param [in] instance The eTMR peripheral instance number.
+ * @param[in] instance The eTMR peripheral instance number.
  * @return Middle counter value.
  */
 uint32_t eTMR_DRV_GetMid(uint32_t instance);
 #endif
 
+/*! @} */
+
 /*!
- * @brief This function will set the LDOK to start registers synchronization.
- * 
- * @param [in] instance The eTMR peripheral instance number.
- * @return success
- *        - STATUS_SUCCESS : Completed successfully.
+ * @name Synchronization
+ * @{
+ */
+
+/*!
+ * @brief Set LDOK to start register synchronization.
+ *
+ * @param[in] instance The eTMR peripheral instance number.
+ * @return STATUS_SUCCESS always.
  */
 status_t eTMR_DRV_SetLdok(uint32_t instance);
 
 /*!
- * @brief This function will clear the LDOK.
+ * @brief Clear LDOK bit.
  *
- * @param [in] instance The eTMR peripheral instance number.
- * @return success
- *        - STATUS_SUCCESS : Completed successfully.
+ * @param[in] instance The eTMR peripheral instance number.
+ * @return STATUS_SUCCESS always.
  */
 status_t eTMR_DRV_ClearLdok(uint32_t instance);
 
 /*!
- * @brief This function configures sync mechanism for some eTMR registers (MOD, MID,
- *        INIT, CHMASK, CHxVAL0, CHxVAL1).
+ * @brief Configure synchronization for buffered registers.
+ *
+ * Sets up loading opportunities, trigger sources, and hardware trigger
+ * enables for MOD, MID, INIT, CHMASK, CHxVAL0, and CHxVAL1.
  *
  * @param[in] instance The eTMR peripheral instance number.
- * @param[in] param The sync configuration structure.
- * @return operation status
- *        - STATUS_SUCCESS : Completed successfully.
- *        - STATUS_ERROR : Error occurred.
+ * @param[in] param    Pointer to sync configuration.
+ * @return Operation status.
+ * @retval STATUS_SUCCESS Completed successfully.
+ * @retval STATUS_ERROR   Error occurred.
  */
 status_t eTMR_DRV_SetSync(uint32_t instance, const etmr_pwm_sync_t *param);
 
+/*! @} */
+
 /*!
- * @brief Set channel safe state when fault is detected.
+ * @name Channel Output Mask & Safe State
+ * @{
+ */
+
+/*!
+ * @brief Mask channel outputs.
  *
- * @param[in] instance the eTMR peripheral instance
- * @param[in] safeState the eTMR channels safe state after fault detected
- *            safeState: CH7FV | CH6FV | CH5FV | CH4FV |
- *                       CH3FV | CH2FV | CH1FV | CH0FV
- * @return    operation status
- *            - STATUS_SUCCESS : Completed successfully.
- *            - STATUS_ERROR :   Error occurred.
+ * @param[in] instance       The eTMR peripheral instance number.
+ * @param[in] maskEn         Channel mask enable bitmask.
+ * @param[in] maskVal        Channel mask values.
+ * @param[in] softwareTrigger If true, generate a software trigger.
+ * @return STATUS_SUCCESS always.
+ */
+status_t eTMR_DRV_SetChnOutMask(uint32_t instance, uint8_t maskEn, uint16_t maskVal, bool softwareTrigger);
+
+/*!
+ * @brief Set channel safe-state output values on fault.
+ *
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @param[in] safeState Combined safe-state value for all channels.
+ * @return Operation status.
  */
 status_t eTMR_DRV_SetSafeState(uint32_t instance, uint32_t safeState);
 
+/*! @} */
+
 /*!
- * @brief This function configures output trigger
- * 
- * @param[in] instance the eTMR peripheral instance
- * @param[in] param    The trigger configuration structure
- * @return    operation status
- *            - STATUS_SUCCESS : Completed successfully.
- *            - STATUS_ERROR :   Error occurred.
+ * @name Output Trigger
+ * @{
+ */
+
+/*!
+ * @brief Configure the output trigger.
+ *
+ * @param[in] instance The eTMR peripheral instance number.
+ * @param[in] param    Pointer to trigger configuration.
+ * @return Operation status.
  */
 status_t eTMR_DRV_SetOutputTrigger(uint32_t instance, const etmr_trig_config_t *param);
 
+/*! @} */
+
 /*!
- * @brief This function will enable the generation a list of interrupts.
- *        It includes the eTMR overflow interrupts, the reload point interrupt, the fault
- *        interrupt and the channel (n) interrupt.
+ * @name Interrupt Management
+ * @{
+ */
+
+/*!
+ * @brief Enable a set of interrupts by bitmask.
  *
- * @param[in] instance The eTMR peripheral instance number.
- * @param[in] interruptMask The mask of interrupt. This is a logical OR of members of the
- *            enumeration ::etmr_interrupt_option_t
- * @return operation status
- *        - STATUS_SUCCESS : Completed successfully.
+ * @param[in] instance      The eTMR peripheral instance number.
+ * @param[in] interruptMask Logical OR of ::etmr_interrupt_option_t values.
+ * @return STATUS_SUCCESS always.
  */
 status_t eTMR_DRV_EnableInterrupts(uint32_t instance, uint32_t interruptMask);
 
 /*!
- * @brief This function is used to disable some interrupts.
+ * @brief Disable a set of interrupts by bitmask.
  *
- * @param[in] instance The eTMR peripheral instance number.
- * @param[in] interruptMask The mask of interrupt. This is a logical OR of members of the
- *            enumeration ::etmr_interrupt_option_t
+ * @param[in] instance      The eTMR peripheral instance number.
+ * @param[in] interruptMask Logical OR of ::etmr_interrupt_option_t values.
  */
 void eTMR_DRV_DisableInterrupts(uint32_t instance, uint32_t interruptMask);
 
 /*!
- * @brief This function will get the enabled eTMR interrupts.
+ * @brief Get the currently enabled interrupt mask.
  *
  * @param[in] instance The eTMR peripheral instance number.
- * @return The enabled interrupts. This is the logical OR of members of the
- *         enumeration ::etmr_interrupt_option_t
+ * @return Logical OR of ::etmr_interrupt_option_t values.
  */
 uint32_t eTMR_DRV_GetEnabledInterrupts(uint32_t instance);
 
+/*! @} */
+
 /*!
- * @brief This function will get the eTMR status flags.
- * @note: Regarding the duty cycle is 100% at the channel output, the match interrupt
- *        has no event due to the CHxVAL1 value are not between INIT value and MOD value.
+ * @name Status Flags
+ * @{
+ */
+
+/*!
+ * @brief Get status flags for all sources.
  *
  * @param[in] instance The eTMR peripheral instance number.
- * @return The status flags. This is the logical OR of members of the
- *         enumeration ::etmr_status_flag_t
+ * @return Logical OR of ::etmr_status_flag_t values.
  */
 uint32_t eTMR_DRV_GetStatusFlags(uint32_t instance);
 
 /*!
- * @brief Retrieves the frequency of the clock source feeding the eTMR counter.
+ * @brief Clear all status flags.
  *
- * Function will return a 0 if no clock source is selected and the eTMR counter is disabled
- *
- * @param [in] instance The eTMR peripheral instance number.
- * @return The frequency of the clock source running the eTMR counter (0 if counter is disabled)
- */
-uint32_t eTMR_DRV_GetFrequency(uint32_t instance);
-
-/*!
- * @brief This function is used to covert the given frequency to period in ticks
- *
- * @param [in] instance The eTMR peripheral instance number.
- * @param [in] freqencyHz Frequency value in Hz.
- *
- * @return The value in ticks of the frequency
- */
-uint32_t eTMR_DRV_ConvertFreqToPeriodTicks(uint32_t instance, uint32_t freqencyHz);
-
-/*!
- * @brief This function is used to clear all status flags
- *
- * @param [in] instance The eTMR peripheral instance number.
- *
- * @return The status
+ * @param[in] instance The eTMR peripheral instance number.
+ * @return STATUS_SUCCESS always.
  */
 status_t eTMR_DRV_ClearAllStatusFlag(uint32_t instance);
-
 /*!
- * @brief Reset eTMR all of registers
+ * @brief Get channel negative pulse ready flag.
  *
- * @param[in] instance the eTMR peripheral instance
- */
-void eTMR_DRV_Reset(uint32_t instance);
-
-/******************************************** STS Register **************************************************/
-
-/*!
- * @brief Get channel negative pulse ready flag
- *
- * @param[in] instance the eTMR peripheral instance
- * @param[in] channel the eTMR channel
- *
- * @retval    true/false
+ * @param[in] instance The eTMR peripheral instance number.
+ * @param[in] channel  The eTMR channel index.
+ * @return true if negative pulse ready, false otherwise.
  */
 bool eTMR_DRV_GetChnNegPulseRdyFlag(uint32_t instance, uint8_t channel);
 
 /*!
- * @brief Get channel positive pulse ready flag
+ * @brief Get channel positive pulse ready flag.
  *
- * @param[in] instance the eTMR peripheral instance
- * @param[in] channel the eTMR channel
- *
- * @retval    true/false
+ * @param[in] instance The eTMR peripheral instance number.
+ * @param[in] channel  The eTMR channel index.
+ * @return true if positive pulse ready, false otherwise.
  */
 bool eTMR_DRV_GetChnPosPulseRdyFlag(uint32_t instance, uint8_t channel);
 
 /*!
- * @brief Get quadrature decoder direction
+ * @brief Get quadrature decoder counting direction.
  *
- * @param[in] instance the eTMR peripheral instance
- *
- * @retval    true/false
+ * @param[in] instance The eTMR peripheral instance number.
+ * @return true if counting up, false if counting down.
  */
 bool eTMR_DRV_GetQuadDecodeDir(uint32_t instance);
 
 /*!
- * @brief Get quadrature decoder overflow flag
+ * @brief Get quadrature decoder counter overflow flag.
  *
- * @param[in] instance the eTMR peripheral instance
- *
- * @retval    true/false
+ * @param[in] instance The eTMR peripheral instance number.
+ * @return true if overflow occurred.
  */
 bool eTMR_DRV_GetQuadDecodeTofFlag(uint32_t instance);
 
 /*!
- * @brief Get counter overflow flag
+ * @brief Get counter overflow flag.
  *
- * @param[in] instance the eTMR peripheral instance
- *
- * @retval    true/false
+ * @param[in] instance The eTMR peripheral instance number.
+ * @return true if overflow occurred.
  */
 bool eTMR_DRV_GetTofFlag(uint32_t instance);
 
 /*!
- * @brief Get reload flag
+ * @brief Get reload flag.
  *
- * @param[in] instance the eTMR peripheral instance
- *
- * @retval    true/false
+ * @param[in] instance The eTMR peripheral instance number.
+ * @return true if reload event occurred.
  */
 bool eTMR_DRV_GetReloadFlag(uint32_t instance);
 
 /*!
- * @brief Get fault flag
+ * @brief Get fault flag for a specific fault channel.
  *
- * @param[in] instance the eTMR peripheral instance
- * @param[in] fltChannel the eTMR fault channel
- *
- * @retval    true/false
+ * @param[in] instance   The eTMR peripheral instance number.
+ * @param[in] fltChannel The fault channel index.
+ * @return true if fault occurred.
  */
 bool eTMR_DRV_GetFaultFlag(uint32_t instance, uint8_t fltChannel);
 
 /*!
- * @brief Get channel interrupt flag
+ * @brief Get channel interrupt flag.
  *
- * @param[in] instance the eTMR peripheral instance
- * @param[in] channel the eTMR channel
- *
- * @retval    true/false
+ * @param[in] instance The eTMR peripheral instance number.
+ * @param[in] channel  The eTMR channel index.
+ * @return true if the channel flag is set.
  */
 bool eTMR_DRV_GetChnFlag(uint32_t instance, uint8_t channel);
 
 /*!
- * @brief Clear channel negative pulse ready flag
+ * @brief Clear channel negative pulse ready flag.
  *
- * @param[in] instance the eTMR peripheral instance
- * @param[in] channel the eTMR channel
+ * @param[in] instance The eTMR peripheral instance number.
+ * @param[in] channel  The eTMR channel index.
  */
 void eTMR_DRV_ClearChnNegPulseRdyFlag(uint32_t instance, uint8_t channel);
 
 /*!
- * @brief Clear channel positive pulse ready flag
+ * @brief Clear channel positive pulse ready flag.
  *
- * @param[in] instance the eTMR peripheral instance
- * @param[in] channel the eTMR channel
+ * @param[in] instance The eTMR peripheral instance number.
+ * @param[in] channel  The eTMR channel index.
  */
 void eTMR_DRV_ClearChnPosPulseRdyFlag(uint32_t instance, uint8_t channel);
 
 /*!
- * @brief Clear quadrature decoder counter overflow flag
+ * @brief Clear quadrature decoder counter overflow flag.
  *
- * @param[in] instance the eTMR peripheral instance
+ * @param[in] instance The eTMR peripheral instance number.
  */
 void eTMR_DRV_ClearQuadDecodeTofFlag(uint32_t instance);
 
 /*!
- * @brief Clear counter overflow flag
+ * @brief Clear counter overflow flag.
  *
- * @param[in] instance the eTMR peripheral instance
+ * @param[in] instance The eTMR peripheral instance number.
  */
 void eTMR_DRV_ClearTofFlag(uint32_t instance);
 
 /*!
- * @brief Clear counter reload flag
+ * @brief Clear counter reload flag.
  *
- * @param[in] instance the eTMR peripheral instance
+ * @param[in] instance The eTMR peripheral instance number.
  */
 void eTMR_DRV_ClearReloadFlag(uint32_t instance);
 
 /*!
- * @brief Clear fault channel flag
+ * @brief Clear fault channel flag.
  *
- * @param[in] instance the eTMR peripheral instance
- * @param[in] fltChannel the eTMR fault channel
+ * @param[in] instance   The eTMR peripheral instance number.
+ * @param[in] fltChannel The fault channel index.
  */
 void eTMR_DRV_ClearFaultFlag(uint32_t instance, uint8_t fltChannel);
 
 /*!
- * @brief Clear channel interrupt flag
+ * @brief Clear channel interrupt flag.
  *
- * @param[in] instance the eTMR peripheral instance
- * @param[in] channelSet the eTMR channel set
+ * @param[in] instance   The eTMR peripheral instance number.
+ * @param[in] channelSet The eTMR channel set bitmask.
  */
 void eTMR_DRV_ClearChnFlag(uint32_t instance, uint8_t channelSet);
 
-/******************************************** IOSTS Register **************************************************/
+/*! @} */
 
 /*!
- * @brief Get phase B input status in Quadrature Decoder
+ * @name IO Status
+ * @{
+ */
+/*!
+ * @brief Get phase B input status.
  *
- * @param[in] instance the eTMR peripheral instance
- *
- * @retval    0 or 1
+ * @param[in] instance The eTMR peripheral instance number.
+ * @return Phase B input level (0 or 1).
  */
 uint8_t eTMR_DRV_GetPhaseBStatus(uint32_t instance);
 
 /*!
- * @brief Get phase A input status in Quadrature Decoder
+ * @brief Get phase A input status.
  *
- * @param[in] instance the eTMR peripheral instance
- *
- * @retval    0 or 1
+ * @param[in] instance The eTMR peripheral instance number.
+ * @return Phase A input level (0 or 1).
  */
 uint8_t eTMR_DRV_GetPhaseAStatus(uint32_t instance);
 
 /*!
- * @brief Get fault channel input status(polarity)
+ * @brief Get fault channel input status (polarity).
  *
- * @param[in] instance   the eTMR peripheral instance
- * @param[in] fltChannel the eTMR fault channel
- *
- * @return    status of fault input
+ * @param[in] instance   The eTMR peripheral instance number.
+ * @param[in] fltChannel The fault channel index.
+ * @return Fault input status.
  */
 uint8_t eTMR_DRV_GetFaultInputStatus(uint32_t instance, uint8_t fltChannel);
 
 /*!
- * @brief Get channel IO status in pwm, output compare and input capture mode.
+ * @brief Get channel IO status.
  *
- * @param[in] instance the eTMR peripheral instance
- * @param[in] channel the eTMR channel
- *
- * @return    status of channel IO
+ * @param[in] instance The eTMR peripheral instance number.
+ * @param[in] channel  The eTMR channel index.
+ * @return Channel IO level.
  */
 uint8_t eTMR_DRV_GetChnIoStatus(uint32_t instance, uint8_t channel);
 
-/******************************************** CTRL Register **************************************************/
+/*! @} */
+
+/*!
+ * @name Channel Mode Control
+ * @{
+ */
 
 /*!
  * @brief Set complementary mode for channels
@@ -910,7 +928,13 @@ void eTMR_DRV_SetChnCombMode(uint32_t instance, uint8_t channelPair, bool en);
  */
 void eTMR_DRV_SetChnCombSrc(uint32_t instance, uint8_t channelPair, uint8_t src);
 #endif
-/******************************************** FAULT Register **************************************************/
+
+/*! @} */
+
+/*!
+ * @name Fault Configuration
+ * @{
+ */
 
 /*!
  * @brief Set channel fault input polarity
@@ -929,7 +953,12 @@ void eTMR_DRV_SetFaultChnPol(uint32_t instance, uint8_t fltChannel, uint32_t pol
  */
 void eTMR_DRV_SetFaultChnEnable(uint32_t instance, uint8_t fltChannel, bool enable);
 
-/******************************************** INTE Register **************************************************/
+/*! @} */
+
+/*!
+ * @name Interrupt Enable/Disable (Fine-grained)
+ * @{
+ */
 
 /*!
  * @brief Enable quadrature decoder counter overflow interrupt
@@ -1025,6 +1054,8 @@ bool eTMR_DRV_IsFaultIntEnabled(uint32_t instance);
  * @return    true/false
  */
 bool eTMR_DRV_IsChnIntEnabled(uint32_t instance, uint8_t channel);
+
+/*! @} */
 
 /*!
  * @brief Get eTMR current counter value.

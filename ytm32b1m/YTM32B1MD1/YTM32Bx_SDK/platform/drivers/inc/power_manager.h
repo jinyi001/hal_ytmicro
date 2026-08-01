@@ -8,6 +8,22 @@
 /*!
  * @file power_manager.h
  * @version 1.4.1
+ *
+ * @brief Power Manager — Public API for system power mode management.
+ *
+ * This header defines the application-level interface for the Power Manager.
+ * It provides APIs for initializing the power management framework, switching
+ * between pre-defined power modes, and managing notification callbacks that
+ * are invoked before and after power mode transitions.
+ *
+ * The APIs are organized into three categories:
+ *   - **Initialization & De-initialization**: Set up or tear down the Power Manager.
+ *   - **Power Mode Control**: Switch power modes and query the current mode.
+ *   - **Status & Error Query**: Retrieve transition results and callback errors.
+ *
+ * @note The actual power mode definitions and hardware-specific implementation
+ *       are provided by the platform-specific header (included automatically
+ *       based on the target CPU).
  */
 
 #ifndef POWER_MANAGER_H_
@@ -41,20 +57,31 @@
     #error "No valid CPU defined!"
 #endif
 
+/*!
+ * @defgroup power_manager Power Manager
+ * @brief System Power Mode Management — Public API.
+ * @details Provides APIs for initializing the power management framework,
+ *          switching between pre-defined power modes with callback
+ *          notification, and querying transition status. Supports both
+ *          agreement-based and forced mode-change policies.
+ * @{
+ */
+
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
 
 /*!
- * @brief Power manager policies.
+ * @brief Power manager mode-change policy.
  *
- * Defines whether the mode switch initiated by the POWER_SYS_SetMode() is agreed upon
- * (depending on the result of notification callbacks), or forced.
- * For POWER_MANAGER_POLICY_FORCIBLE the power mode is changed
- * regardless of the callback results, while for POWER_MANAGER_POLICY_AGREEMENT policy
- * any error code returned by one of the callbacks aborts the mode change.
- * See also POWER_SYS_SetMode() description.
- * Implements power_manager_policy_t_Class
+ * Controls whether a power mode switch initiated by POWER_SYS_SetMode()
+ * requires agreement from all registered callbacks or is forced regardless
+ * of callback results.
+ *
+ * | Value                          | Behavior                                    |
+ * |--------------------------------|---------------------------------------------|
+ * | POWER_MANAGER_POLICY_AGREEMENT | Abort switch if any callback returns error.  |
+ * | POWER_MANAGER_POLICY_FORCIBLE  | Force switch regardless of callback results. |
  */
 typedef enum
 {
@@ -63,13 +90,16 @@ typedef enum
 } power_manager_policy_t;
 
 /*!
- * @brief The PM notification type. Used to notify registered callbacks.
- * Callback notifications can be invoked in following situations:
- *  - before a power mode change (Callback return value can affect POWER_SYS_SetMode()
- *    execution. Refer to the  POWER_SYS_SetMode() and power_manager_policy_t documentation).
- *  - after a successful change of the power mode.
- *  - after an unsuccessful attempt to switch power mode, in order to recover to a working state.
- * Implements power_manager_notify_t_Class
+ * @brief Callback notification type.
+ *
+ * Specifies the phase of a power mode transition during which a registered
+ * callback is being invoked.
+ *
+ * | Value                        | Phase                                            |
+ * |------------------------------|--------------------------------------------------|
+ * | POWER_MANAGER_NOTIFY_RECOVER | Recovery after a failed mode switch attempt.      |
+ * | POWER_MANAGER_NOTIFY_BEFORE  | Before the power mode change is applied.          |
+ * | POWER_MANAGER_NOTIFY_AFTER   | After the power mode change has been applied.     |
  */
 typedef enum
 {
@@ -79,13 +109,16 @@ typedef enum
 } power_manager_notify_t;
 
 /*!
- * @brief The callback type indicates when a callback will be invoked.
+ * @brief Callback invocation type.
  *
- * Used in the callback configuration structures (power_manager_callback_user_config_t)
- * to specify when the registered callback will be called during power mode change initiated by
- * POWER_SYS_SetMode().
+ * Specifies when a registered callback shall be invoked during power mode
+ * transitions initiated by POWER_SYS_SetMode().
  *
- * Implements power_manager_callback_type_t_Class
+ * | Value                                | When invoked                    |
+ * |--------------------------------------|---------------------------------|
+ * | POWER_MANAGER_CALLBACK_BEFORE        | Before mode switch only.        |
+ * | POWER_MANAGER_CALLBACK_AFTER         | After mode switch only.         |
+ * | POWER_MANAGER_CALLBACK_BEFORE_AFTER  | Both before and after switch.   |
  */
 typedef enum
 {
@@ -95,37 +128,38 @@ typedef enum
 } power_manager_callback_type_t;
 
 /*!
- * @brief Callback-specific data.
+ * @brief Opaque callback data type.
  *
- * Pointer to data of this type is passed during callback registration. The pointer is
- * part of the power_manager_callback_user_config_t structure and is passed to the callback during
- * power mode change notifications.
- * Implements power_manager_callback_data_t_Class
+ * Pointer to application-specific data passed during callback registration.
+ * This pointer is forwarded to the callback function on every notification.
  */
 typedef void power_manager_callback_data_t;
 
 /*!
  * @brief Power mode user configuration structure.
  *
- * This structure defines power mode with additional power options.
- * This structure is implementation-defined. Please refer to actual definition based on the
- * underlying MCU power description. Applications may define multiple power modes and
- * switch between them. A list of all defined power modes is passed to the Power manager during
- * initialization as an array of references to structures of this type (see POWER_SYS_Init()).
- * Power modes can be switched by calling POWER_SYS_SetMode(), which takes as argument the index
- * of the requested power mode in the list passed during manager initialization.
- * The power mode currently in use can be retrieved by calling POWER_SYS_GetLastMode(), which provides
- * the index of the current power mode, or by calling POWER_SYS_GetLastModeConfig(), which provides a
- * pointer to the configuration structure of the current power mode.
- * The members of the power mode configuration structure depend on power options available
- * for a specific chip, and includes at least the power mode. The available power modes are chip-specific.
- * See power_manager_modes_t defined in the underlying HAL for a list of all supported modes.
+ * Defines a target power mode along with additional power options.
+ * The actual structure members are platform-specific and defined in the
+ * SOC-specific header (see power_manager_modes_t). Applications define
+ * multiple power modes and pass them as an array to POWER_SYS_Init().
+ *
+ * @note Refer to the platform-specific header for the full definition
+ *       of this structure (e.g., power_manager_YTM32B1Mx.h).
  */
 
 /*!
- * @brief Power notification structure passed to registered callback function
+ * @brief Callback notification structure.
  *
- * Implements power_manager_notify_struct_t_Class
+ * Passed to registered callback functions during power mode transition
+ * notifications. Contains the target power configuration and the
+ * notification type (before/after/recover).
+ *
+ * | Field                  | Type                           | Description                          |
+ * |------------------------|--------------------------------|--------------------------------------|
+ * | targetPowerConfigPtr   | power_manager_user_config_t *  | Pointer to target power config.      |
+ * | targetPowerConfigIndex | uint8_t                        | Index of target config in the array. |
+ * | policy                 | power_manager_policy_t         | Mode transition policy.              |
+ * | notifyType             | power_manager_notify_t         | Notification phase.                  |
  */
 typedef struct
 {
@@ -136,41 +170,35 @@ typedef struct
 } power_manager_notify_struct_t;
 
 /*!
- * @brief Callback prototype.
+ * @brief Callback function prototype.
  *
- * Declaration of callback. It is common for all registered callbacks.
- * Function pointer of this type is part of power_manager_callback_user_config_t callback
- * configuration structure.
- * Depending on the callback type, the callback function is invoked during power mode change
- * (see POWER_SYS_SetMode()) before the mode change, after it, or in both cases to notify about
- * the change progress (see power_manager_callback_type_t). When called, the type of the notification
- * is passed as parameter along with a pointer to power mode configuration structure
- * (see power_manager_notify_struct_t) and any data passed during the callback registration (see
- * power_manager_callback_data_t).
- * When notified before a mode change, depending on the power mode change policy (see
- * power_manager_policy_t) the callback may deny the mode change by returning any error code other
- * than STATUS_SUCCESS (see POWER_SYS_SetMode()).
- * @param notify Notification structure.
- * @param dataPtr Callback data. Pointer to the data passed during callback registration. Intended to
- *  pass any driver or application data such as internal state information.
- * @return An error code or STATUS_SUCCESS.
- * Implements power_manager_callback_t_Class
+ * All registered callbacks must conform to this signature. The callback
+ * receives a notification structure describing the transition and an
+ * optional data pointer provided at registration time.
+ *
+ * When notified before a mode change with POWER_MANAGER_POLICY_AGREEMENT,
+ * the callback may deny the transition by returning any status code other
+ * than STATUS_SUCCESS.
+ *
+ * @param[in] notify   Pointer to the notification structure.
+ * @param[in] dataPtr  Pointer to callback-specific data (may be NULL).
+ * @return STATUS_SUCCESS to allow the transition, or an error code to deny it.
  */
 typedef status_t (*power_manager_callback_t)(power_manager_notify_struct_t *notify,
                                              power_manager_callback_data_t *dataPtr);
 
 /*!
- * @brief callback configuration structure
+ * @brief Callback configuration structure.
  *
- * This structure holds configuration of callbacks passed
- * to the Power manager during its initialization.
- * Structures of this type are expected to be statically
- * allocated.
- * This structure contains following application-defined data:
- *  callback - pointer to the callback function
- *  callbackType - specifies when the callback is called
- *  callbackData - pointer to the data passed to the callback
- * Implements power_manager_callback_user_config_t_Class
+ * Holds the configuration for a single callback registered with the
+ * Power Manager. Structures of this type should be statically allocated
+ * and remain valid for the lifetime of the Power Manager.
+ *
+ * | Field            | Type                             | Description                          |
+ * |------------------|----------------------------------|--------------------------------------|
+ * | callbackFunction | power_manager_callback_t         | Pointer to the callback function.    |
+ * | callbackType     | power_manager_callback_type_t    | When to invoke (before/after/both).  |
+ * | callbackData     | power_manager_callback_data_t *  | Application data passed to callback. |
  */
 typedef struct
 {
@@ -180,13 +208,14 @@ typedef struct
 } power_manager_callback_user_config_t;
 
 /*!
- * @brief Power manager internal state structure.
+ * @brief Power Manager internal state structure.
  *
- * Power manager internal structure. Contains data necessary for Power manager proper
- * functionality. Stores references to registered power mode configurations,
- * callbacks, and other internal data.
- * This structure is statically allocated and initialized by POWER_SYS_Init().
- * Implements power_manager_state_t_Class
+ * Stores references to registered power mode configurations, callbacks,
+ * and runtime state. This structure is statically allocated and initialized
+ * by POWER_SYS_Init().
+ *
+ * @warning This structure is for internal use only. Do not modify its
+ *          members directly from application code.
  */
 typedef struct
 {
@@ -198,7 +227,7 @@ typedef struct
     uint8_t currentConfig;                                  /*!< Index of current configuration.  */
 } power_manager_state_t;
 
-/*! @brief Power manager internal structure. */
+/*! @brief Power manager internal state instance. */
 extern power_manager_state_t gPowerManagerState;
 
 /*******************************************************************************
@@ -209,27 +238,38 @@ extern power_manager_state_t gPowerManagerState;
 extern "C" {
 #endif
 
+/*******************************************************************************
+ * Initialization & De-initialization
+ ******************************************************************************/
 /*!
- * @brief Power manager initialization for operation.
+ * @name Initialization & De-initialization
+ * @brief Functions for setting up and tearing down the Power Manager.
+ * @{
+ */
+
+/*!
+ * @brief Initialize the Power Manager for operation.
  *
- * This function initializes the Power manager and its run-time state structure.
- * Pointer to an array of Power mode configuration structures needs to be passed
- * as a parameter along with a parameter specifying its size. At least one power mode
- * configuration is required. Optionally, pointer to the array of predefined
- * callbacks can be passed with its corresponding size parameter.
- * For details about callbacks, refer to the power_manager_callback_user_config_t.
- * As Power manager stores only pointers to arrays of these structures, they need
- * to exist and be valid for the entire life cycle of Power manager.
+ * Initializes the Power Manager and its internal run-time state. An array
+ * of power mode configuration structures and an optional array of callback
+ * configurations must be provided. The Power Manager stores only pointers
+ * to these arrays, so they must remain valid for the entire lifetime of
+ * the Power Manager.
  *
- * @param[in] powerConfigsPtr A pointer to an array of pointers to all power
- *  configurations which will be handled by Power manager.
- * @param[in] configsNumber Number of power configurations. Size of powerConfigsPtr
- *  array.
- * @param[in] callbacksPtr A pointer to an array of pointers to callback configurations.
- *  If there are no callbacks to register during Power manager initialization, use NULL value.
- * @param[in] callbacksNumber Number of registered callbacks. Size of callbacksPtr
- *  array.
- * @return An error code or STATUS_SUCCESS.
+ * @param[in] powerConfigsPtr  Pointer to an array of pointers to power mode
+ *                              configurations. Must not be NULL.
+ * @param[in] configsNumber    Number of power mode configurations in the array.
+ *                              Must be at least 1.
+ * @param[in] callbacksPtr     Pointer to an array of pointers to callback
+ *                              configurations. Use NULL if no callbacks.
+ * @param[in] callbacksNumber  Number of callback configurations. Use 0 if
+ *                              no callbacks.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS  Initialization completed successfully.
+ * @retval STATUS_ERROR    Initialization failed.
+ *
+ * @pre  The Power Manager must not already be initialized.
+ * @post The Power Manager is ready, with default mode index set to 0.
  */
 status_t POWER_SYS_Init(power_manager_user_config_t *(*powerConfigsPtr)[],
                         uint8_t configsNumber,
@@ -237,125 +277,156 @@ status_t POWER_SYS_Init(power_manager_user_config_t *(*powerConfigsPtr)[],
                         uint8_t callbacksNumber);
 
 /*!
- * @brief This function de-initializes the Power manager.
+ * @brief De-initialize the Power Manager.
  *
- * @return An error code or STATUS_SUCCESS.
+ * Clears the internal state and removes all registered configurations
+ * and callbacks. After calling this function, POWER_SYS_Init() must be
+ * called again before using any other Power Manager API.
+ *
+ * @return Execution status.
+ * @retval STATUS_SUCCESS  De-initialization completed successfully.
  */
 status_t POWER_SYS_Deinit(void);
 
 /*!
- * @brief This function returns the last successfully set power mode.
+ * @brief Populate a configuration structure with default power mode values.
  *
- * This function returns index of power mode which was last set using POWER_SYS_SetMode().
- * If the power mode was entered even though some of the registered callbacks denied the mode change,
- * or if any of the callbacks invoked after the entering/restoring run mode failed, then the return
- * code of this function has STATUS_ERROR value.
+ * Fills the configuration structure with the platform-specific default
+ * values (typically RUN mode with sleep-on-exit disabled).
  *
- * @param[out] powerModeIndexPtr Power mode which has been set represented as an index into array of power mode
- * configurations passed to the POWER_SYS_Init().
- * @return An error code or STATUS_SUCCESS.
+ * @param[out] config  Pointer to the configuration structure to fill.
+ *                     Must not be NULL.
+ *
+ * @note The default configuration is platform-specific. See the SOC-specific
+ *       header for the actual default values.
  */
-status_t POWER_SYS_GetLastMode(uint8_t * powerModeIndexPtr);
+void POWER_SYS_GetDefaultConfig(power_manager_user_config_t *const config);
+
+/*! @} */ /* End of Initialization & De-initialization */
+
+/*******************************************************************************
+ * Power Mode Control
+ ******************************************************************************/
+/*!
+ * @name Power Mode Control
+ * @brief Functions for switching and querying the active power mode.
+ * @{
+ */
 
 /*!
- * @brief This function returns the user configuration structure of the last successfully set power mode.
+ * @brief Switch to a specified power mode.
  *
- * This function returns a pointer to configuration structure which was last set using POWER_SYS_SetMode().
- * If the current power mode was entered even though some of the registered callbacks denied
- * the mode change, or if any of the callbacks invoked after the entering/restoring run mode failed, then
- * the return code of this function has STATUS_ERROR value.
+ * Switches to one of the pre-defined power modes. The function performs
+ * the following sequence:
+ *   1. Notify all registered BEFORE callbacks.
+ *   2. If policy is AGREEMENT and any callback returns error, abort and
+ *      invoke RECOVER notifications on already-notified callbacks.
+ *   3. Apply the hardware power mode switch.
+ *   4. Notify all registered AFTER callbacks.
  *
- * @param[out] powerModePtr Pointer to power mode configuration structure of the last set power mode.
- * @return An error code or STATUS_SUCCESS.
- */
-status_t POWER_SYS_GetLastModeConfig(power_manager_user_config_t ** powerModePtr);
-
-/*!
- * @brief This function configures the power mode.
+ * For sleep/deep-sleep modes, AFTER callbacks are invoked upon wake-up.
  *
- * This function switches to one of the defined power modes. Requested mode number is passed
- * as an input parameter. This function notifies all registered callback functions before
- * the mode change (using  POWER_MANAGER_CALLBACK_BEFORE set as callback type parameter),
- * sets specific power options defined in the power mode configuration and enters the specified
- * mode. In case of run modes, this function also invokes all registered callbacks after
- * the mode change (using POWER_MANAGER_CALLBACK_AFTER).
- * In case of sleep or deep sleep modes, if the requested mode is not exited through
- * a reset, these notifications are sent after the core wakes up.
- * Callbacks are invoked in the following order: All registered callbacks are notified
- * ordered by index in the callbacks array (see callbacksPtr parameter of POWER_SYS_Init()).
- * The same order is used for before and after switch notifications.
- * The notifications before the power mode switch can be used to obtain confirmation about
- * the change from registered callbacks. If any registered callback denies the power
- * mode change, further execution of this function depends on mode change policy: the mode
- * change is either forced(POWER_MANAGER_POLICY_FORCIBLE) or aborted(POWER_MANAGER_POLICY_AGREEMENT).
- * When mode change is forced, the results of the before switch notifications are ignored. If
- * agreement is requested, in case any callback returns an error code then further
- * before switch notifications are cancelled and all already notified callbacks are re-invoked
- * with POWER_MANAGER_CALLBACK_AFTER set as callback type parameter. The index of the callback
- * which returned error code during pre-switch notifications is stored and can be obtained by using
- * POWER_SYS_GetErrorCallback(). Any error codes during callbacks re-invocation (recover phase) are ignored.
- * POWER_SYS_SetMode() returns an error code denoting the phase in which a callback failed.
- * It is possible to enter any mode supported by the processor. Refer to the chip reference manual
- * for the list of available power modes. If it is necessary to switch into an intermediate power mode prior to
- * entering the requested mode, then the intermediate mode is entered without invoking the callback mechanism.
+ * @param[in] powerModeIndex  Index into the power mode configuration array
+ *                            passed to POWER_SYS_Init().
+ * @param[in] policy          Mode change policy (AGREEMENT or FORCIBLE).
+ * @return Execution status.
+ * @retval STATUS_SUCCESS               Mode switch completed successfully.
+ * @retval STATUS_MCU_NOTIFY_BEFORE_ERROR  A BEFORE callback returned error.
+ * @retval STATUS_MCU_NOTIFY_AFTER_ERROR   An AFTER callback returned error.
+ * @retval STATUS_MCU_TRANSITION_FAILED    Hardware mode switch failed.
  *
- * @param[in] powerModeIndex Requested power mode represented as an index into
- * array of user-defined power mode configurations passed to the POWER_SYS_Init().
- * @param[in] policy Transaction policy
- * @return An error code or STATUS_SUCCESS.
+ * @pre  POWER_SYS_Init() must have been called.
+ * @pre  powerModeIndex must be less than configsNumber.
+ *
+ * @note Use POWER_SYS_GetErrorCallbackIndex() or POWER_SYS_GetErrorCallback()
+ *       to identify the failing callback when an error is returned.
  */
 status_t POWER_SYS_SetMode(uint8_t powerModeIndex,
                            power_manager_policy_t policy);
 
 
 /*!
- * @brief This function returns currently running power mode.
+ * @brief Get the currently active hardware power mode.
  *
- * This function reads hardware settings and returns currently running power mode.
+ * Reads the hardware state and returns the current power mode status.
  *
- * @return Currently used run power mode.
+ * @param[in] configPtr  Pointer to a power mode configuration structure.
+ * @return The current power mode status value.
  */
 power_mode_stat_t POWER_SYS_GetCurrentMode(power_manager_user_config_t *configPtr);
 
+/*! @} */ /* End of Power Mode Control */
+
+/*******************************************************************************
+ * Status & Error Query
+ ******************************************************************************/
 /*!
- * @brief This function returns the last failed notification callback.
+ * @name Status & Error Query
+ * @brief Functions for retrieving power mode transition results and errors.
+ * @{
+ */
+
+/*!
+ * @brief Get the index of the last successfully set power mode.
  *
- * This function returns the index of the last callback that failed during the power mode switch when
- * POWER_SYS_SetMode() was called. The returned value represents the index in the array of registered callbacks.
- * If the last POWER_SYS_SetMode() call ended successfully, a value equal to the number of registered callbacks
+ * Returns the index of the power mode configuration that was last set
+ * via POWER_SYS_SetMode(). If any callback returned an error during
+ * the transition, the return code is STATUS_ERROR.
+ *
+ * @param[out] powerModeIndexPtr  Pointer to receive the power mode index.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS  All callbacks executed without error.
+ * @retval STATUS_ERROR    One or more callbacks returned error.
+ */
+status_t POWER_SYS_GetLastMode(uint8_t * powerModeIndexPtr);
+
+/*!
+ * @brief Get the configuration of the last successfully set power mode.
+ *
+ * Returns a pointer to the configuration structure of the last power mode
+ * set via POWER_SYS_SetMode(). If any callback returned an error, the
+ * return code is STATUS_ERROR.
+ *
+ * @param[out] powerModePtr  Pointer to receive the configuration pointer.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS  All callbacks executed without error.
+ * @retval STATUS_ERROR    One or more callbacks returned error.
+ */
+status_t POWER_SYS_GetLastModeConfig(power_manager_user_config_t ** powerModePtr);
+
+/*!
+ * @brief Get the index of the last failed notification callback.
+ *
+ * Returns the index of the last callback that returned an error during
+ * a power mode switch. If the last POWER_SYS_SetMode() call was
+ * successful, a value equal to the total number of registered callbacks
  * is returned.
  *
- * @return Callback index of last failed callback or value equal to callbacks count.
+ * @return Index of the failing callback, or callbacksNumber if no error.
  */
 uint8_t POWER_SYS_GetErrorCallbackIndex(void);
 
 /*!
- * @brief This function returns the callback configuration structure for the last failed notification.
+ * @brief Get the configuration of the last failed notification callback.
  *
- * This function returns a pointer to configuration structure of the last callback that failed during
- * the power mode switch when POWER_SYS_SetMode() was called.
- * If the last POWER_SYS_SetMode() call ended successfully, a NULL value is returned.
+ * Returns a pointer to the configuration structure of the last callback
+ * that returned an error. If the last POWER_SYS_SetMode() call was
+ * successful, NULL is returned.
  *
- * @return Pointer to the callback configuration which returns error.
+ * @return Pointer to the failing callback configuration, or NULL.
  */
 power_manager_callback_user_config_t *POWER_SYS_GetErrorCallback(void);
 
-/*!
- * @brief This function returns the default power_manager configuration structure.
- *
- * This function returns a pointer of the power_manager configuration structure.
- * All structure members have default value when CPU is default power mode.
- *
- */
-void POWER_SYS_GetDefaultConfig(power_manager_user_config_t *const config);
+/*! @} */ /* End of Status & Error Query */
 
 #if defined(__cplusplus)
 }
 #endif
 
+/*! @} */ /* End of power_manager group */
+
 #endif /* POWER_MANAGER_H_ */
 
-/*! @}*/
 /*******************************************************************************
  * EOF
  ******************************************************************************/

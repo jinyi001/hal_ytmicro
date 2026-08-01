@@ -1,92 +1,291 @@
 /*!
-@defgroup emu ECC Management Unit (EMU)
-@brief The YTMicro SDK provides error injection and error report Drivers for the ECC Management Unit module. @details The ECC Management Unit (EMU) supports single-bit inversion on read data when accessing SRAM,and reporting error information,and correcting the error bit.
+@defgroup emu
+@ingroup mod_system ECC Management Unit (EMU)
+@brief ECC error injection and error reporting module for SRAM validation.
 
-## The EMU supports features:
+@details
+The EMU module provides hardware support for validating ECC-protected SRAM
+paths. It can inject test errors into configured SRAM words, report the
+address and syndrome of observed ECC events, and expose interrupt status for
+single-bit correction and double-bit detection scenarios.
 
-- Only in supervisor mode.
-- Using only 32-bit (word) access.
-- Support two main functions: Error Injection and Error Report.
-- Support two channels:SRAM_L(channel 0) and SRAM_U(channel 1). The Support two channels have 32-bits read data and 7-bits ecc check-bit.
+@section emu_features Key Features
+- Per-channel SRAM error injection using a programmable target address.
+- Supports data-bit injection, check-bit injection, and mixed data + check
+  injection through `emu_config_t`.
+- Supports raw multi-bit injection masks through EMU_DRV_InjectError().
+- Provides latched error report address, error counter, and syndrome access.
+- Exposes single-bit correction interrupt status and double-bit interrupt
+  enable / clear helpers.
+- Adapts to device-specific channel counts through `EMU_EICHD_COUNT` and
+  `EMU_ERINFO_COUNT`.
+- Supports 64-bit data injection masks on devices that define
+  `FEATURE_EMU_SUPPORT_64BIT_INJECTION`.
 
-## Integration guideline
+@section emu_modes Supported Modes
 
-The following files need to be compiled in the project:
+The EMU module supports the following injection and reporting modes:
 
-```sh
-${SDK_PATH}\platform\drivers\src\emu\emu_driver.c
-${SDK_PATH}\platform\drivers\src\emu\emu_hw_driver.c
-```
+| Mode | Configuration Path | Description | Notes |
+|------|--------------------|-------------|-------|
+| Single data-bit injection | `injectBitsType = EMU_INJECT_BITS_TYPE_DATA` and `dataBit = EMU_DATABIT_n` | Injects one ECC test error on the SRAM data path. | Typical flow for validating single-bit correction behavior. |
+| Single check-bit injection | `injectBitsType = EMU_INJECT_BITS_TYPE_CHK` and `chkBit = EMU_CHKBIT_n` | Injects one ECC test error on the ECC check-bit path. | Useful for verifying syndrome and report handling. |
+| Mixed single-bit injection | `injectBitsType = EMU_INJECT_BITS_TYPE_MIXTURE` with both `dataBit` and `chkBit` | Injects one data-bit error together with one check-bit error. | Lets the application exercise combined fault scenarios. |
+| Raw multi-bit injection | EMU_DRV_InjectError() with `dataMulti` and `chkMulti` masks | Programs multi-bit data and/or check masks directly. | Pass `NO_INJECTION_ERROR` for the path that should remain unchanged. |
+| Interrupt-assisted error handling | `interruptEnable` in `emu_config_t` plus interrupt APIs | Latches single-bit correction status and supports double-bit interrupt control. | Signal-bit and double-bit interrupt enables are both configured during EMU_DRV_Init(). |
 
-## Include path
+@section emu_arch Module Architecture
 
-The following paths need to be added to the include path of the toolchain:
+The EMU module is organized in a two-layer architecture:
 
-```sh
-${SDK_PATH}\platform\drivers\inc\
-${SDK_PATH}\platform\drivers\src\emu\
-```
+@verbatim
+┌──────────────────────────────────────────────┐
+│              Application Code                │
+│         (calls EMU_DRV_* functions)          │
+├──────────────────────────────────────────────┤
+│          EMU Driver Layer (emu_driver.h/c)   │
+│  ● Instance-based API (EMU_DRV_Init, etc.)   │
+│  ● Converts user configuration into channel  │
+│    injection, report, and interrupt setup    │
+├──────────────────────────────────────────────┤
+│      EMU HW Access Layer (emu_hw_access.h/c) │
+│  ● Direct register-level helpers for EIGCR,  │
+│    EICHCR, EICHD, ERINFO, ERIE, and ERIF     │
+│  ● Encapsulates reset, enable, injection,    │
+│    report, and interrupt register updates    │
+├──────────────────────────────────────────────┤
+│           EMU Peripheral Hardware            │
+│      (SRAM ECC injection and reporting)      │
+└──────────────────────────────────────────────┘
+@endverbatim
 
-## Preprocessor symbols
+@subsection emu_arch_driver Driver Layer (emu_driver.h)
+Application code should use the `EMU_DRV_*` functions from emu_driver.h.
+These APIs accept a zero-based instance index, validate basic constraints,
+and resolve the peripheral base address internally through `EMU_BASE_PTRS`.
 
-No special symbols are required for this component
+@subsection emu_arch_hw HW Access Layer (emu_hw_access.h)
+This internal layer provides register-level helpers grouped into five
+functional areas:
+- **Initialization** - EMU_Init()
+- **Module Enable Control** - EMU_Enable(), EMU_Disable()
+- **Injection Configuration** - EMU_SetErrInjectAddr(), EMU_SetErrInjectData(),
+  EMU_SetErrInjectChkbit(), and related clear / multi-bit helpers
+- **Error Reporting** - EMU_GetErrReportCnt(), EMU_ClearErrReportCnt(),
+  EMU_GetErrReportAddr(), EMU_GetSyndrome()
+- **Interrupt Control** - EMU_EnableInterruptSignalBit(),
+  EMU_EnableInterruptDoubleBit(), and corresponding clear / query helpers
 
-## Dependencies
+@section emu_config Configuration Parameters
 
-- \ref clock_manager
+@subsection emu_config_inject emu_inject_err_t Fields
+| Field | Type | Description | Default Value |
+|-------|------|-------------|---------------|
+| injectBitsType | emu_inject_bits_type | Selects whether injection targets the data path, the check-bit path, or both. | User-defined |
+| dataBit | e_emu_databit | Data-bit index used when `injectBitsType` includes the data path. | User-defined |
+| chkBit | e_emu_chkbit | Check-bit index used when `injectBitsType` includes the check-bit path. | User-defined |
 
-## EMU Driver Guide
-In order to be able to use the error injection in your application, the first thing to do is initializing EMU with user configuration input.
+@subsection emu_config_struct emu_config_t Fields
+| Field | Type | Description | Default Value |
+|-------|------|-------------|---------------|
+| channel | uint32_t | Target EMU channel index. Valid range is `0 .. EMU_EICHD_COUNT - 1`. | User-defined |
+| injectErrAddr | uint32_t | SRAM word address monitored for injected ECC errors. | User-defined |
+| injectErrSetInfo | emu_inject_err_t | Single-bit or mixed-bit injection selection. | User-defined |
+| interruptEnable | bool | Enables both signal-bit and double-bit interrupts during initialization when set to `true`. | User-defined |
 
-## EMU Driver Operation
+@subsection emu_config_features Device Feature Macros
+| Macro | Description |
+|-------|-------------|
+| EMU_INSTANCE_COUNT | Number of EMU peripheral instances available on the device. |
+| EMU_EICHD_COUNT | Number of injection channels supported by one EMU instance. |
+| EMU_ERINFO_COUNT | Number of error-report entries exposed by one EMU instance. |
+| FEATURE_EMU_SUPPORT_64BIT_INJECTION | Defined as `1` when data-path injection supports 64-bit masks. |
+| FEATURE_EMU_GLOBAL_ENABLE_KEY | Defined as `1` when the global enable register requires a device-specific key sequence. |
 
-### Error injection feature ###
+@section emu_usage Usage Patterns
 
-This is example code to configure the EMU driver:
+@subsection emu_usage_basic Pattern 1: Single-Bit Data Injection and Address Reporting
+Configure one channel for data-bit injection, enable it immediately, read the
+target word, and then retrieve the latched error address.
 
-```c
-#define EMU_INSTANCE_ID    (0U)
+@code{.c}
+#define INST_EMU      (0U)
+#define TEST_WORD_ADDR (0x1FFF0000U)
 
-/* Configuration for error injection feature */
-emu_config_t EmuInitConfig0 = {
-    .channel = 0,
-    .injectErrAddr = 0x1FFF0000,
-    .injectErrSetInfo = 
-    {
-        .injectBitsType = EMU_INJECT_BITS_TYPE_DATA,
-        .dataBit = EMU_DATABIT_7,
-    },
-    .interruptEnable = false,
-};
-
-/* Main */
-int main(void)
+void emu_single_bit_example(void)
 {
-    uint32_t reportErrAddr = 0;
-    uint32_t value = 0;
+    emu_config_t emuConfig = {
+        .channel = 0U,
+        .injectErrAddr = TEST_WORD_ADDR,
+        .injectErrSetInfo = {
+            .injectBitsType = EMU_INJECT_BITS_TYPE_DATA,
+            .dataBit = EMU_DATABIT_7,
+            .chkBit = EMU_CHKBIT_0 /* Ignored in data-only mode. */
+        },
+        .interruptEnable = true
+    };
+    volatile uint32_t *const testWord = (volatile uint32_t *)TEST_WORD_ADDR;
+    uint32_t correctedValue;
+    uint32_t reportAddr;
 
-    /* Initialize clocks*/
+    *testWord = 0x0000BEEFU;
 
-    /*  */
-    *(volatile uint32_t *)(EmuInitConfig0.injectErrAddr) = 0xBEEF;
+    /* Clock setup is platform-specific and must be completed beforehand. */
+    EMU_DRV_Init(INST_EMU, &emuConfig, 1U);
 
-    /* Initialize EMU module for channel0*/
-    EMU_DRV_Init(EMU_INSTANCE_ID,&EmuInitConfig0,1);
-    value = *(volatile uint32_t *)(EmuInitConfig0.injectErrAddr); //read memory
+    /* Reading the configured address triggers the injected ECC test event. */
+    correctedValue = *testWord;
+    reportAddr = EMU_DRV_GetErrReportAddr(INST_EMU, (uint8_t)emuConfig.channel);
 
-    if(value == 0xBEEF)
-    {
-        /* Injection error has been corrected! */
-    }
-    else
-    {
-        /* Injection error has not been corrected! */
-    }
+    (void)correctedValue;
+    (void)reportAddr;
 
-    /* Get error report address. */
-    reportErrAddr = EMU_DRV_GetErrReportAddr(EMU_INSTANCE_ID,EmuInitConfig0.channel);
-
-    return 0;
+    EMU_DRV_DeInit(INST_EMU, emuConfig.channel);
 }
-```
+@endcode
+
+@subsection emu_usage_multi Pattern 2: Raw Multi-Bit Injection Masks
+Use the raw multi-bit helper when the application needs to program data and
+check masks directly instead of selecting one enumerated bit.
+
+@code{.c}
+#define INST_EMU       (0U)
+#define TEST_WORD_ADDR (0x1FFF0000U)
+
+void emu_multi_bit_example(void)
+{
+    emu_databit_type dataMask = (emu_databit_type)(((uint32_t)1U << 0U) |
+                                                   ((uint32_t)1U << 3U));
+    emu_chkbit_type chkMask = (emu_chkbit_type)((uint32_t)1U << 1U);
+
+    EMU_DRV_InjectError(INST_EMU,
+                        0U,
+                        TEST_WORD_ADDR,
+                        dataMask,
+                        chkMask);
+
+    /* To skip one path, pass NO_INJECTION_ERROR for dataMask or chkMask. */
+}
+@endcode
+
+@subsection emu_usage_interrupt Pattern 3: Interrupt Service and Error Counter Maintenance
+Check the single-bit correction flag in the interrupt handler, clear the
+latched status, and consume the report information before clearing the count.
+
+@code{.c}
+#define INST_EMU (0U)
+
+void EMU_SB_IRQHandler(void)
+{
+    if (EMU_DRV_GetChannelSBInterruptFlag(INST_EMU, 0U) != 0U)
+    {
+        uint8_t chkBit = EMU_DRV_GetErrReportChkbit(INST_EMU, 0U);
+        uint32_t errAddr = EMU_DRV_GetErrReportAddr(INST_EMU, 0U);
+
+        EMU_DRV_ClearInterruptFlagSignalBit(INST_EMU, 0U);
+        EMU_DRV_ClearErrReportCnt(INST_EMU, 0U);
+
+        (void)chkBit;
+        (void)errAddr;
+    }
+}
+
+void emu_double_bit_interrupt_control(void)
+{
+    EMU_DRV_EnableInterruptDoubleBit(INST_EMU, 0U);
+    /* ... handle the fault path ... */
+    EMU_DRV_ClearInterruptFlagDoubleBit(INST_EMU, 0U);
+    EMU_DRV_DisableInterruptDoubleBit(INST_EMU, 0U);
+}
+@endcode
+
+@section emu_api API Quick Reference
+
+@subsection emu_api_init Initialization & De-initialization
+| Function | Description |
+|----------|-------------|
+| EMU_DRV_Init() | Reset one EMU instance, apply the caller configuration, and optionally enable the selected channel immediately. |
+| EMU_DRV_DeInit() | Disable the selected channel and restore the entire EMU instance to reset state. |
+
+@subsection emu_api_inject Error Injection Control
+| Function | Description |
+|----------|-------------|
+| EMU_DRV_InjectError() | Program raw multi-bit data and check masks for one channel and re-enable injection. |
+
+@subsection emu_api_report Error Report & Counter Access
+| Function | Description |
+|----------|-------------|
+| EMU_DRV_GetErrReportChkbit() | Convert the latched syndrome into a reported check-bit index. |
+| EMU_DRV_GetErrReportCnt() | Read the per-channel error report counter. |
+| EMU_DRV_ClearErrReportCnt() | Clear the per-channel error report counter. |
+| EMU_DRV_GetErrReportAddr() | Read the address latched for the reported ECC event. |
+
+@subsection emu_api_interrupt Interrupt Status & Control
+| Function | Description |
+|----------|-------------|
+| EMU_DRV_GetChannelSBInterruptFlag() | Query whether a single-bit correction interrupt is pending for the selected channel. |
+| EMU_DRV_ClearInterruptFlagSignalBit() | Clear the single-bit correction interrupt flag for one channel. |
+| EMU_DRV_EnableInterruptDoubleBit() | Enable double-bit interrupt signaling for one channel. |
+| EMU_DRV_DisableInterruptDoubleBit() | Disable double-bit interrupt signaling for one channel. |
+| EMU_DRV_ClearInterruptFlagDoubleBit() | Clear the double-bit interrupt flag for one channel. |
+
+@section emu_notes Important Notes
+
+@subsection emu_notes_clock Clock Dependency
+The EMU peripheral clock must be enabled before calling EMU_DRV_Init().
+The driver does not manage clocks internally. See @ref clock_manager.
+
+@subsection emu_notes_access Access Restrictions
+@warning EMU error injection is intended for supervisor-mode SRAM accesses.
+Using user-mode accesses may bypass the intended validation path or fail to
+trigger the expected ECC event.
+
+@warning The injection target must be accessed with 32-bit word reads and
+writes. Sub-word accesses are not the supported validation path for this
+driver and can produce unexpected report behavior.
+
+@subsection emu_notes_reset Instance-Wide Reset Behavior
+@warning EMU_DRV_Init() calls EMU_Init(), which resets the complete EMU
+instance before applying the caller-provided configuration. Re-initializing
+one channel clears the configuration and report state of the other channels
+within the same instance.
+
+@subsection emu_notes_device Device Variations
+- The valid channel range is device-dependent and exposed through
+  `EMU_EICHD_COUNT`.
+- The number of report entries is device-dependent and exposed through
+  `EMU_ERINFO_COUNT`.
+- 64-bit data injection masks are only available when
+  `FEATURE_EMU_SUPPORT_64BIT_INJECTION == 1`.
+
+@subsection emu_notes_enable Global Enable Handling
+When `FEATURE_EMU_GLOBAL_ENABLE_KEY == 1`, the hardware requires a specific
+global-enable write value. The internal EMU_Enable() helper applies the
+correct sequence automatically.
+
+@section emu_integration Integration Guide
+
+@subsection emu_integration_files Compile Files
+The following files must be added to the project:
+
+@code{.sh}
+${SDK_PATH}/platform/drivers/src/emu/emu_driver.c
+${SDK_PATH}/platform/drivers/src/emu/emu_hw_access.c
+@endcode
+
+@subsection emu_integration_include Include Paths
+Add the following directories to the toolchain include search path:
+
+@code{.sh}
+${SDK_PATH}/platform/drivers/inc
+${SDK_PATH}/platform/drivers/src/emu
+@endcode
+
+@subsection emu_integration_symbols Preprocessor Symbols
+No user-defined preprocessor symbols are required for this component. Device
+capabilities are selected automatically through the active device feature
+headers.
+
+@subsection emu_integration_deps Dependencies
+- @ref clock_manager
 */

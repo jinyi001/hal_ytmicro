@@ -8,6 +8,13 @@
 /*!
  * @file tmr_driver.c
  * @version 1.4.1
+ *
+ * @brief TMR Driver — implementation of the public TMR_DRV_* API.
+ *
+ * This file implements the application-level TMR driver declared in
+ * tmr_driver.h. The driver resolves each instance base address and programs
+ * the TMR registers directly because this module does not use a standalone
+ * hardware-access layer.
  */
 
 /*!
@@ -24,30 +31,24 @@
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
-/*! @brief The maximum value of compare register */
+/*! @brief Maximum value accepted by the 32-bit compare register. */
 #define TMR_COMPARE_MAX (0xFFFFFFFFU)
 
 /*******************************************************************************
  * Variables
  ******************************************************************************/
-/*! @brief Table of base addresses for TMR instances. */
+/*! @brief Table of base addresses for TMR peripheral instances. */
 static TMR_Type *const s_tmrBase[TMR_INSTANCE_COUNT] = TMR_BASE_PTRS;
-/*! @brief TMR functional clock variable which will be updated in some driver functions */
+/*! @brief Cached functional clock frequency for each TMR instance (Hz). */
 static uint32_t s_tmrClockSrcFreq[TMR_INSTANCE_COUNT] = {0};
+
 /*******************************************************************************
- * Code
+ * Initialization & De-initialization
  ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMR_DRV_Init
- * Description   : Initializes the TMR module.
- * This function initializes TMR module base on the members of the tmr_config_t structure
- * with the desired values. Including clock source for module, prescaler, allow counter to
- * be stopped in debug mode and start-value for common counter register.
- *
- * Implements    : TMR_DRV_Init_Activity
- *END**************************************************************************/
+/*!
+ * @brief Initialize one TMR instance with module-level counter settings.
+ */
 void TMR_DRV_Init(const uint32_t instance,
                   const tmr_config_t *const config)
 {
@@ -56,34 +57,28 @@ void TMR_DRV_Init(const uint32_t instance,
 
     TMR_Type *const base = s_tmrBase[instance];
 
-    /* Configure clock source selection, prescaler, runs in stop mode */
+    /* Program the counter prescaler. */
     base->PRS = TMR_PRS_PRS(config->clockPrescaler); /*PRQA S 2985*/
+    /* Configure whether the counter stops during debug halt. */
     base->CTRL = TMR_CTRL_DBGDIS(config->stopInDebugMode ? 1UL : 0UL); /*PRQA S 2985*/
-    /* Set start-value for counter register */
+    /* Seed the shared counter start value. */
     base->CNT = config->startValue;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMR_DRV_Deinit
- * Description   : De-Initializes the TMR module.
- * This function resets all control registers and registers of each channel to default values
- * (Reference Manual Resets).
- * This function should only be called if user wants to stop all channels (not only one channel).
- * System clock is always enabled for TMR module, and doesn't have any option to disable clock.
- *
- * Implements    : TMR_DRV_Deinit_Activity
- *END**************************************************************************/
+/*!
+ * @brief Reset one TMR instance and all compare channels to their reset state.
+ */
 void TMR_DRV_Deinit(const uint32_t instance)
 {
     DEV_ASSERT(instance < TMR_INSTANCE_COUNT);
     uint8_t i;
     TMR_Type *const base = s_tmrBase[instance];
 
-    /* Disable counter and reset counter registers */
+    /* Stop the shared counter and clear its current value. */
     base->CTRL = 0x0U;
     base->CNT = 0x0U;
-    /* Reset all channels to default */
+
+    /* Restore every compare channel to its reset configuration. */
     for (i = 0; i < TMR_CH_COUNT; i++)
     {
         base->CH[i].CTRL = 0x0U;
@@ -92,40 +87,28 @@ void TMR_DRV_Deinit(const uint32_t instance)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMR_DRV_GetDefaultConfig
- * Description   : Gets the default configuration structure of TMR with default settings.
- * This function initializes the hardware configuration structure to default values
- * (Reference Manual Resets).
- * This function should be called before configuring the hardware feature by TMR_DRV_Init()
- * function, otherwise all members be written by user.
- * This function insures that all members are written with safe values, but the user still can
- * modify the desired members.
- *
- * Implements    : TMR_DRV_GetDefaultConfig_Activity
- *END**************************************************************************/
+/*!
+ * @brief Populate a TMR module configuration structure with safe defaults.
+ */
 void TMR_DRV_GetDefaultConfig(tmr_config_t *const config)
 {
     DEV_ASSERT(config != NULL);
-    /* Divide TMR clock by 1 */
+
+    /* Divide the module clock by 1. */
     config->clockPrescaler = 0U;
-    /* Counter continues to run in debug mode */
+    /* Let the counter continue running while debugging. */
     config->stopInDebugMode = false;
-    /* Value start for common counter register */
+    /* Start counting from zero. */
     config->startValue = 0U;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMR_DRV_InitChannel
- * Description   : Initializes the TMR channel module with a structure.
- * This function initializes TMR channel module base on the members of the tmr_channel_config_t
- * structure for each channel with the desired values. Including channel selected and compare-value
- * for that channel. This function is useful when using PEx tool.
- *
- * Implements    : TMR_DRV_InitChannel_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Channel Compare Control
+ ******************************************************************************/
+
+/*!
+ * @brief Initialize one compare channel from a configuration structure.
+ */
 void TMR_DRV_InitChannel(const uint32_t instance,
                          const tmr_channel_config_t *const config)
 {
@@ -135,28 +118,23 @@ void TMR_DRV_InitChannel(const uint32_t instance,
 
     TMR_Type *const base = s_tmrBase[instance];
 
-    /* Compare value for channel selected */
+    /* Program the compare value for the selected channel. */
     base->CH[config->channel].CMP = config->compareValue;
-    /* Enable channel */
+
+    /* Enable channel interrupt generation when requested by the caller. */
 #if (defined(FEATURE_TMR_HAS_INTERRUPT_ENABLE_CONFIG) && (FEATURE_TMR_HAS_INTERRUPT_ENABLE_CONFIG == 1))
     if (config->interruptEnable)
     {
         base->CH[config->channel].CTRL |= TMR_CH_CTRL_CHIE_MASK;
     }
 #endif
+    /* Enable the compare channel. */
     base->CH[config->channel].CTRL |= TMR_CH_CTRL_CHEN_MASK;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMR_DRV_ConfigChannel
- * Description   : Configures the TMR channel module with parameters.
- * This function initializes the desired settings for each channel.
- * This function is the same TMR_DRV_InitChannel() function about feature. But it is required
- * for user to have more options when configure the channel.
- *
- * Implements    : TMR_DRV_ConfigChannel_Activity
- *END**************************************************************************/
+/*!
+ * @brief Program a compare value and enable one channel.
+ */
 void TMR_DRV_ConfigChannel(const uint32_t instance,
                            const uint8_t channel,
                            const uint32_t compareValue)
@@ -165,23 +143,16 @@ void TMR_DRV_ConfigChannel(const uint32_t instance,
     DEV_ASSERT(channel < TMR_CH_COUNT);
 
     TMR_Type *const base = s_tmrBase[instance];
-    /* Compare value for channel selected */
+
+    /* Program the new compare value. */
     base->CH[channel].CMP = compareValue;
-    /* Enable channel */
+    /* Enable the selected compare channel. */
     base->CH[channel].CTRL = TMR_CH_CTRL_CHEN_MASK;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMR_DRV_EnableChannel
- * Description   : Enables the channel selected.
- * This function enables channel selected. The feature in this function is contained
- * in TMR_DRV_InitChannel() also, so after calling that function then no need to call this
- * function for the first time. It is called when a channel is disable momentarily and
- *  user wants to enable channel again.
- *
- * Implements    : TMR_DRV_EnableChannel_Activity
- *END**************************************************************************/
+/*!
+ * @brief Enable one compare channel without changing its compare value.
+ */
 void TMR_DRV_EnableChannel(const uint32_t instance,
                            const uint8_t channel)
 {
@@ -189,19 +160,14 @@ void TMR_DRV_EnableChannel(const uint32_t instance,
     DEV_ASSERT(channel < TMR_CH_COUNT);
 
     TMR_Type *const base = s_tmrBase[instance];
-    /* Enable channel */
+
+    /* Enable the selected compare channel. */
     base->CH[channel].CTRL |= TMR_CH_CTRL_CHEN_MASK;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMR_DRV_DisableChannel
- * Description   : Disables the channel selected.
- * This function disables channel selected. There is no channel interrupt request is generated
- * after calling this function.
- *
- * Implements    : TMR_DRV_DisableChannel_Activity
- *END**************************************************************************/
+/*!
+ * @brief Disable one compare channel.
+ */
 void TMR_DRV_DisableChannel(const uint32_t instance,
                             const uint8_t channel)
 {
@@ -209,77 +175,75 @@ void TMR_DRV_DisableChannel(const uint32_t instance,
     DEV_ASSERT(channel < TMR_CH_COUNT);
 
     TMR_Type *const base = s_tmrBase[instance];
-    /* Disable channel */
+
+    /* Disable the selected compare channel. */
     base->CH[channel].CTRL &= ~TMR_CH_CTRL_CHEN_MASK;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMR_DRV_SetStartValueCount
- * Description   : Sets start-value for Counter register.
- * This function sets start-value for common Counter register. There is only one counter
- * for all channels and the feature in this function is contained in TMR_DRV_Init() also,
- * after calling that function then no need to call this function for the first time.
- * It is called when user wants to set a new start-value to run again instead of calling
- * TMR_DRV_Init(), the action calls TMR_DRV_Init() will reduce performance of module.
- *
- * Implements    : TMR_DRV_SetStartValueCount_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Counter Control
+ ******************************************************************************/
+
+/*!
+ * @brief Write a new start value into the shared counter register.
+ */
 void TMR_DRV_SetStartValueCount(const uint32_t instance,
                                 const uint32_t startValue)
 {
     DEV_ASSERT(instance < TMR_INSTANCE_COUNT);
 
     TMR_Type *const base = s_tmrBase[instance];
-    /* Set start-value for counter register */
+
+    /* Seed the shared counter register with a new start value. */
     base->CNT = startValue;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMR_DRV_StartTimer
- * Description   : Starts timer counter.
- * This function enables common Timer Counter and starts running.
- *
- * Implements    : TMR_DRV_StartTimer_Activity
- *END**************************************************************************/
+/*!
+ * @brief Start the shared TMR counter.
+ */
 void TMR_DRV_StartTimer(const uint32_t instance)
 {
     DEV_ASSERT(instance < TMR_INSTANCE_COUNT);
 
     TMR_Type *const base = s_tmrBase[instance];
-    /* Timer counter is started */
+
+    /* Enable counting on the shared counter. */
     base->CTRL |= TMR_CTRL_TEN_MASK;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMR_DRV_StopTimer
- * Description   : Stops timer counter.
- * This function disables common Timer Counter and stop counting.
- *
- * Implements    : TMR_DRV_StopTimer_Activity
- *END**************************************************************************/
+/*!
+ * @brief Stop the shared TMR counter.
+ */
 void TMR_DRV_StopTimer(const uint32_t instance)
 {
     DEV_ASSERT(instance < TMR_INSTANCE_COUNT);
 
     TMR_Type *const base = s_tmrBase[instance];
-    /* Timer counter is stopped */
+
+    /* Disable counting on the shared counter. */
     base->CTRL &= ~TMR_CTRL_TEN_MASK;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMR_DRV_ComputeTicksByUs
- * Description   : Computes the number of ticks from microseconds.
- * This function computes the number of ticks from microseconds.
- * The number of ticks depends on the frequency and counter prescaler of the TMR source clock.
- * User has to configure the frequency and counter prescaler suitable by themself before calling
- * this function to have valid the number of ticks.
- *
- * Implements    : TMR_DRV_ComputeTicksByUs_Activity
- *END**************************************************************************/
+/*!
+ * @brief Read the current value of the shared TMR counter.
+ */
+uint32_t TMR_DRV_GetCounterValue(const uint32_t instance)
+{
+    DEV_ASSERT(instance < TMR_INSTANCE_COUNT);
+
+    const TMR_Type *const base = s_tmrBase[instance];
+
+    /* Return a snapshot of the current counter value. */
+    return base->CNT;
+}
+
+/*******************************************************************************
+ * Time Conversion & Scheduling
+ ******************************************************************************/
+
+/*!
+ * @brief Convert a microsecond interval to TMR ticks.
+ */
 status_t TMR_DRV_ComputeTicksByUs(const uint32_t instance,
                                   const uint32_t periodUs,
                                   uint32_t *ticks)
@@ -294,42 +258,35 @@ status_t TMR_DRV_ComputeTicksByUs(const uint32_t instance,
 
     const clock_names_t s_tmrClkNames[] = TMR_CLOCK_NAMES;
     clkSelect = 0x0U;
-    /* Gets current clock prescaler */
+
+    /* Read the active prescaler from hardware and convert it to a divisor. */
     clkPrescaler = ((base->PRS & TMR_PRS_PRS_MASK) >> TMR_PRS_PRS_SHIFT) + 1U;
-    /* Gets current functional clock frequency of TMR */
+    /* Query the functional clock used by the TMR instance. */
     clkErr = CLOCK_SYS_GetFreq(s_tmrClkNames[clkSelect], &s_tmrClockSrcFreq[instance]);
-    /* Checks the functional clock of TMR */
+    /* Validate the returned clock information before using it. */
     (void) clkErr;
     DEV_ASSERT(clkErr == STATUS_SUCCESS);
     DEV_ASSERT(s_tmrClockSrcFreq[instance] > 0U);
 
-    /* The formula to convert the microsecond value to the number of tick */
-    /* ticks = ((periodUs * ClockSrcFreq) / clkPrescaler) / 1000000 */
+    /* Convert microseconds to timer ticks. */
     tempTicks = (((uint64_t) periodUs * s_tmrClockSrcFreq[instance]) / clkPrescaler) / 1000000U;
 
     if (tempTicks > TMR_COMPARE_MAX)
     {
-        /* The number of ticks is out of range of compare register */
+        /* The converted value does not fit in the compare register. */
         retStatus = STATUS_ERROR;
     } else
     {
-        /* The number of ticks is in of range of compare register */
+        /* Return the converted compare increment to the caller. */
         *ticks = (uint32_t) tempTicks;
     }
 
     return retStatus;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMR_DRV_IncrementTicks
- * Description   : Increases the number of ticks in compare register.
- * This function will compute the compare-value suitable and set that compare-value for compare
- * register to create a periodic event. To make sure about a periodic event, user should call
- * this function immediately after the event occurs.
- *
- * Implements    : TMR_DRV_IncrementTicks_Activity
- *END**************************************************************************/
+/*!
+ * @brief Move a compare channel forward by a relative number of ticks.
+ */
 void TMR_DRV_IncrementTicks(const uint32_t instance,
                             const uint8_t channel,
                             const uint32_t ticks)
@@ -338,25 +295,24 @@ void TMR_DRV_IncrementTicks(const uint32_t instance,
     DEV_ASSERT(channel < TMR_CH_COUNT);
 
     TMR_Type *const base = s_tmrBase[instance];
+
+    /* Schedule the next deadline relative to the existing compare value. */
     base->CH[channel].CMP += ticks;
     uint32_t cnt = base->CNT;
     if (cnt > base->CH[channel].CMP)
     {
-        /* Timer already timeout, need to use CNT value instead */
+        /* If the deadline is already in the past, re-base it on the current counter. */
         base->CH[channel].CMP = base->CNT + ticks;
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMR_DRV_GetStatusFlags
- * Description   : Gets status of timer interrupt flag.
- * This function returns the status of each channel selected. When common Counter Timer
- * is enabled and value in Counter Timer reaches to compare-value in Channel Compare register
- * then a channel interrupt request is generated.
- *
- * Implements    : TMR_DRV_GetStatusFlags_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Status Flag Management
+ ******************************************************************************/
+
+/*!
+ * @brief Read the raw status register of one compare channel.
+ */
 uint32_t TMR_DRV_GetStatusFlags(const uint32_t instance,
                                 const uint8_t channel)
 {
@@ -364,19 +320,14 @@ uint32_t TMR_DRV_GetStatusFlags(const uint32_t instance,
     DEV_ASSERT(channel < TMR_CH_COUNT);
 
     const TMR_Type *const base = s_tmrBase[instance];
-    /* Return status of channel */
+
+    /* Return the raw status value for the selected compare channel. */
     return base->CH[channel].INT;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMR_DRV_ClearStatusFlags
- * Description   : Clears channel interrupt flag.
- * This function will clear the flag of channel selected by writing a 1 to bit flag
- * which user wants to clear. All efforts write 0 to bit flag has no effect.
- *
- * Implements    : TMR_DRV_ClearStatusFlags_Activity
- *END**************************************************************************/
+/*!
+ * @brief Clear the compare status flag of one channel.
+ */
 void TMR_DRV_ClearStatusFlags(const uint32_t instance,
                               const uint8_t channel)
 {
@@ -384,25 +335,9 @@ void TMR_DRV_ClearStatusFlags(const uint32_t instance,
     DEV_ASSERT(channel < TMR_CH_COUNT);
 
     TMR_Type *const base = s_tmrBase[instance];
-    /* Clear interrupt flag, write 1 to clear */
+
+    /* Clear the latched compare flag with write-one-to-clear semantics. */
     base->CH[channel].INT = TMR_CH_INT_CHIF_MASK;
-}
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMR_DRV_GetCounterValue
- * Description   : Returns current counter module.
- * This function will return the counter value at the moment it is called.
- *
- * Implements    : TMR_DRV_GetCounterValue_Activity
- *END**************************************************************************/
-uint32_t TMR_DRV_GetCounterValue(const uint32_t instance)
-{
-    DEV_ASSERT(instance < TMR_INSTANCE_COUNT);
-
-    const TMR_Type *const base = s_tmrBase[instance];
-    /* Return current counter */
-    return base->CNT;
 }
 
 /*******************************************************************************

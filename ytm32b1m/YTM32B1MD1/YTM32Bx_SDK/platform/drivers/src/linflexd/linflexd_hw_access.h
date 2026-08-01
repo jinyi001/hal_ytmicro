@@ -7,15 +7,23 @@
 
 /*!
  * @file linflexd_hw_access.h
- * @version 1.4.1
+ * @brief LINFlexD hardware access layer.
+ *
+ * This header provides low-level inline functions for direct register
+ * access to the LINFlexD peripheral. Functions are grouped by functional
+ * area: mode control, UART/LIN configuration, baud rate, status flags,
+ * interrupt control, data buffer access, and ID filter configuration.
+ *
+ * @note These functions are intended for internal driver use and should
+ *       not be called directly by application code.
  */
 
 /*!
-* @page misra_violations MISRA-C:2012 violations list
-*
-* PRQA S 0779 Rule 5.2: dentifier does not differ from other identifier(s)
-*
-*/
+ * @page misra_violations MISRA-C:2012 violations list
+ *
+ * PRQA S 0779 Rule 5.2: Identifier does not differ from other identifier(s)
+ *
+ */
 
 #ifndef LINFlexD_HW_ACCESS_H
 #define LINFlexD_HW_ACCESS_H
@@ -156,10 +164,15 @@ typedef enum
 extern "C" {
 #endif
 
+/*! @name Module Mode Control */
+/*! @{ */
+
 /*!
- * @brief Requests LINFlexD module to enter init mode.
+ * @brief Requests the LINFlexD module to enter initialization mode.
  *
- * This function enters initialization mode.
+ * This function sets the INIT bit in the LINCR1 register to place the
+ * module in initialization mode, where configuration registers can be
+ * modified. Sleep mode is exited automatically.
  *
  * @param base LINFlexD base pointer.
  */
@@ -176,9 +189,10 @@ static inline void LINFlexD_EnterInitMode(LINFlexD_Type *base)
 }
 
 /*!
- * @brief Requests LINFlexD module to enter normal mode.
+ * @brief Requests the LINFlexD module to enter normal mode.
  *
- * This function enters normal mode. *
+ * This function clears the INIT and SLEEP bits in the LINCR1 register
+ * to place the module in normal operating mode.
  *
  * @param base LINFlexD base pointer.
  */
@@ -195,12 +209,13 @@ static inline void LINFlexD_EnterNormalMode(LINFlexD_Type *base)
 }
 
 /*!
- * @brief Requests LINFlexD module to enter sleep mode.
+ * @brief Enables or disables sleep mode.
  *
- * This function enters sleep mode. *
+ * This function sets or clears the SLEEP bit in the LINCR1 register
+ * to enter or exit low-power sleep mode.
  *
  * @param base LINFlexD base pointer.
- * @param enable LINFlexD sleep mode enable.
+ * @param enable true to enter sleep mode, false to exit.
  */
 static inline void LINFlexD_SetSleepMode(LINFlexD_Type *base, bool enable)
 {
@@ -212,11 +227,13 @@ static inline void LINFlexD_SetSleepMode(LINFlexD_Type *base, bool enable)
     base->LINCR1 = regValTemp;
 }
 /*!
- * @brief Get LINFlexD module sleep mode.
+ * @brief Returns sleep mode status.
  *
- * This function get sleep mode status. *
+ * This function returns whether the module is currently in sleep mode
+ * by reading the SLEEP bit from the LINCR1 register.
  *
  * @param base LINFlexD base pointer.
+ * @return true if sleep mode is active, false otherwise.
  */
 static inline bool LINFlexD_GetSleepMode(LINFlexD_Type *base)
 {
@@ -224,12 +241,15 @@ static inline bool LINFlexD_GetSleepMode(LINFlexD_Type *base)
 }
 
 /*!
- * @brief Sets the LINFlexD mode.
+ * @brief Initializes the LINFlexD module for LIN mode.
  *
- * This function sets LIN MASTER or SLAVE mode, based on the parameter received.
+ * This function configures the LINCR1 register with the specified master/slave
+ * mode and break length. It enables key LIN features such as hardware checksum,
+ * automatic wakeup, and bypass receive filter.
  *
- * @param base LINFlexD base pointer.
- * @param masterMode LINFlexD lin mode - LIN_MASTER/LIN_SLAVE.
+ * @param base       LINFlexD base pointer.
+ * @param masterMode true for master mode, false for slave mode.
+ * @param breakLength Break length selection for master mode.
  */
 static inline void LINFlexD_Init(LINFlexD_Type *base, bool masterMode, linflexd_break_length_t breakLength)
 {
@@ -413,10 +433,10 @@ static inline void LINFlexD_IdleBitError(LINFlexD_Type *base, bool enable)
  */
 static inline void LINFlexD_SetTransferAbort(LINFlexD_Type *base, bool enable)
 {
-    base->LINCR2 |= LINFlexD_LINCR2_ABRQ_MASK;
     uint32_t reg = base->LINCR2;
     reg &= ~(LINFlexD_LINCR2_ABRQ_MASK);
-    base->LINCR2 = reg | LINFlexD_LINCR2_ABRQ(enable ? 1U : 0U);
+    reg |= LINFlexD_LINCR2_ABRQ(enable ? 1U : 0U);
+    base->LINCR2 = reg;
 }
 /*!
  * @brief Get Transfer abort request
@@ -502,6 +522,11 @@ static inline linflexd_hw_state_t LINFlexD_GetLinState(const LINFlexD_Type * bas
     uint8_t state = (uint8_t)((base->LINSR & LINFlexD_LINSR_LINS_MASK) >> LINFlexD_LINSR_LINS_SHIFT);
     return (linflexd_hw_state_t)state;
 }
+
+/*! @} */
+
+/*! @name LIN Mode Configuration */
+/*! @{ */
 
 /*!
  * @brief Sets the word length.
@@ -610,6 +635,11 @@ static inline void LINFlexD_SetReceiverState(LINFlexD_Type *base, bool enable)
     SDK_EXIT_CRITICAL();
 }
 
+/*! @} */
+
+/*! @name Transmitter / Receiver Control */
+/*! @{ */
+
 /*!
  * @brief Sets the transmission mode (FIFO/Buffer).
  *
@@ -705,6 +735,11 @@ static inline void LINFlexD_SetRxStopBitsCount(LINFlexD_Type *base, linflexd_uar
     base->UARTCR = regValTemp;
 }
 
+/*! @} */
+
+/*! @name Timeout Configuration */
+/*! @{ */
+
 /*!
  * @brief Sets UART to monitor idle state.
  *
@@ -753,6 +788,11 @@ static inline void LINFlexD_SetIdleTimeoutValue(LINFlexD_Type *base,  uint32_t v
 {
     base->UARTPTO = LINFlexD_UARTPTO_PTO(value);
 }
+
+/*! @} */
+
+/*! @name Baud Rate Configuration */
+/*! @{ */
 
 /*!
  * @brief Sets fractional baud rate.
@@ -818,6 +858,11 @@ static inline uint32_t LINFlexD_GetIntegerBaudRate(const LINFlexD_Type * base)
     return (uint32_t)((base->LINIBRR & LINFlexD_LINIBRR_IBR_MASK) >> LINFlexD_LINIBRR_IBR_SHIFT);
 }
 
+/*! @} */
+
+/*! @name LIN Timeout Configuration */
+/*! @{ */
+
 /*!
  * @brief Sets timeout enable.
  *
@@ -858,6 +903,11 @@ static inline void LINFlexD_SetTimeoutValue(LINFlexD_Type * base,
                     LINFlexD_LINTOCR_HTO(headerTimeout);
 }
 
+/*! @} */
+
+/*! @name UART Stop Bits Configuration */
+/*! @{ */
+
 /*!
  * @brief Sets the number of stop bits for Tx.
  *
@@ -897,6 +947,11 @@ static inline void LINFlexD_SetTxStopBitsCount(LINFlexD_Type *base, linflexd_uar
     base->GCR = regValTemp;
 #endif
 }
+
+/*! @} */
+
+/*! @name Status Flags */
+/*! @{ */
 
 /*!
  * @brief Clears an UART interrupt flag.
@@ -975,6 +1030,11 @@ static inline bool LINFlexD_GetLinErrorStatusFlag(const LINFlexD_Type * base, li
     return ((base->LINESR & (uint32_t)flag) != 0U);
 }
 
+/*! @} */
+
+/*! @name Interrupt Control */
+/*! @{ */
+
 /*!
  * @brief Enables/disables an UART interrupt.
  *
@@ -1016,6 +1076,11 @@ static inline bool LINFlexD_IsInterruptEnabled(const LINFlexD_Type * base, uint3
     return ((base->LINIER & intSrc) != 0U);
 }
 
+/*! @} */
+
+/*! @name Data Buffer Access */
+/*! @{ */
+
 /*!
  * @brief Sets the first byte of the tx data buffer.
  *
@@ -1050,7 +1115,7 @@ static inline void LINFlexD_SetTxDataArray(LINFlexD_Type * base, const uint8_t *
 /*!
  * @brief Gets the byte array of the rx data buffer.
  *
- * This function writes given bytes to the rx data buffer.
+ * This function reads bytes from the rx data buffer into the user buffer.
  *
  * @param base LINFlexD base pointer.
  * @param data data bytes array.
@@ -1104,9 +1169,14 @@ static inline uint16_t LINFlexD_GetRxDataBuffer2Bytes(const LINFlexD_Type * base
     return base->DATA.DATA16[2];
 }
 
+/*! @} */
+
+/*! @name ID Filter Configuration */
+/*! @{ */
+
 /*!
-* @brief Config the ID filters.
-*
+ * @brief Configures the ID filters.
+ *
 * This function config each ID filters by config.
 * 
 * @param base LINFlexD base pointer.
@@ -1149,8 +1219,13 @@ static inline uint8_t LINFlexD_GetFilterMatchIndex(LINFlexD_Type *base)
     return (uint8_t)(base->IFMI & LINFlexD_IFMI_IFMI_MASK);
 }
 
+/*! @} */
+
+/*! @name Deinitialization */
+/*! @{ */
+
 /*!
- * @brief Deinit all linflexd regisgters to default value.
+ * @brief Resets all LINFlexD registers to default values.
  */
 static inline void LINFlexD_DeinitRegs(LINFlexD_Type *base)
 {
@@ -1166,6 +1241,7 @@ static inline void LINFlexD_DeinitRegs(LINFlexD_Type *base)
     base->LINCR1 = 0x00000082U;
 }
 
+/*! @} */
 
 #if defined(__cplusplus)
 }

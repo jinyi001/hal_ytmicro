@@ -56,7 +56,7 @@
 MEMORY
 {
 {{#each @root.level1}}
-    {{this.name}}   {{#if this.isFlash}}(RX){{else}}(RW){{/if}} : ORIGIN = 0x{{nToString this.startAddress 16}}, LENGTH = 0x{{nToString this.size 16}}
+    MEMORY_{{this.name}}   {{#if this.isFlash}}(RX){{else}}(RW){{/if}} : ORIGIN = 0x{{nToString this.startAddress 16}}, LENGTH = 0x{{nToString this.size 16}}
 {{/each}}
 }
 {{setVar2 'memoryUsed' (createObject)~}}
@@ -132,7 +132,7 @@ SECTIONS
 {{#if @root.i.copyFrom}}
         {{@root.i.name}}_ram_end = .;
 {{/if}}
-    } > {{@root.i.parent.name}}
+    } > MEMORY_{{@root.i.parent.name}}
 {{/if}}
    
 {{#if @root.i.needCopy}}
@@ -153,8 +153,8 @@ SECTIONS
 {{setVar2 'lastParent' @root.i.parent.id}}
 {{/each}}
     {{#each @root.level1}}
-    {{this.name}}_memory_start = ORIGIN({{this.name}});
-    {{this.name}}_memory_end = ORIGIN({{this.name}}) + LENGTH({{this.name}});
-    {{this.name}}_memory_size = LENGTH({{this.name}});
+    {{this.name}}_memory_start = ORIGIN(MEMORY_{{this.name}});
+    {{this.name}}_memory_end = ORIGIN(MEMORY_{{this.name}}) + LENGTH(MEMORY_{{this.name}});
+    {{this.name}}_memory_size = LENGTH(MEMORY_{{this.name}});
 {{/each}}
 }

@@ -7,7 +7,7 @@
 
 /*!
  * @file spi_slave_driver.c
- * @version 1.4.1
+ * @brief SPI slave mode driver implementation.
  */
 
 /*!
@@ -27,7 +27,7 @@
 
 #if defined(FEATURE_SPI_HAS_DMA_ENABLE) && (FEATURE_SPI_HAS_DMA_ENABLE > 0U)
 
-/* Callback for DMA transfer done.*/
+/*! @brief DMA transfer completion callback for slave mode (internal). */
 static void SPI_DRV_SlaveCompleteDMATransfer(void *parameter, dma_chn_status_t status);
 
 #endif /* FEATURE_SPI_HAS_DMA_ENABLE */
@@ -35,14 +35,9 @@ static void SPI_DRV_SlaveCompleteDMATransfer(void *parameter, dma_chn_status_t s
 /*******************************************************************************
  * Code
  ******************************************************************************/
-/*FUNCTION**********************************************************************
-*
-* Function Name : SPI_DRV_SlaveGetDefaultConfig
-* Description   : Initializes a structured provided by user with the configuration
-* of an interrupt based SPI transfer.
-* Implements : SPI_DRV_SlaveGetDefaultConfig_Activity
-*
-*END**************************************************************************/
+/*!
+ * @brief Fill the slave configuration structure with default values.
+ */
 void SPI_DRV_SlaveGetDefaultConfig(spi_slave_config_t *spiConfig)
 {
     DEV_ASSERT(spiConfig != NULL);
@@ -62,8 +57,8 @@ void SPI_DRV_SlaveGetDefaultConfig(spi_slave_config_t *spiConfig)
     spiConfig->callbackParam = NULL;
 }
 
-/*
- * Implements : SPI_DRV_SlaveInit_Activity
+/*!
+ * @brief Initialize the SPI instance in slave mode.
  */
 status_t SPI_DRV_SlaveInit(uint32_t instance, spi_state_t *spiState, const spi_slave_config_t *slaveConfig)
 {
@@ -143,14 +138,14 @@ status_t SPI_DRV_SlaveInit(uint32_t instance, spi_state_t *spiState, const spi_s
     return errorCode;
 }
 
-/*
- * Implements : SPI_DRV_SlaveDeinit_Activity
+/*!
+ * @brief De-initialize the SPI slave instance.
  */
 status_t SPI_DRV_SlaveDeinit(uint32_t instance)
 {
     DEV_ASSERT(instance < SPI_INSTANCE_COUNT);
     DEV_ASSERT(g_spiStatePtr[instance] != NULL);
-    /* Instantiate local variable of type spi_master_state_t and point to global state */
+    /* Instantiate local variable of type spi_state_t and point to global state */
     const spi_state_t *spiState = (spi_state_t *)g_spiStatePtr[instance];
     SPI_Type *base = g_spiBase[instance];
     status_t errorCode = STATUS_SUCCESS;
@@ -173,8 +168,8 @@ status_t SPI_DRV_SlaveDeinit(uint32_t instance)
     return errorCode;
 }
 
-/*
- * Implements : SPI_DRV_SlaveTransferBlocking_Activity
+/*!
+ * @brief Perform an interrupt-driven blocking slave transfer.
  */
 status_t SPI_DRV_SlaveTransferBlocking(uint32_t instance,
                                        const uint8_t *sendBuffer,
@@ -223,8 +218,8 @@ status_t SPI_DRV_SlaveTransferBlocking(uint32_t instance,
     return status;
 }
 
-/*
- * Implements : SPI_DRV_SlaveTransfer_Activity
+/*!
+ * @brief Start a non-blocking slave transfer.
  */
 status_t
 SPI_DRV_SlaveTransfer(uint32_t instance, const uint8_t *sendBuffer, uint8_t *receiveBuffer, uint16_t transferByteCount)
@@ -238,7 +233,6 @@ SPI_DRV_SlaveTransfer(uint32_t instance, const uint8_t *sendBuffer, uint8_t *rec
     state->dummy = 0xFFU;
 #if FEATURE_SPI_HAS_DMA_ENABLE
     dma_transfer_size_t dmaTransferSize = DMA_TRANSFER_SIZE_1B;
-    const uint8_t *buffer;
 #endif
 
     /* The number of transferred bytes should be divisible by frame size */
@@ -334,49 +328,57 @@ SPI_DRV_SlaveTransfer(uint32_t instance, const uint8_t *sendBuffer, uint8_t *rec
                         break;
                 }
         
+                /* Completion is always observed on RX: TX FIFO decouples
+                 * TX-DMA-done from SPI-shifter-done, so TX channel cannot be
+                 * the completion source. For TX-only the HW echo drives the
+                 * RX shifter; configure RX with state->dummy as a fixed sink
+                 * (destination offset disabled) so an RX-DMA-done event still
+                 * marks transfer end. */
+                SPI_ClearRxmaskBit(base);
                 if (receiveBuffer != NULL)
                 {
                     state->rxCount = transferByteCount;
-                    buffer = receiveBuffer;
+                    (void)DMA_DRV_ConfigMultiBlockTransfer(state->rxDMAChannel,
+                                                           DMA_TRANSFER_PERIPH2MEM,
+                                                           (uint32_t)(&(base->DATA)),
+                                                           (uint32_t)receiveBuffer,
+                                                           dmaTransferSize,
+                                                           (uint32_t)1U << (uint8_t)(dmaTransferSize),
+                                                           (uint32_t)transferByteCount /
+                                                               (uint32_t)((uint32_t)1U << (uint8_t)(dmaTransferSize)),
+                                                           true);
                 }
                 else
                 {
                     state->rxCount = 0U;
-                    /* if there is no data to receive, use dummy data as destination for DMA transfer */
-                    buffer = (uint8_t *)(&(state->dummy));
-                }
-                (void)DMA_DRV_ConfigMultiBlockTransfer(state->rxDMAChannel,
-                                                       DMA_TRANSFER_PERIPH2MEM,
-                                                       (uint32_t)(&(base->DATA)),
-                                                       (uint32_t)buffer,
-                                                       dmaTransferSize,
-                                                       (uint32_t)1U << (uint8_t)(dmaTransferSize),
-                                                       (uint32_t)transferByteCount /
-                                                           (uint32_t)((uint32_t)1U << (uint8_t)(dmaTransferSize)),
-                                                       true);
-                if (receiveBuffer == NULL)
-                {
-                    /* if there is no data to receive, don't increment destination offset */
+                    (void)DMA_DRV_ConfigMultiBlockTransfer(state->rxDMAChannel,
+                                                           DMA_TRANSFER_PERIPH2MEM,
+                                                           (uint32_t)(&(base->DATA)),
+                                                           (uint32_t)(&(state->dummy)),
+                                                           dmaTransferSize,
+                                                           (uint32_t)1U << (uint8_t)(dmaTransferSize),
+                                                           (uint32_t)transferByteCount /
+                                                               (uint32_t)((uint32_t)1U << (uint8_t)(dmaTransferSize)),
+                                                           true);
                     DMA_DRV_SetDestOffset(state->rxDMAChannel, 0);
                 }
-        
+
+                /* TX channel is only set up when there is real data to send;
+                 * RX-only masks TX so the peripheral never raises a TX DMA
+                 * request (the SDK-955 stray request originated here). */
                 if (sendBuffer != NULL)
                 {
                     state->txCount = transferByteCount;
                     SPI_ClearTxmaskBit(base);
-                    buffer = sendBuffer;
                     (void)DMA_DRV_ConfigMultiBlockTransfer(state->txDMAChannel,
-                                                       DMA_TRANSFER_MEM2PERIPH,
-                                                       (uint32_t)buffer,
-                                                       (uint32_t)(&(base->DATA)),
-                                                       dmaTransferSize,
-                                                       (uint32_t)1U << (uint8_t)(dmaTransferSize),
-                                                       (uint32_t)transferByteCount /
-                                                           (uint32_t)((uint32_t)1U << (uint8_t)(dmaTransferSize)),
-                                                       true);
-                    
-                    /* Start TX channel */
-                    (void)DMA_DRV_StartChannel(state->txDMAChannel);
+                                                           DMA_TRANSFER_MEM2PERIPH,
+                                                           (uint32_t)sendBuffer,
+                                                           (uint32_t)(&(base->DATA)),
+                                                           dmaTransferSize,
+                                                           (uint32_t)1U << (uint8_t)(dmaTransferSize),
+                                                           (uint32_t)transferByteCount /
+                                                               (uint32_t)((uint32_t)1U << (uint8_t)(dmaTransferSize)),
+                                                           true);
                 }
                 else
                 {
@@ -384,23 +386,18 @@ SPI_DRV_SlaveTransfer(uint32_t instance, const uint8_t *sendBuffer, uint8_t *rec
                     SPI_SetTxmskBit(base);
                 }
 
-                if (sendBuffer == NULL)
-                {
-                    /* if there is no data to transmit, don't increment source offset */
-                    DMA_DRV_SetSrcOffset(state->txDMAChannel, 0);
-                }
-        
                 (void)DMA_DRV_InstallCallback(state->rxDMAChannel, (SPI_DRV_SlaveCompleteDMATransfer), (void *)(instance)); /* PRQA S 0326 */
-        
+
                 state->isTransferInProgress = true;
-        
-                /* Start RX channel */
+
                 (void)DMA_DRV_StartChannel(state->rxDMAChannel);
-                /* Start TX channel */
-                (void)DMA_DRV_StartChannel(state->txDMAChannel);
-                /* Enable SPI DMA requests */
                 SPI_SetRxDmaCmd(base, true);
-                SPI_SetTxDmaCmd(base, true);
+
+                if (sendBuffer != NULL)
+                {
+                    (void)DMA_DRV_StartChannel(state->txDMAChannel);
+                    SPI_SetTxDmaCmd(base, true);
+                }
             }
 #endif /* FEATURE_SPI_HAS_DMA_ENABLE */
         }
@@ -408,6 +405,9 @@ SPI_DRV_SlaveTransfer(uint32_t instance, const uint8_t *sendBuffer, uint8_t *rec
     return status;
 }
 
+/*!
+ * @brief Interrupt handler for SPI slave mode.
+ */
 void SPI_DRV_SlaveIRQHandler(uint32_t instance)
 {
     SPI_Type *base = g_spiBase[instance];
@@ -481,8 +481,8 @@ void SPI_DRV_SlaveIRQHandler(uint32_t instance)
     }
 }
 
-/*
- * Implements : SPI_DRV_SlaveAbortTransfer_Activity
+/*!
+ * @brief Abort an in-progress slave transfer.
  */
 status_t SPI_DRV_SlaveAbortTransfer(uint32_t instance)
 {
@@ -523,8 +523,8 @@ status_t SPI_DRV_SlaveAbortTransfer(uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*
- * Implements : SPI_DRV_SlaveGetTransferStatus_Activity
+/*!
+ * @brief Query the status of an ongoing slave transfer.
  */
 status_t SPI_DRV_SlaveGetTransferStatus(uint32_t instance, uint32_t *bytesRemained)
 {
@@ -553,8 +553,7 @@ status_t SPI_DRV_SlaveGetTransferStatus(uint32_t instance, uint32_t *bytesRemain
 #if FEATURE_SPI_HAS_DMA_ENABLE
 
 /*!
- * @brief Finish up a transfer DMA.
- * The main purpose of this function is to create a function compatible with DMA callback type
+ * @brief DMA transfer completion callback for slave mode (internal).
  */
 static void SPI_DRV_SlaveCompleteDMATransfer(void *parameter, dma_chn_status_t status)
 {

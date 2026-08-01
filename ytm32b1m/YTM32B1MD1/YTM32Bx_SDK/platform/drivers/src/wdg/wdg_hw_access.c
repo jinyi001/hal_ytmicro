@@ -8,6 +8,13 @@
 /*!
  * @file wdg_hw_access.c
  * @version 1.4.1
+ *
+ * @brief WDG HW Access Layer — non-inline register operations.
+ *
+ * This file implements watchdog hardware-access functions that are emitted as
+ * normal functions instead of static-inline helpers. The source restores the
+ * watchdog to reset-like values, configures interrupt behavior, and programs
+ * or reads back the watchdog configuration image.
  */
 
 #include "wdg_hw_access.h"
@@ -16,12 +23,11 @@
  * Code
  ******************************************************************************/
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Restore the watchdog to reset-like values.
  *
- * Function Name : WDG_Deinit
- * Description   : De-init WDG module.
- *
- *END**************************************************************************/
+ * @param[in] base  WDG base pointer.
+ */
 void WDG_Deinit(WDG_Type *const base)
 {
     /* Unlock WDG register */
@@ -39,12 +45,12 @@ void WDG_Deinit(WDG_Type *const base)
 
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Enable or disable the WDG timeout interrupt.
  *
- * Function Name : WDG_SetInt
- * Description   : enable/disable the WDG timeout interrupt
- *
- *END**************************************************************************/
+ * @param[in] base    WDG base pointer.
+ * @param[in] enable  `true` to enable the timeout interrupt.
+ */
 void WDG_SetInt(WDG_Type *const base,
                 bool enable)
 {
@@ -61,12 +67,13 @@ void WDG_SetInt(WDG_Type *const base,
     }
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Configure all watchdog registers from the user configuration.
  *
- * Function Name : WDG_Config
- * Description   : Configures all WDG registers.
- *
- *END**************************************************************************/
+ * @param[in] base           WDG base pointer.
+ * @param[in] wdgUserConfig  Pointer to the user configuration structure.
+ * @return Execution status.
+ */
 status_t WDG_Config(WDG_Type *const base,
                     const wdg_user_config_t *wdgUserConfig)
 {
@@ -140,12 +147,12 @@ status_t WDG_Config(WDG_Type *const base,
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Read back the current watchdog configuration from hardware.
  *
- * Function Name : WDG_GetConfig
- * Description   : Gets the current WDG configuration.
- *
- *END**************************************************************************/
+ * @param[in] base    WDG base pointer.
+ * @param[out] config Pointer to the structure that receives the current configuration.
+ */
 void WDG_GetConfig(const WDG_Type *base, wdg_user_config_t *const config)
 {
     uint32_t cr = base->CR;
@@ -168,4 +175,3 @@ void WDG_GetConfig(const WDG_Type *base, wdg_user_config_t *const config)
 /*******************************************************************************
  * EOF
  ******************************************************************************/
-

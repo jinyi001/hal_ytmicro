@@ -8,6 +8,18 @@
 /*!
  * @file ipc_hw_access.h
  * @version 1.4.1
+ *
+ * @brief IPC Hardware Access — Inter-Peripheral Crossbar clock control register interface.
+ *
+ * This header provides low-level inline functions for controlling peripheral
+ * clock gates, clock sources, and dividers through the IPC (Inter-Peripheral
+ * Crossbar) peripheral clock control registers.
+ *
+ * Functions are organized into:
+ *   - **Clock Configuration** — Set peripheral clock source, divider, and gate.
+ *   - **Module Reset** — Assert/de-assert software reset for a peripheral.
+ *   - **Clock Gate Control** — Enable/disable individual peripheral clocks.
+ *   - **Clock Status Query** — Read back clock gate, source, and divider settings.
  */
 
 #ifndef IPC_HW_ACCESS_H
@@ -26,15 +38,26 @@ extern const uint16_t clockNameMappings[CLOCK_NAME_COUNT];
 extern "C" {
 #endif /* __cplusplus*/
 
+/*******************************************************************************
+ * Clock Configuration
+ ******************************************************************************/
+/*!
+ * @name Clock Configuration
+ * @brief Set peripheral clock source, divider, and gate in one operation.
+ * @{
+ */
 
 /*!
-* @brief Sets SOSC control register
-*
-* @param[in] ipcCtrlReg  is point to IPC module control register
-* @param[in] clockGate   control register can be written or not
-* @param[in] clockSource is the source of the peripheral clock
-* @param[in] divider     peripheral clock divider
-*/
+ * @brief Configure a peripheral clock control register.
+ *
+ * Sets the clock source, divider, and gate enable for a peripheral in a
+ * single register write.
+ *
+ * @param[in] ipcCtrlReg  Pointer to the IPC control register for the peripheral.
+ * @param[in] clockGate   true to enable the peripheral clock, false to disable.
+ * @param[in] clkSrc      Clock source selector value.
+ * @param[in] divider     Clock divider value.
+ */
 static inline void IPC_SetPeripheralClockControl(volatile uint32_t *ipcCtrlReg, bool clockGate, uint32_t clkSrc, uint32_t divider)
 {
    /* Configure the peripheral clock source, the fractional clock divider and the clock gate */
@@ -44,15 +67,26 @@ static inline void IPC_SetPeripheralClockControl(volatile uint32_t *ipcCtrlReg, 
 
    *ipcCtrlReg = value;
 }
+
+/*! @} */ /* End of Clock Configuration */
+
+/*******************************************************************************
+ * Module Reset
+ ******************************************************************************/
 /*!
-* @brief Reset a given peripheral.
-* For example, to reset the ADC0 module , use like this:
-* @code
-*  IPC_SetClockMode(ipcReg);
-* @endcode
-*
-* @param[in] ipcReg      pointer to IPC CTRL REG
-*/
+ * @name Module Reset
+ * @brief Assert and de-assert software reset for a peripheral via IPC.
+ * @{
+ */
+
+/*!
+ * @brief Reset a peripheral module via its IPC control register.
+ *
+ * Asserts and then immediately de-asserts the software reset bit (SWREN)
+ * for the peripheral associated with the given control register.
+ *
+ * @param[in] ctrlReg  Pointer to the IPC control register for the peripheral.
+ */
 static inline void IPC_ResetModule(volatile uint32_t* ctrlReg)
 {
     /* Assert reset */
@@ -61,22 +95,23 @@ static inline void IPC_ResetModule(volatile uint32_t* ctrlReg)
     *ctrlReg &= (uint32_t)(~(IPC_CTRL_SWREN_MASK));
 }
 
+/*! @} */ /* End of Module Reset */
+
+/*******************************************************************************
+ * Clock Gate Control
+ ******************************************************************************/
 /*!
-* @brief Enables/disables the clock for a given peripheral.
-* For example, to enable the ADC0 clock, use like this:
-* @code
-*  IPC_SetClockMode(IPC, IPC_ADC0_CLOCK, true);
-* @endcode
-*
-* @param[in] base        ipc base pointer
-* @param[in] clockName   is the name of the peripheral clock
-* must be one of the following values (see the clock_names_t type from clock_names.h)
-*    IPC_DMA0_CLOCK
-*    IPC_MPU0_CLOCK
-*    ...
-*    IPC_UART3_CLOCK
-* @param[in] isClockEnabled  is the value of the command that enables/disables the clock
-*/
+ * @name Clock Gate Control
+ * @brief Enable or disable individual peripheral clocks.
+ * @{
+ */
+
+/*!
+ * @brief Enable or disable the clock for a peripheral.
+ *
+ * @param[in] ctrlReg        Pointer to the IPC control register for the peripheral.
+ * @param[in] isClockEnabled true to enable the clock, false to disable.
+ */
 static inline void IPC_SetClockMode(volatile uint32_t* ctrlReg,
                                        const bool isClockEnabled)
 {
@@ -90,22 +125,24 @@ static inline void IPC_SetClockMode(volatile uint32_t* ctrlReg,
    }
 }
 
+/*! @} */ /* End of Clock Gate Control */
 
+/*******************************************************************************
+ * Clock Status Query
+ ******************************************************************************/
+/*!
+ * @name Clock Status Query
+ * @brief Read back clock gate state, source selection, and divider value.
+ * @{
+ */
 
 /*!
-* @brief Gets the clock gate control mode.
-*
-* @param[in] base        ipc base pointer
-* @param[in] clockName   is the name of the peripheral clock
-* must be one of the following values (see the clock_names_t type from clock_names.h)
-*    IPC_DMA0_CLOCK
-*    IPC_MPU0_CLOCK
-*    ...
-*    IPC_UART3_CLOCK
-* @return  the clock gate control mode
-*        - false : Clock is disabled
-*        - true : Clock is enabled
-*/
+ * @brief Get the clock gate state for a peripheral.
+ *
+ * @param[in] base       IPC base pointer.
+ * @param[in] clockName  Peripheral clock name (from clock_names_t).
+ * @return true if the peripheral clock is enabled, false if disabled.
+ */
 static inline bool IPC_GetClockMode(const IPC_Type* const base,
                                        const clock_names_t clockName)
 {
@@ -115,17 +152,12 @@ static inline bool IPC_GetClockMode(const IPC_Type* const base,
 }
 
 /*!
-* @brief Gets the selection of a clock source for a specific peripheral
-*
-* @param[in] base        ipc base pointer
-* @param[in] clockName   is the name of the peripheral clock
-* must be one of the following values (see the clock_names_t type from clock_names.h)
-*    IPC_DMA0_CLOCK
-*    IPC_MPU0_CLOCK
-*    ...
-*    IPC_UART3_CLOCK
-* @return  the clock source
-*/
+ * @brief Get the clock source selection for a peripheral.
+ *
+ * @param[in] base       IPC base pointer.
+ * @param[in] clockName  Peripheral clock name (from clock_names_t).
+ * @return Clock source selector value.
+ */
 static inline uint32_t IPC_GetClockSourceSel(const IPC_Type* const base,
                                                                  const clock_names_t clockName)
 {
@@ -133,22 +165,19 @@ static inline uint32_t IPC_GetClockSourceSel(const IPC_Type* const base,
 }
 
 /*!
-* @brief Gets the selection of the divider value for a specific peripheral
-*
-* @param[in] base        ipc base pointer
-* @param[in] clockName   is the name of the peripheral clock
-* must be one of the following values (see the clock_names_t type from clock_names.h)
-*    IPC_DMA0_CLOCK
-*    IPC_MPU0_CLOCK
-*    ...
-*    IPC_UART3_CLOCK
-* @return  the divider value
-*/
+ * @brief Get the clock divider value for a peripheral.
+ *
+ * @param[in] base       IPC base pointer.
+ * @param[in] clockName  Peripheral clock name (from clock_names_t).
+ * @return Divider selector value.
+ */
 static inline uint32_t IPC_GetDividerSel(const IPC_Type* const base,
                                              const clock_names_t clockName)
 {
    return ((base->CTRL[clockNameMappings[clockName]] & IPC_CTRL_DIV_MASK) >> IPC_CTRL_DIV_SHIFT);
 }
+
+/*! @} */ /* End of Clock Status Query */
 
 #if defined(__cplusplus)
 }

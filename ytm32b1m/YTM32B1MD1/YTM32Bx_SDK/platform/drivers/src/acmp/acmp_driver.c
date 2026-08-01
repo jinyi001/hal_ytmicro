@@ -8,6 +8,13 @@
 /*!
  * @file acmp_driver.c
  * @version 1.4.1
+ *
+ * @brief ACMP Driver — implementation of the public ACMP_DRV_* API.
+ *
+ * This file implements the instance-based ACMP driver declared in
+ * `acmp_driver.h`. Each function resolves the hardware base address for the
+ * selected instance and delegates the register-level work to the internal
+ * helpers declared in `acmp_hw_access.h`.
  */
 
 #include "acmp_driver.h"
@@ -20,35 +27,38 @@
 /* Table of base addresses for ACMP instances. */
 static ACMP_Type *const g_acmpBase[] = ACMP_BASE_PTRS;
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Reset an ACMP instance through the IPC software reset path.
  *
- * Function Name : ACMP_DRV_Reset
- * Description   : This function set all ACMP registers to reset values.
- *
- * Implements : ACMP_DRV_Reset_Activity
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @return Execution status.
+ */
 status_t ACMP_DRV_Reset(const uint32_t instance)
 {
     status_t status = STATUS_SUCCESS;
     DEV_ASSERT(instance < ACMP_INSTANCE_COUNT);
+
     IPC->CTRL[instance + IPC_ACMP0_INDEX] |= IPC_CTRL_SWREN_MASK;
     IPC->CTRL[instance + IPC_ACMP0_INDEX] &= ~IPC_CTRL_SWREN_MASK;
 
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Populate all ACMP sub-configuration blocks with default values.
  *
- * Function Name : ACMP_DRV_GetDefaultConfig
- * Description   : Return a default configuration structure for all components
- * from comparator module.
- * Implements : ACMP_DRV_GetDefaultConfig_Activity
- *
- *END**************************************************************************/
+ * @param[in] config  Pointer to the configuration container whose member
+ *                    blocks receive default values.
+ * @return Execution status.
+ */
 status_t ACMP_DRV_GetDefaultConfig(const acmp_config_t *config)
 {
     status_t status = STATUS_SUCCESS;
     DEV_ASSERT(config != NULL);
+    DEV_ASSERT(config->comparatorConfig != NULL);
+    DEV_ASSERT(config->dacConfig != NULL);
+    DEV_ASSERT(config->muxConfig != NULL);
+    DEV_ASSERT(config->continuousConfig != NULL);
 
 #if FEATURE_ACMP_HAS_CLK_SRC_SEL
     (config->comparatorConfig)->acmpClkSrc = ACMP_CLK_SRC_SIRC;
@@ -84,7 +94,7 @@ status_t ACMP_DRV_GetDefaultConfig(const acmp_config_t *config)
     (config->continuousConfig)->fixedPort = ACMP_FIXED_NEG_PORT;
     (config->continuousConfig)->samplePeriod = FEATURE_ACMP_DEFAULT_CONT_PERIOD;
     (config->continuousConfig)->samplePosition = FEATURE_ACMP_DEFAULT_CONT_POS;
-    for (int8_t i = 0; i < 8; i++)
+    for (uint8_t i = 0; i < 8; i++)
     {
         (config->continuousConfig)->channelConfig[i].enable = false;
         (config->continuousConfig)->channelConfig[i].expectation = ACMP_EXPECT_POS_LESS_THAN_NEG;
@@ -93,13 +103,13 @@ status_t ACMP_DRV_GetDefaultConfig(const acmp_config_t *config)
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Initialize an ACMP instance from the supplied configuration blocks.
  *
- * Function Name : ACMP_DRV_Init
- * Description   : Initialize Analog comparator configuration.
- *
- * Implements : ACMP_DRV_Init_Activity
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[in] config    Pointer to the configuration container.
+ * @return Execution status.
+ */
 status_t ACMP_DRV_Init(const uint32_t instance, const acmp_config_t *config)
 {
     status_t status = STATUS_SUCCESS;
@@ -136,13 +146,14 @@ status_t ACMP_DRV_Init(const uint32_t instance, const acmp_config_t *config)
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Write the packed expectation bitmap used by continuous mode.
  *
- * Function Name : ACMP_DRV_SetExpectation
- * Description   : This function set channel expectation
- * Implements : ACMP_DRV_SetExpectation_Activity
- *
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[in] state     Packed expectation bitmap. Bit 0 controls channel 0 and
+ *                      bit 7 controls channel 7.
+ * @return Execution status.
+ */
 status_t ACMP_DRV_SetExpectation(const uint32_t instance, uint8_t state)
 {
     DEV_ASSERT(instance < ACMP_INSTANCE_COUNT);
@@ -152,13 +163,12 @@ status_t ACMP_DRV_SetExpectation(const uint32_t instance, uint8_t state)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Request continuous scan mode through the runtime control path.
  *
- * Function Name : ACMP_DRV_EnableContinuous
- * Description   : This function enable continuous mode
- * Implements : ACMP_DRV_EnableContinuous_Activity
- *
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @return Execution status.
+ */
 status_t ACMP_DRV_EnableContinuous(const uint32_t instance)
 {
     DEV_ASSERT(instance < ACMP_INSTANCE_COUNT);
@@ -168,13 +178,12 @@ status_t ACMP_DRV_EnableContinuous(const uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Request continuous-mode disable through the runtime control path.
  *
- * Function Name : ACMP_DRV_DisableContinuous
- * Description   : This function disable continuous mode
- * Implements : ACMP_DRV_DisableContinuous_Activity
- *
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @return Execution status.
+ */
 status_t ACMP_DRV_DisableContinuous(const uint32_t instance)
 {
     DEV_ASSERT(instance < ACMP_INSTANCE_COUNT);
@@ -184,17 +193,21 @@ status_t ACMP_DRV_DisableContinuous(const uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Read back all ACMP configuration blocks for one instance.
  *
- * Function Name : ACMP_DRV_GetConfigAll
- * Description   : This function returns the configuration for all components
- * from comparator module.
- * Implements : ACMP_DRV_GetConfigAll_Activity
- *
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[in] config    Pointer to the configuration container. All member
+ *                      pointers receive the current ACMP state.
+ * @return Execution status.
+ */
 status_t ACMP_DRV_GetConfigAll(const uint32_t instance, const acmp_config_t *config)
 {
     DEV_ASSERT(config != NULL);
+    DEV_ASSERT(config->comparatorConfig != NULL);
+    DEV_ASSERT(config->dacConfig != NULL);
+    DEV_ASSERT(config->muxConfig != NULL);
+    DEV_ASSERT(config->continuousConfig != NULL);
     DEV_ASSERT(instance < ACMP_INSTANCE_COUNT);
 
     /* Get ACMP sample mode configuration */
@@ -209,14 +222,13 @@ status_t ACMP_DRV_GetConfigAll(const uint32_t instance, const acmp_config_t *con
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Configure the comparator core.
  *
- * Function Name : ACMP_DRV_ConfigComparator
- * Description   : Configure only comparator features (functional mode, power mode,
- * inverter, hysteresis, offset, filter sampling period and samples count).
- * Implements : ACMP_DRV_ConfigComparator_Activity
- *
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[in] config    Pointer to the comparator configuration structure.
+ * @return Execution status.
+ */
 status_t ACMP_DRV_ConfigComparator(const uint32_t instance, const acmp_comparator_config_t *config)
 {
     DEV_ASSERT(config != NULL);
@@ -243,11 +255,16 @@ status_t ACMP_DRV_ConfigComparator(const uint32_t instance, const acmp_comparato
     ACMP_SetOutputPolarity(base, config->outputPolarity);
     /* Set power mode */
     ACMP_SetPowerMode(base, (config)->powerMode);
+
+    /* Set filter clock source */
+    ACMP_SetFilterClockSrc(base, (uint8_t)config->filterClkSrc);
     
     if (config->filterEnable)
     {
-        /* Set filter clock source */
-        ACMP_SetFilterClockSrc(base, (uint8_t)config->filterClkSrc);
+#if defined(FEATURE_ACMP_HAS_FILTER_BYPASS) && (FEATURE_ACMP_HAS_FILTER_BYPASS == 1)
+        /* Enable filter */
+        ACMP_SetFilterEnState(base, true);
+#endif
         /* Set filter sample period */
         ACMP_SetFilterSamplePeriod(base, config->filterSamplePeriod);
         /* Set filter sample count */
@@ -257,12 +274,11 @@ status_t ACMP_DRV_ConfigComparator(const uint32_t instance, const acmp_comparato
     {
 #if FEATURE_ACMP_HAS_FILTER_BYPASS
         ACMP_SetFilterEnState(base, false);
-#else
+#endif
         /* Set filter sample period */
         ACMP_SetFilterSamplePeriod(base, 0U);
         /* Set filter sample count */
         ACMP_SetFilterSampleCount(base, 0U);
-#endif
     }
 #if FEATURE_ACMP_HAS_AUTODIS
     /* Set auto disable hard block */
@@ -276,13 +292,13 @@ status_t ACMP_DRV_ConfigComparator(const uint32_t instance, const acmp_comparato
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Read back the comparator core configuration.
  *
- * Function Name : ACMP_DRV_GetComparator
- * Description   : Return configuration for comparator components from ACMP module.
- * Implements : ACMP_DRV_GetComparatorConfig_Activity
- *
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[out] config   Pointer to the structure that receives the comparator state.
+ * @return Execution status.
+ */
 status_t ACMP_DRV_GetComparatorConfig(const uint32_t instance, acmp_comparator_config_t *config)
 {
     DEV_ASSERT(config != NULL);
@@ -304,7 +320,26 @@ status_t ACMP_DRV_GetComparatorConfig(const uint32_t instance, acmp_comparator_c
 #if FEATURE_ACMP_HAS_AUTODIS
     config->autoDisableHardBlock = ACMP_GetAutoDisableHardBlock(base);
 #endif
-    config->filterEnable = false;
+
+#if defined(FEATURE_ACMP_HAS_FILTER_BYPASS) && (FEATURE_ACMP_HAS_FILTER_BYPASS == 1)
+    if (ACMP_GetFilterEnState(base))
+    {
+        config->filterEnable = true;
+    }
+    else
+    {
+        config->filterEnable = false;
+    }
+#else
+    if (ACMP_GetFilterSampleCount(base) != 0U && ACMP_GetFilterSamplePeriod(base) != 0U)
+    {
+        config->filterEnable = true;
+    }
+    else
+    {
+        config->filterEnable = false;
+    }
+#endif
     config->filterClkSrc = (acmp_filter_clk_src_t)ACMP_GetFilterClockSrc(base);
     config->filterSampleCount = ACMP_GetFilterSampleCount(base);
     config->filterSamplePeriod = ACMP_GetFilterSamplePeriod(base);
@@ -314,13 +349,13 @@ status_t ACMP_DRV_GetComparatorConfig(const uint32_t instance, acmp_comparator_c
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Configure the integrated DAC threshold generator.
  *
- * Function Name : ACMP_DRV_ConfigDac
- * Description   : Configure only DAC component from comparator module.
- * Implements : ACMP_DRV_ConfigDac_Activity
- *
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[in] config    Pointer to the DAC configuration structure.
+ * @return Execution status.
+ */
 status_t ACMP_DRV_ConfigDac(const uint32_t instance, const acmp_dac_config_t *config)
 {
     DEV_ASSERT(config != NULL);
@@ -339,13 +374,13 @@ status_t ACMP_DRV_ConfigDac(const uint32_t instance, const acmp_dac_config_t *co
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Read back the integrated DAC configuration.
  *
- * Function Name : ACMP_DRV_GetDacConfig
- * Description   : Return configuration for DAC component from comparator module.
- * Implements : ACMP_DRV_GetDacConfig_Activity
- *
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[out] config   Pointer to the structure that receives the DAC state.
+ * @return Execution status.
+ */
 status_t ACMP_DRV_GetDacConfig(const uint32_t instance, acmp_dac_config_t *config)
 {
     DEV_ASSERT(config != NULL);
@@ -361,14 +396,13 @@ status_t ACMP_DRV_GetDacConfig(const uint32_t instance, acmp_dac_config_t *confi
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Configure the positive and negative input routes.
  *
- * Function Name : ACMP_DRV_ConfigMux
- * Description   : Configure only MUX component from comparator module to select
- * source signals for comparator ports.
- * Implements : ACMP_DRV_ConfigMux_Activity
- *
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[in] config    Pointer to the MUX configuration structure.
+ * @return Execution status.
+ */
 status_t ACMP_DRV_ConfigMux(const uint32_t instance, const acmp_mux_config_t *config)
 {
     DEV_ASSERT(config != NULL);
@@ -386,14 +420,13 @@ status_t ACMP_DRV_ConfigMux(const uint32_t instance, const acmp_mux_config_t *co
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Read back the positive and negative input routes.
  *
- * Function Name : ACMP_DRV_GetMuxConfig
- * Description   : Return configuration for the MUX component which select
- * source signals for comparator ports.
- * Implements : ACMP_DRV_GetMuxConfig_Activity
- *
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[out] config   Pointer to the structure that receives the routing state.
+ * @return Execution status.
+ */
 status_t ACMP_DRV_GetMuxConfig(const uint32_t instance, acmp_mux_config_t *config)
 {
     status_t status = STATUS_SUCCESS;
@@ -412,13 +445,13 @@ status_t ACMP_DRV_GetMuxConfig(const uint32_t instance, acmp_mux_config_t *confi
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Configure continuous scan mode.
  *
- * Function Name : ACMP_DRV_ConfigContinuous
- * Description   : Configure comparator in trigger mode.
- * Implements : ACMP_DRV_ConfigContinuous_Activity
- *
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[in] config    Pointer to the continuous-mode configuration structure.
+ * @return Execution status.
+ */
 status_t ACMP_DRV_ConfigContinuous(const uint32_t instance, const acmp_continuous_config_t *config)
 {
     DEV_ASSERT(config != NULL);
@@ -475,13 +508,13 @@ status_t ACMP_DRV_ConfigContinuous(const uint32_t instance, const acmp_continuou
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Read back continuous scan configuration.
  *
- * Function Name : ACMP_DRV_GetContinuousConfig
- * Description   : Return configuration for the continuous mode.
- * Implements : ACMP_DRV_GetContinuousConfig_Activity
- *
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[out] config   Pointer to the structure that receives the continuous-mode state.
+ * @return Execution status.
+ */
 status_t ACMP_DRV_GetContinuousConfig(const uint32_t instance, acmp_continuous_config_t *config)
 {
     DEV_ASSERT(config != NULL);
@@ -501,18 +534,19 @@ status_t ACMP_DRV_GetContinuousConfig(const uint32_t instance, acmp_continuous_c
     for (uint8_t i = 0; i < 8U; i++)
     {
         config->channelConfig[i].enable = ACMP_GetContinuousChannelEnState(base, i);
+        config->channelConfig[i].expectation = (acmp_ch_expectation_config_t)ACMP_GetContinuousChannelExpectation(base, i);
     }
 
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Read the comparator output event flags.
  *
- * Function Name : ACMP_DRV_GetOutputFlags
- * Description   : Return in <flags> comparator output flags(rising and falling edge on output).
- * Implements : ACMP_DRV_GetOutputFlags_Activity
- *
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[out] flags    Pointer to the variable that receives the output flags.
+ * @return Execution status.
+ */
 status_t ACMP_DRV_GetOutputFlags(const uint32_t instance, uint8_t *flags)
 {
     DEV_ASSERT(flags != NULL);
@@ -522,13 +556,12 @@ status_t ACMP_DRV_GetOutputFlags(const uint32_t instance, uint8_t *flags)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Clear the comparator output event flags.
  *
- * Function Name : ACMP_DRV_ClearOutputFlags
- * Description   : Clear comparator output flags(rising and falling edge on output).
- * Implements : ACMP_DRV_ClearOutputFlags_Activity
- *
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @return Execution status.
+ */
 status_t ACMP_DRV_ClearOutputFlags(const uint32_t instance)
 {
     DEV_ASSERT(instance < ACMP_INSTANCE_COUNT);
@@ -537,14 +570,13 @@ status_t ACMP_DRV_ClearOutputFlags(const uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
-*
-* Function Name : ACMP_DRV_GetChannelFlags
-* Description   : Return all input change flags in <flags>.
-* <flags> format : Flag_Ch7 Flag_Ch6 ... Flag_Ch0
-* Implements : ACMP_DRV_GetInputFlags_Activity
-*
-*END**************************************************************************/
+/*!
+ * @brief Read the per-channel change flags used by continuous mode.
+ *
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[out] flags    Pointer to the variable that receives the channel flags.
+ * @return Execution status.
+ */
 status_t ACMP_DRV_GetChannelFlags(const uint32_t instance, acmp_ch_list_t *flags)
 {
     DEV_ASSERT(flags != NULL);
@@ -554,13 +586,12 @@ status_t ACMP_DRV_GetChannelFlags(const uint32_t instance, acmp_ch_list_t *flags
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
-*
-* Function Name : ACMP_DRV_ClearChannelFlags
-* Description   : Clear all input channels flags .
-* Implements : ACMP_DRV_ClearInputFlags_Activity
-*
-*END**************************************************************************/
+/*!
+ * @brief Clear all continuous-mode channel change flags.
+ *
+ * @param[in] instance  ACMP instance index (0-based).
+ * @return Execution status.
+ */
 status_t ACMP_DRV_ClearChannelFlags(const uint32_t instance)
 {
     DEV_ASSERT(instance < ACMP_INSTANCE_COUNT);
@@ -569,13 +600,12 @@ status_t ACMP_DRV_ClearChannelFlags(const uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Enable the comparator block for the selected instance.
  *
- * Function Name : ACMP_DRV_Enable
- * Description   : This function enable the ACMP.
- *
- * Implements : ACMP_DRV_Enable_Activity
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @return Execution status.
+ */
 status_t ACMP_DRV_Enable(const uint32_t instance)
 {
     DEV_ASSERT(instance < ACMP_INSTANCE_COUNT);
@@ -584,13 +614,12 @@ status_t ACMP_DRV_Enable(const uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Disable the comparator block for the selected instance.
  *
- * Function Name : ACMP_DRV_Disable
- * Description   : This function disable the ACMP.
- *
- * Implements : ACMP_DRV_Disable_Activity
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @return Execution status.
+ */
 status_t ACMP_DRV_Disable(const uint32_t instance)
 {
     DEV_ASSERT(instance < ACMP_INSTANCE_COUNT);
@@ -599,13 +628,12 @@ status_t ACMP_DRV_Disable(const uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Report the channel currently being sampled in continuous mode.
  *
- * Function Name : ACMP_DRV_GetChannelId
- * Description   : This function is to get channel ID in the continuous mode.
- *
- * Implements : ACMP_DRV_GetChannelId_Activity
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @return Current channel identifier.
+ */
 uint8_t ACMP_DRV_GetChannelId(const uint32_t instance)
 {
     DEV_ASSERT(instance < ACMP_INSTANCE_COUNT);
@@ -616,13 +644,12 @@ uint8_t ACMP_DRV_GetChannelId(const uint32_t instance)
     return channelId;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Read the current comparator output state.
  *
- * Function Name : ACMP_DRV_GetOutput
- * Description   : This function is to get module output value.
- *
- * Implements : ACMP_DRV_GetOutput_Activity
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @return `true` when the comparator output is high, or `false` otherwise.
+ */
 bool ACMP_DRV_GetOutput(const uint32_t instance)
 {
     DEV_ASSERT(instance < ACMP_INSTANCE_COUNT);
@@ -632,13 +659,13 @@ bool ACMP_DRV_GetOutput(const uint32_t instance)
     return ACMP_GetOutput(baseAddr);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Read the last captured output for a channel scanned in continuous mode.
  *
- * Function Name : ACMP_DRV_GetChannelOutput
- * Description   : This function is to get channel output value.
- *
- * Implements : ACMP_DRV_GetOutput_Activity
- *END**************************************************************************/
+ * @param[in] instance  ACMP instance index (0-based).
+ * @param[in] channel   Channel index to query.
+ * @return `true` when the stored channel output is high, or `false` otherwise.
+ */
 bool ACMP_DRV_GetChannelOutput(const uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < ACMP_INSTANCE_COUNT);

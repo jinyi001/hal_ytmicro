@@ -7,7 +7,7 @@
 
 /*!
  * @file spi_hw_access.c
- * @version 1.4.1
+ * @brief SPI hardware register access layer implementation.
  */
 
 /*!
@@ -31,31 +31,17 @@
  * Code
  ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_Init
- * Description   : Resets the SPI internal logic and registers to their default settings.
- *
- * This function first performs a software reset of the SPI module which resets the
- * internal SPI logic and most registers, then proceeds to manually reset all of the
- * SPI registers to their default setting to ensuring these registers at programmed to
- * their default value which includes disabling the module.
- *
- *END**************************************************************************/
+/*!
+ * @brief Reset the SPI module to its default state.
+ */
 void SPI_Init(SPI_Type *base)
 {
     base->CTRL = 0x00000000; // software spi module
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_Disable
- * Description   : Disables the SPI module.
- *
- * Note that this function returns STATUS_BUSY if it is detected that the Module Busy Flag
- * (MBF) is set, otherwise, if success, it returns STATUS_SUCCESS.
- *
- *END**************************************************************************/
+/*!
+ * @brief Disable the SPI module.
+ */
 status_t SPI_Disable(SPI_Type *base)
 {
     status_t status = STATUS_SUCCESS;
@@ -73,26 +59,18 @@ status_t SPI_Disable(SPI_Type *base)
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_GetVersionId
- * Description   : Configures the SPI for master or slave.
- *
- * Note that the SPI module must first be disabled before configuring this.
- *
- *END**************************************************************************/
+/*!
+ * @brief Configure the SPI for master or slave mode.
+ */
 status_t SPI_SetMasterSlaveMode(SPI_Type *base, spi_master_slave_mode_t mode)
 {
     base->CTRL = (base->CTRL & (~SPI_CTRL_MODE_MASK)) | ((uint32_t)mode << SPI_CTRL_MODE_SHIFT);
     return STATUS_SUCCESS;
 }
 #if !defined(FEATURE_SPI_LITE_VERSION)
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_SetPinConfigMode
- * Description   : Flushes the SPI FIFOs.
- *
- *END**************************************************************************/
+/*!
+ * @brief Flush the SPI TX and/or RX FIFOs.
+ */
 void SPI_SetFlushFifoCmd(SPI_Type *base, bool flushTxFifo, bool flushRxFifo)
 {
     base->TXFIFO |= (uint32_t)(flushTxFifo ? 1 : 0) << SPI_TXFIFO_RESET_SHIFT;
@@ -101,44 +79,25 @@ void SPI_SetFlushFifoCmd(SPI_Type *base, bool flushTxFifo, bool flushRxFifo)
 
 #endif /* FEATURE_SPI_LITE_VERSION */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_ClearStatusFlag
- * Description   : Clears the SPI status flag.
- *
- * This function clears the state of one of the SPI status flags as requested by
- * the user. Note, the flag must be w1c capable, if not the function returns an error.
- * w1c capable flags are:
- *   SPI_WORD_COMPLETE
- *   SPI_FRAME_COMPLETE
- *   SPI_TRANSFER_COMPLETE
- *   SPI_TRANSMIT_ERROR
- *   SPI_RECEIVE_ERROR
- *   SPI_DATA_MATCH
- *
- *END**************************************************************************/
+/*!
+ * @brief Clear a write-1-to-clear (W1C) status flag.
+ */
 status_t SPI_ClearStatusFlag(SPI_Type *base, spi_status_flag_t statusFlag)
 {
     if (statusFlag == SPI_ALL_STATUS)
     {
-        base->STS |= (uint32_t)SPI_ALL_STATUS;
+        base->STS = (uint32_t)SPI_ALL_STATUS;
     }
     else
     {
-        base->STS |= ((uint32_t)1U << (uint32_t)statusFlag);
+        base->STS = ((uint32_t)1U << (uint32_t)statusFlag);
     }
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_SetPcsPolarityMode
- * Description   : Configures the desired SPI PCS polarity.
- *
- * This function allows the user to configure the polarity of a particular PCS signal.
- * Note that the SPI module must first be disabled before configuring this.
- *
- *END**************************************************************************/
+/*!
+ * @brief Set the polarity of a specific PCS signal.
+ */
 status_t SPI_SetPcsPolarityMode(SPI_Type *base, spi_which_pcs_t whichPcs, spi_signal_polarity_t pcsPolarity)
 {
     uint32_t cfgr1Value = 0;
@@ -154,30 +113,9 @@ status_t SPI_SetPcsPolarityMode(SPI_Type *base, spi_which_pcs_t whichPcs, spi_si
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_SetPinConfigMode
- * Description   : Configures the SPI SDO/SDI pin configuration mode.
- *
- * This function configures the pin mode of the SPI.
- * For the SDI and SDO pins, the user can configure these pins as follows:
- *  SDI is used for input data and SDO for output data.
- *  SDO is used for input data and SDO for output data.
- *  SDI is used for input data and SDI for output data.
- *  SDO is used for input data and SDI for output data.
- *
- * The user has the option to configure the output data as:
- *  Output data retains last value when chip select is de-asserted (default setting).
- *  Output data is tristated when chip select is de-asserted.
- *
- * Finally, the user has the option to configure the PCS[3:2] pins as:
- *  Enabled for PCS operation (default setting).
- *  Disabled - this is need if the user wishes to configure the SPI mode for 4-bit transfers
- *             where these pins will be used as I/O data pins.
- *
- * Note that the SPI module must first be disabled before configuring this.
- *
- *END**************************************************************************/
+/*!
+ * @brief Configure the SDO/SDI pin routing and output behavior.
+ */
 status_t
 SPI_SetPinConfigMode(SPI_Type *base, spi_pin_config_t pinCfg, spi_data_out_config_t dataOutConfig, bool pcs3and2Enable)
 {
@@ -202,34 +140,19 @@ SPI_SetPinConfigMode(SPI_Type *base, spi_pin_config_t pinCfg, spi_data_out_confi
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Compute absolute difference between two unsigned values.
  *
- * Function Name : abs_dif
- * Description   : This is a helper function which implements absolute difference between
- * two numbers.
- *
- *END**************************************************************************/
+ * Internal helper for baud rate calculation.
+ */
 static uint32_t abs_dif(uint32_t a, uint32_t b)
 {
     return (a > b) ? (a - b) : (b - a);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_SetBaudRate
- * Description   : Sets the SPI baud rate in bits per second.
- *
- * This function takes in the desired bitsPerSec (baud rate) and calculates the nearest
- * possible baud rate, and returns the calculated baud rate in bits-per-second. It requires
- * that the caller also provide the frequency of the module source clock (in Hertz).
- * Also note that the baud rate does not take into affect until the Transmit Control
- * Register (TCR) is programmed with the PRESCALE value. Hence, this function returns the
- * PRESCALE tcrPrescaleValue parameter for later programming in the TCR.  It is up to the
- * higher level peripheral driver to alert the user of an out of range baud rate input.
- * Note that the SPI module must first be disabled before configuring this.
- * Note that the SPI module must be configure for master mode before configuring this.
- *
- *END**************************************************************************/
+/*!
+ * @brief Calculate and set the SPI baud rate.
+ */
 uint32_t SPI_SetBaudRate(SPI_Type *base, uint32_t bitsPerSec, uint32_t sourceClockInHz, uint32_t *tcrPrescaleValue)
 {
     uint32_t bestFreq = 0xFFFFFFFFU;
@@ -316,22 +239,9 @@ uint32_t SPI_SetBaudRate(SPI_Type *base, uint32_t bitsPerSec, uint32_t sourceClo
     return bestFreq;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_SetBaudRateDivisor
- * Description   : Configures the baud rate divisor manually (only the SPI_CCR[SCKDIV]).
- *
- * This function allows the caller to manually set the baud rate divisor in the event
- * that this divider is known and the caller does not wish to call the
- * SPI_SetBaudRate function. Note that this only affects the SPI_CCR[SCKDIV]).
- * The Transmit Control Register (TCR) is programmed separately with the PRESCALE value.
- * The valid range is 0x00 to 0xFF (255), if the user inputs outside of this range, an error
- * is returned.
- *
- * Note that the SPI module must first be disabled before configuring this.
- * Note that the SPI module must be configure for master mode before configuring this.
- *
- *END**************************************************************************/
+/*!
+ * @brief Manually set the SCK clock divider value.
+ */
 status_t SPI_SetBaudRateDivisor(SPI_Type *base, uint32_t divisor)
 {
     uint32_t spi_tmp;
@@ -344,21 +254,9 @@ status_t SPI_SetBaudRateDivisor(SPI_Type *base, uint32_t divisor)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_SetTxCommandReg
- * Description   : Sets the Transmit Command Register (TCR) parameters.
- *
- * The Transmit Command Register (TCR) contains multiple parameters that affect
- * the transmission of data, such as clock phase and polarity, which PCS to use,
- * whether or not the PCS remains asserted at the completion of a frame, etc.
- * Any writes to this register results in an immediate push of the entire register
- * and its contents to the TX FIFO.  Hence, writes to this register should include
- * all of the desired parameters written to the register at once. Hence, the user
- * should fill in the members of the spi_tx_cmd_config_t data structure and pass
- * this to the function.
- *
- *END**************************************************************************/
+/*!
+ * @brief Write the full Transmit Command Register (TCR).
+ */
 void SPI_SetTxCommandReg(SPI_Type *base, const spi_tx_cmd_config_t *txCmdCfgSet)
 {
     base->TXCFG = ((SPI_TXCFG_CPOL(txCmdCfgSet->clkPolarity)) | /*PRQA S 2985*/
@@ -377,15 +275,9 @@ void SPI_SetTxCommandReg(SPI_Type *base, const spi_tx_cmd_config_t *txCmdCfgSet)
                    (SPI_TXCFG_MSKTX((txCmdCfgSet->txMask) ? 1U : 0U))); /*PRQA S 2985*/
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_SetPcs
- * Description   : Sets the PCS flag to a value between 0 and 3.
- *
- * This function modifies the TCR register and sets the value of the PCS flag
- * to the value of the whichPcs parameter.
- *
- *END**************************************************************************/
+/*!
+ * @brief Select the active chip select (PCS) signal.
+ */
 void SPI_SetPcs(SPI_Type *base, spi_which_pcs_t whichPcs)
 {
     uint32_t regVal;

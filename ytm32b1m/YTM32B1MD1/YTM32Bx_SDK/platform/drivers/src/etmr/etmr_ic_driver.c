@@ -8,6 +8,13 @@
 /*!
  * @file etmr_ic_driver.c
  * @version 1.4.1
+ *
+ * @brief eTMR Input Capture Driver — implementation.
+ *
+ * This file implements the input capture mode functions declared in
+ * etmr_ic_driver.h, including channel initialization, de-initialization,
+ * measurement queries, and interrupt handlers for both software and
+ * hardware capture paths.
  */
 
 /*!
@@ -486,13 +493,13 @@ void eTMR5_Ch6_Ch7_IRQHandler(void)
 
 #endif /* CPU_<device> */
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Initialize the eTMR channels in input capture mode.
  *
- * Function Name : eTMR_DRV_InitInputCapture
- * Description   : This function initialize the channel in the Input Capture mode
- *
- * Implements    : eTMR_DRV_InitInputCapture_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @param[in] param     Pointer to the input capture configuration.
+ * @return Operation status.
+ */
 status_t eTMR_DRV_InitInputCapture(uint32_t instance, const etmr_ic_param_t *param)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -591,14 +598,14 @@ status_t eTMR_DRV_InitInputCapture(uint32_t instance, const etmr_ic_param_t *par
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief De-initialize input capture mode.
  *
- * Function Name : eTMR_DRV_DeinitInputCapture
- * Description   : This function de-initialize input capture mode and configure
- *                 channel as none mode
- *
- * Implements    : eTMR_DRV_DeinitInputCapture_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @param[in] param     Pointer to the input capture configuration used to
+ *                      identify which channels to de-initialize.
+ * @return Operation status.
+ */
 status_t eTMR_DRV_DeinitInputCapture(uint32_t instance, const etmr_ic_param_t *param)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -674,13 +681,13 @@ status_t eTMR_DRV_DeinitInputCapture(uint32_t instance, const etmr_ic_param_t *p
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Check whether an input capture measurement is complete.
  *
- * Function Name : eTMR_DRV_GetInputCaptureComplete
- * Description   : This function is used to get complete status.
- *
- * Implements    : eTMR_DRV_GetInputCaptureComplete_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @param[in] channel   The eTMR channel index.
+ * @return `true` if capture is complete, `false` otherwise.
+ */
 bool eTMR_DRV_GetInputCaptureComplete(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -696,13 +703,13 @@ bool eTMR_DRV_GetInputCaptureComplete(uint32_t instance, uint8_t channel)
     return value;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Clear the input capture complete flag.
  *
- * Function Name : eTMR_DRV_ClearInputCaptureComplete
- * Description   : This function is used to clear complete status.
- *
- * Implements    : eTMR_DRV_ClearInputCaptureComplete_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @param[in] channel   The eTMR channel index.
+ * @return Operation status.
+ */
 status_t eTMR_DRV_ClearInputCaptureComplete(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -717,15 +724,13 @@ status_t eTMR_DRV_ClearInputCaptureComplete(uint32_t instance, uint8_t channel)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the measured input signal period.
  *
- * Function Name : eTMR_DRV_GetInputCaptureMeasurementPeriod
- * Description   : This function is used to get the period of pwm. The
- *                 calculation is available in the eTMR_DRV_InputCaptureHandler
- *                 function.
- *
- * Implements    : eTMR_DRV_GetInputCaptureMeasurementPeriod_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @param[in] channel   The eTMR channel index.
+ * @return The measured period in timer ticks.
+ */
 uint32_t eTMR_DRV_GetInputCaptureMeasurementPeriod(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -741,13 +746,13 @@ uint32_t eTMR_DRV_GetInputCaptureMeasurementPeriod(uint32_t instance, uint8_t ch
     return value;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the positive pulse width count.
  *
- * Function Name : eTMR_DRV_GetInputCapturePositivePulseCount
- * Description   : This function is used to get positive pulse count value.
- *
- * Implements    : eTMR_DRV_GetInputCapturePositivePulseCount_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @param[in] channel   The eTMR channel index.
+ * @return The positive pulse count value in timer ticks.
+ */
 uint32_t eTMR_DRV_GetInputCapturePositivePulseCount(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -763,13 +768,13 @@ uint32_t eTMR_DRV_GetInputCapturePositivePulseCount(uint32_t instance, uint8_t c
     return value;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the negative pulse width count.
  *
- * Function Name : eTMR_DRV_GetInputCaptureNegativePulseCount
- * Description   : This function is used to get negative pulse count value.
- *
- * Implements    : eTMR_DRV_GetInputCaptureNegativePulseCount_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @param[in] channel   The eTMR channel index.
+ * @return The negative pulse count value in timer ticks.
+ */
 uint32_t eTMR_DRV_GetInputCaptureNegativePulseCount(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -785,13 +790,13 @@ uint32_t eTMR_DRV_GetInputCaptureNegativePulseCount(uint32_t instance, uint8_t c
     return value;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the raw capture value from the CVAL register.
  *
- * Function Name : eTMR_DRV_GetInputCaptureValue
- * Description   : This function is used to get capture count value.
- *
- * Implements    : eTMR_DRV_GetInputCaptureValue_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @param[in] channel   The eTMR channel index.
+ * @return The captured counter value.
+ */
 uint32_t eTMR_DRV_GetInputCaptureValue(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -800,14 +805,12 @@ uint32_t eTMR_DRV_GetInputCaptureValue(uint32_t instance, uint8_t channel)
     return eTMR_GetChnCapVal(etmrBase, channel);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Input capture interrupt handler using software capture processing.
  *
- * Function Name : eTMR_DRV_InputCaptureHandler
- * Description   : This function is used to get capture value, polarity and the
- *                 count of overflow on each edge.
- *
- * Implements    : eTMR_DRV_InputCaptureHandler_Activity
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @param[in] channel   The channel that triggered the interrupt.
+ */
 void eTMR_DRV_InputCaptureHandler(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -885,16 +888,12 @@ void eTMR_DRV_InputCaptureHandler(uint32_t instance, uint8_t channel)
 }
 
 #if defined(FEATURE_eTMR_HAS_HARDWARE_CAPTURE) && (FEATURE_eTMR_HAS_HARDWARE_CAPTURE == 1U)
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Input capture interrupt handler using hardware capture processing.
  *
- * Function Name : eTMR_DRV_InputCaptureHardwareHandler
- * Description   : This function is used to get positive pulse width, negative
- *                 pulse width and period. If use hardware process, there is no
- *                 no need to use eTMR_DRV_CalculateChannelCaptureValue function.
- *                 Furthermore, overflow interrupt software process is no longer
- *                 required.
- *
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @param[in] channel   The channel that triggered the interrupt.
+ */
 void eTMR_DRV_InputCaptureHardwareHandler(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -965,21 +964,12 @@ void eTMR_DRV_InputCaptureHardwareHandler(uint32_t instance, uint8_t channel)
 }
 #endif
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Calculate period and pulse-width measurements for one channel.
  *
- * Function Name : eTMR_DRV_CalculateChannelCaptureValue
- * Description   : This function is used to calculate period, positive pulse or
-                   negative pulse count for each channel. When measurementType is 
-                   eTMR_PERIOD_MEASUREMENT and captureEdge is eTMR_DUAL_EDGES,
-                   period, positive pulse width and negative pulse width can be 
-                   measured. When measurementType is eTMR_PERIOD_MEASUREMENT and
-                   captureEdge is eTMR_POS_EDGE or eTMR_NEG_EDGE, period can be
-                   measured. When measurementType is eTMR_POS_PULSE_MEASUREMENT
-                   or eTMR_NEG_PULSE_MEASUREMENT, positive pulse width or negative
-                   pulse width can be measured. It is necessary to use dual edges
-                   capture method to measure positive pulse width or negative pulse
-                   width.
- *END**************************************************************************/
+ * @param[in] instance  The eTMR peripheral instance number.
+ * @param[in] channel   The channel to calculate measurements for.
+ */
 void eTMR_DRV_CalculateChannelCaptureValue(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);

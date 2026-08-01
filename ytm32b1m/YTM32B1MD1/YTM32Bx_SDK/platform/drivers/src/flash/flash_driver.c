@@ -8,6 +8,13 @@
 /*!
  * @file flash_driver.c
  * @version 1.4.1
+ *
+ * @brief Flash Driver — implementation of the public FLASH_DRV_* API.
+ *
+ * This file implements the application-level flash driver functions declared
+ * in flash_driver.h. It provides erase, program, and verification operations
+ * for the EFM (Embedded Flash Module) peripheral, supporting both synchronous
+ * and asynchronous (interrupt-driven) operation modes.
  */
 
 /*!
@@ -71,6 +78,8 @@ static status_t FLASH_LaunchCommandSequence(uint32_t instance) __attribute__((no
 END_FUNCTION_DECLARATION_RAMSECTION
 
 static uint32_t FLASH_GetSectorSize(uint32_t dest);
+
+static bool FLASH_IsEraseRangeValid(uint32_t dest, uint32_t size);
 
 static void FLASH_DoneIRQHandler(uint32_t instance);
 
@@ -179,13 +188,9 @@ typedef void (*FLASH_UnlockCmds_t)(EFM_Type *base, uint32_t cmd, uint32_t addr);
 static FLASH_UnlockCmds_t s_FlashUnlockCmd[EFM_INSTANCE_COUNT] = { FLASH_Pflash_UnlockCmd, FLASH_Dflash_UnlockCmd};
 #endif /* FEATURE_EFM_UNLOCK_CMD_COMPLEX */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_LaunchCommandSequence
- * Description   : Perform command write sequence on Flash.
- * It is internal function, called by driver APIs only.
- *
- *END**************************************************************************/
+/*!
+ * @brief Execute the flash command write sequence (RAM-resident).
+ */
 START_FUNCTION_DEFINITION_RAMSECTION
 DISABLE_CHECK_RAMSECTION_FUNCTION_CALL
 static status_t FLASH_LaunchCommandSequence(uint32_t instance)
@@ -329,13 +334,9 @@ static status_t FLASH_LaunchCommandSequence(uint32_t instance)
 ENABLE_CHECK_RAMSECTION_FUNCTION_CALL
 END_FUNCTION_DEFINITION_RAMSECTION
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_GetSectorSize
- * Description   : Get flash sector size based on the destination address.
- * It is internal function, called by driver APIs only.
- *
- *END**************************************************************************/
+/*!
+ * @brief Get the flash sector size based on the destination address.
+ */
 static uint32_t FLASH_GetSectorSize(uint32_t dest)
 {
     uint32_t sectorSize = 0;
@@ -388,15 +389,40 @@ static uint32_t FLASH_GetSectorSize(uint32_t dest)
     return sectorSize;
 }
 
+/*!
+ * @brief Validate that an erase range covers complete, defined flash sectors.
+ */
+static bool FLASH_IsEraseRangeValid(uint32_t dest, uint32_t size)
+{
+    bool valid = true;
+    uint32_t current = dest;
+    uint32_t remaining = size;
+    uint32_t sectorSize;
+
+    while ((remaining > 0U) && (true == valid))
+    {
+        sectorSize = FLASH_GetSectorSize(current);
+        if ((0U == sectorSize) ||
+            ((current % sectorSize) != 0U) ||
+            (remaining < sectorSize))
+        {
+            valid = false;
+        }
+        else
+        {
+            current += sectorSize;
+            remaining -= sectorSize;
+        }
+    }
+
+    return valid;
+}
+
 #if (defined(FEATURE_EFM_PREREAD_CHECK_FOR_PROGRAM) && (FEATURE_EFM_PREREAD_CHECK_FOR_PROGRAM == 1)) || \
     (defined(FEATURE_EFM_SW_READ_VERIFY) && (FEATURE_EFM_SW_READ_VERIFY == 1))
-/*FUNCTION**********************************************************************
-*
-* Function Name : FLASH_DRV_SoftwareVerifyMemory
-* Description   : Flash software verification. 
-*                 Check if memory matches the expected data.
-* 
-*END**************************************************************************/
+/*!
+ * @brief Verify flash memory content against expected data (software check).
+ */
 static status_t FLASH_DRV_SoftwareVerifyMemory(uint32_t address, volatile const uint32_t *expectedData, uint32_t wordCount)
 {
     status_t status = STATUS_SUCCESS;
@@ -431,12 +457,9 @@ static status_t FLASH_DRV_SoftwareVerifyMemory(uint32_t address, volatile const 
 }
 #endif
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_StateCalcChecksum
- * Description   : Calculate checksum value for flash state structure.
- *
- *END**************************************************************************/
+/*!
+ * @brief Calculate shift-sum checksum for the flash state structure.
+ */
 static uint32_t FLASH_StateCalcShiftSum(const flash_state_t *state)
 {
     uint32_t sum = 0;
@@ -448,13 +471,9 @@ static uint32_t FLASH_StateCalcShiftSum(const flash_state_t *state)
     return sum;
 }
 
-/*FUNCTION**********************************************************************
-*
-* Function Name : FLASH_EventCallback
-* Description   : Callback function for flash module.
-*                 Used only for internal functions.
-*
-*END**************************************************************************/
+/*!
+ * @brief Internal event callback dispatcher for the flash module.
+ */
 static void FLASH_EventCallback(EFM_Type *base, flash_state_t *state, flash_event_t event)
 {
     (void) base;
@@ -485,12 +504,9 @@ static void FLASH_EventCallback(EFM_Type *base, flash_state_t *state, flash_even
     }
 }
 
-/*FUNCTION**********************************************************************
-*
-* Function Name : FLASH_DoneIRQHandler
-* Description   : Interrupt handler for flash module done event.
-*
-*END**************************************************************************/
+/*!
+ * @brief Internal interrupt handler for flash command-done events.
+ */
 static void FLASH_DoneIRQHandler(uint32_t instance)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -498,9 +514,6 @@ static void FLASH_DoneIRQHandler(uint32_t instance)
     EFM_Type *base = s_efmBase[instance];
     flash_state_t *state = s_FlashStatePtr[instance];
     DEV_ASSERT(state != NULL);
-#ifdef FEATURE_EFM_PROGRAM_NVR_CMD_CODE
-    uint32_t efm_data[FEATURE_EFM_WRITE_UNIT_WORD_SIZE + 1U];
-#endif /* FEATURE_EFM_PROGRAM_NVR_CMD_CODE */
 
 #ifdef EFM_CTRL_RETRY_CFG_MASK
     uint32_t retry_cfg;
@@ -635,14 +648,14 @@ static void FLASH_DoneIRQHandler(uint32_t instance)
 #ifdef FEATURE_EFM_PROGRAM_NVR_CMD_CODE
                 case FEATURE_EFM_PROGRAM_NVR_CMD_CODE:
                     state->leftSize -= (int32_t)FEATURE_EFM_WRITE_UNIT_SIZE;
-                    state->cmdParam.pdata = efm_data;
+                    state->cmdParam.pdata = state->efm_data;
                     state->nvr_addr += FEATURE_EFM_WRITE_UNIT_SIZE;
                     state->nvr_data += FEATURE_EFM_WRITE_UNIT_WORD_SIZE; /* PRQA S 0488 */
 
-                    efm_data[0] = state->nvr_addr;
+                    state->efm_data[0] = state->nvr_addr;
                     for (uint32_t i = 0U; i < FEATURE_EFM_WRITE_UNIT_WORD_SIZE; i++)
                     {
-                        efm_data[i + 1U] = state->nvr_data[i];
+                        state->efm_data[i + 1U] = state->nvr_data[i];
                     }
                     break;
 #endif /* FEATURE_EFM_PROGRAM_NVR_CMD_CODE */
@@ -679,24 +692,18 @@ static void FLASH_DoneIRQHandler(uint32_t instance)
     }
 }
 
-/*FUNCTION**********************************************************************
-*
-* Function Name : FLASH_DRV_GetDoneStatus
-* Description   : Get the done status of the flash module.
-*
-*END**************************************************************************/
+/*!
+ * @brief Get the done status of the flash module.
+ */
 bool FLASH_DRV_GetDoneStatus(uint32_t instance)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
     return FLASH_GetDoneStatus(s_efmBase[instance]);
 }
 
-/*FUNCTION**********************************************************************
-*
-* Function Name : FLASH_DRV_GetReadCollisionFlag
-* Description   : Get the read collision flag of the flash module.
-*
-*END**************************************************************************/
+/*!
+ * @brief Get the read collision flag of the flash module.
+ */
 bool FLASH_DRV_GetReadCollisionFlag(uint32_t instance)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -704,12 +711,9 @@ bool FLASH_DRV_GetReadCollisionFlag(uint32_t instance)
 }
 
 #if defined(EFM_READ_COLLISION_IRQS_CH_COUNT) && (EFM_READ_COLLISION_IRQS_CH_COUNT > 0U)
-/*FUNCTION**********************************************************************
-*
-* Function Name : FLASH_ReadCollisionIRQHandler
-* Description   : Interrupt handler for flash module access error event.
-*
-*END**************************************************************************/
+/*!
+ * @brief Interrupt handler for flash read-collision error events.
+ */
 static void FLASH_ReadCollisionIRQHandler(uint32_t instance)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -722,13 +726,9 @@ static void FLASH_ReadCollisionIRQHandler(uint32_t instance)
 }
 #endif /* EFM_READ_COLLISION_IRQS_CH_COUNT */
 
-/*FUNCTION**********************************************************************
-*
-* Function Name : EFM_IRQHandler
-* Description   : Interrupt handler for flash module.
-* This handler is used when flash driver is configured for async mode.
-*
-*END**************************************************************************/
+/*!
+ * @brief Main EFM interrupt handler (registered in startup vector table).
+ */
 #if (EFM_IRQS_CH_COUNT > 0U)
 /* Implementation of EFM handler named in startup code. */
 void EFM_IRQHandler(void)
@@ -765,13 +765,9 @@ void EFM_Error_IRQHandler(void)
 }
 #endif
 
-/*FUNCTION**********************************************************************
-*
-* Function Name : FLASH_DRV_Init
-* Description   : Initialize the Flash module.
-*
-* Implements    : FLASH_DRV_Init_Activity
-*END**************************************************************************/
+/*!
+ * @brief Initialize the flash driver with user-provided configuration.
+ */
 status_t FLASH_DRV_Init(uint32_t instance, const flash_user_config_t * userConfigPtr, flash_state_t * state)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -850,13 +846,9 @@ status_t FLASH_DRV_Init(uint32_t instance, const flash_user_config_t * userConfi
     return status;
 }
 
-/*FUNCTION**********************************************************************
-*
-* Function Name : FLASH_DRV_Deinit
-* Description   : De-initialize the Flash module.
-*
-* Implements    : FLASH_DRV_Deinit_Activity
-*END**************************************************************************/
+/*!
+ * @brief De-initialize the flash driver and release resources.
+ */
 status_t FLASH_DRV_Deinit(uint32_t instance)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -881,13 +873,9 @@ status_t FLASH_DRV_Deinit(uint32_t instance)
     return status;
 }
 
-/*FUNCTION**********************************************************************
-*
-* Function Name : FLASH_DRV_GetDefaultConfig
-* Description   : Gets the default configuration structure for the Flash module.
-*
-* Implements    : FLASH_DRV_GetDefaultConfig_Activity
-*END**************************************************************************/
+/*!
+ * @brief Populate a configuration structure with default flash parameters.
+ */
 void FLASH_DRV_GetDefaultConfig(flash_user_config_t * const userConfigPtr)
 {
     DEV_ASSERT(userConfigPtr != NULL);
@@ -899,13 +887,9 @@ void FLASH_DRV_GetDefaultConfig(flash_user_config_t * const userConfigPtr)
     userConfigPtr->callback = NULL_CALLBACK;
 }
 
-/*FUNCTION**********************************************************************
-*
-* Function Name : FLASH_DRV_GetBusyStatus
-* Description   : Get the Flash module busy status.
-*
-* Implements    : FLASH_DRV_GetBusyStatus_Activity
-*END**************************************************************************/
+/*!
+ * @brief Check whether the flash driver is busy with an operation.
+ */
 bool FLASH_DRV_GetBusyStatus(uint32_t instance)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -915,13 +899,9 @@ bool FLASH_DRV_GetBusyStatus(uint32_t instance)
     return state->driverBusy;
 }
 
-/*FUNCTION**********************************************************************
-*
-* Function Name : FLASH_DRV_SetAsyncMode
-* Description   : Enable or disable async mode.
-*
-* Implements    : FLASH_DRV_SetAsyncMode_Activity
-*END**************************************************************************/
+/*!
+ * @brief Switch the flash driver between synchronous and asynchronous mode.
+ */
 status_t FLASH_DRV_SetAsyncMode(uint32_t instance, bool async)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -940,6 +920,7 @@ status_t FLASH_DRV_SetAsyncMode(uint32_t instance, bool async)
         if (true == async)
         {
             state->driverBusy = false;
+            FLASH_ClearDoneStatusFlag(base);
             FLASH_DRV_EnableCmdCompleteInterrupt(instance);
             INT_SYS_EnableIRQ(s_efmIrqId[instance]);
             FLASH_DRV_EnableReadCollisionInterrupt(instance);
@@ -951,13 +932,9 @@ status_t FLASH_DRV_SetAsyncMode(uint32_t instance, bool async)
     return status;
 }
 
-/*FUNCTION**********************************************************************
-*
-* Function Name : FLASH_DRV_SetDisableGlobalInt
-* Description   : Enable or disable global interrupt in sync mode.
-*
-* Implements    : FLASH_DRV_SetDisableGlobalInt_Activity
-*END**************************************************************************/
+/*!
+ * @brief Enable or disable global interrupt suppression in synchronous mode.
+ */
 void FLASH_DRV_SetDisableGlobalInt(uint32_t instance, bool disGlobalInt)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -967,13 +944,9 @@ void FLASH_DRV_SetDisableGlobalInt(uint32_t instance, bool disGlobalInt)
     state->disGlobalInt = disGlobalInt;
 }
 
-/*FUNCTION**********************************************************************
-*
-* Function Name : FLASH_DRV_SetReadVerify
-* Description   : Enable or disable read verify during program/erase operation.
-*
-* Implements    : FLASH_DRV_SetReadVerify_Activity
-*END**************************************************************************/
+/*!
+ * @brief Enable or disable hardware read verification after erase/program.
+ */
 void FLASH_DRV_SetReadVerify(uint32_t instance, bool readVerify)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -996,15 +969,9 @@ void FLASH_DRV_SetReadVerify(uint32_t instance, bool readVerify)
 }
 
 #ifdef FEATURE_EFM_ERASE_ARRAY_CMD_CODE
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_EraseArray
- * Description   : Erases a array of Flash memory.
- * This API always returns STATUS_SUCCESS if size provided by the user is
- * zero regardless of the input validation.
- *
- * Implements    : FLASH_DRV_EraseArray_Activity
- *END**************************************************************************/
+/*!
+ * @brief Erase an entire flash array.
+ */
 status_t FLASH_DRV_EraseArray(uint32_t instance, uint32_t dest)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -1052,15 +1019,9 @@ status_t FLASH_DRV_EraseArray(uint32_t instance, uint32_t dest)
 #endif /* FEATURE_EFM_ERASE_ARRAY_CMD_CODE */
 
 #ifdef FEATURE_EFM_ERASE_BLOCK_CMD_CODE
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_EraseBlock
- * Description   : Erases a block of Flash memory.
- * This API always returns STATUS_SUCCESS if size provided by the user is
- * zero regardless of the input validation.
- *
- * Implements    : FLASH_DRV_EraseBlock_Activity
- *END**************************************************************************/
+/*!
+ * @brief Erase a flash block.
+ */
 status_t FLASH_DRV_EraseBlock(uint32_t instance, uint32_t dest)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -1116,15 +1077,9 @@ status_t FLASH_DRV_EraseBlock(uint32_t instance, uint32_t dest)
 }
 #endif /* FEATURE_EFM_ERASE_BLOCK_CMD_CODE */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_EraseSector
- * Description   : Erases one or more sectors in P-Flash or D-Flash memory.
- * This API always returns STATUS_SUCCESS if size provided by the user is
- * zero regardless of the input validation.
- *
- * Implements    : FLASH_DRV_EraseSector_Activity
- *END**************************************************************************/
+/*!
+ * @brief Erase one or more flash sectors.
+ */
 status_t FLASH_DRV_EraseSector(uint32_t instance, uint32_t dest, uint32_t size)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -1133,82 +1088,92 @@ status_t FLASH_DRV_EraseSector(uint32_t instance, uint32_t dest, uint32_t size)
     DEV_ASSERT(state != NULL);
     status_t status = STATUS_SUCCESS; /* Return code variable */
     uint32_t sectorSize;              /* Size of one sector   */
-    sectorSize = FLASH_GetSectorSize(dest);
-    DEV_ASSERT((dest & (sectorSize - 1)) == 0U);
-    DEV_ASSERT((size & (sectorSize - 1)) == 0U);
-    DEV_ASSERT(size >= sectorSize);
 
-#if defined(FEATURE_EFM_HAS_ERASE_TIMING_UNION) && (FEATURE_EFM_HAS_ERASE_TIMING_UNION == 1U)
-    base->TIMING2 = FEATURE_EFM_SECTOR_ERASE_TIMING;
-#endif
-
-    state->cmdParam.cmdCode = FEATURE_EFM_ERASE_SECTOR_CMD_CODE;
-#ifdef FEATURE_EFM_ERASE_SECTOR_VERIFY_CMD_CODE
-    if (true == state->readVerify)
+    if (0U == size)
     {
-        state->cmdParam.cmdCode = FEATURE_EFM_ERASE_SECTOR_VERIFY_CMD_CODE;
+        /* Zero-size is a no-op; status already STATUS_SUCCESS. */
     }
-#endif
-    state->cmdParam.dest = (uint32_t *)dest;
-    state->cmdParam.pdata = &s_tempData;
-    state->cmdParam.word_size = 1U;
-    state->leftSize = (int32_t)size;
-
-    if (state->async)
+    else if (false == FLASH_IsEraseRangeValid(dest, size))
     {
-        if ((false == FLASH_GetIdleStatus(base)) || (state->driverBusy))
-        {
-            status = STATUS_EFM_BUSY;
-        }
-        else
-        {
-            state->driverBusy = true;
-            state->shiftsum = FLASH_StateCalcShiftSum(state);
-            status = FLASH_LaunchCommandSequence(instance);
-        }
+        status = STATUS_EFM_ADDRESS_OUT_OF_RANGE;
     }
     else
     {
-        while ((state->leftSize > 0) && (STATUS_SUCCESS == status) && (sectorSize > 0U))
+        sectorSize = FLASH_GetSectorSize(dest);
+
+#if defined(FEATURE_EFM_HAS_ERASE_TIMING_UNION) && (FEATURE_EFM_HAS_ERASE_TIMING_UNION == 1U)
+        base->TIMING2 = FEATURE_EFM_SECTOR_ERASE_TIMING;
+#endif
+
+        state->cmdParam.cmdCode = FEATURE_EFM_ERASE_SECTOR_CMD_CODE;
+#ifdef FEATURE_EFM_ERASE_SECTOR_VERIFY_CMD_CODE
+        if (true == state->readVerify)
         {
-            /* Check IDLE to verify the previous command is completed */
-            if (false == FLASH_GetIdleStatus(base))
+            state->cmdParam.cmdCode = FEATURE_EFM_ERASE_SECTOR_VERIFY_CMD_CODE;
+        }
+#endif
+        state->cmdParam.dest = (uint32_t *)dest;
+        state->cmdParam.pdata = &s_tempData;
+        state->cmdParam.word_size = 1U;
+        state->leftSize = (int32_t)size;
+
+        if (state->async)
+        {
+            if ((false == FLASH_GetIdleStatus(base)) || (state->driverBusy))
             {
                 status = STATUS_EFM_BUSY;
             }
             else
             {
-                /* Calling flash command sequence function to execute the command */
+                state->driverBusy = true;
                 state->shiftsum = FLASH_StateCalcShiftSum(state);
                 status = FLASH_LaunchCommandSequence(instance);
             }
-#if defined(FEATURE_EFM_SW_READ_VERIFY) && (FEATURE_EFM_SW_READ_VERIFY == 1)
-            if ((status == STATUS_SUCCESS) && (true == state->readVerify))
+        }
+        else
+        {
+            while ((state->leftSize > 0) && (STATUS_SUCCESS == status) && (sectorSize > 0U))
             {
-                /* Software verify for erase operation */
-                status = FLASH_DRV_SoftwareVerifyMemory((uint32_t)state->cmdParam.dest, NULL, 
-                                    sectorSize / sizeof(uint32_t));
-            }
+                /* Check IDLE to verify the previous command is completed */
+                if (false == FLASH_GetIdleStatus(base))
+                {
+                    status = STATUS_EFM_BUSY;
+                }
+                else
+                {
+                    /* Calling flash command sequence function to execute the command */
+                    state->shiftsum = FLASH_StateCalcShiftSum(state);
+                    status = FLASH_LaunchCommandSequence(instance);
+                }
+#if defined(FEATURE_EFM_SW_READ_VERIFY) && (FEATURE_EFM_SW_READ_VERIFY == 1)
+                if ((status == STATUS_SUCCESS) && (true == state->readVerify))
+                {
+                    /* Software verify for erase operation */
+                    status = FLASH_DRV_SoftwareVerifyMemory((uint32_t)state->cmdParam.dest, NULL, 
+                                        sectorSize / sizeof(uint32_t));
+                }
 #endif
-            state->leftSize -= (int32_t)sectorSize;
-            state->cmdParam.dest += sectorSize >> 2U; /* PRQA S 0488 */
-            sectorSize = FLASH_GetSectorSize((uint32_t)state->cmdParam.dest);
+                state->leftSize -= (int32_t)sectorSize;
+                state->cmdParam.dest += sectorSize >> 2U; /* PRQA S 0488 */
+                sectorSize = FLASH_GetSectorSize((uint32_t)state->cmdParam.dest);
+            }
+			/* Defense-in-depth: detect boundary violation when sectorSize
+             * dropped to 0 while data remained to erase. 
+			 * Even if the FLASH IsEraseRangeValid function has performed the size check. */
+            if ((state->leftSize > 0) && (0U == sectorSize) && (STATUS_SUCCESS == status))
+            {
+                status = STATUS_EFM_ADDRESS_OUT_OF_RANGE;
+            }
+
         }
     }
 
     return status;
 }
 #ifdef FEATURE_EFM_ERASE_SECTOR_RETRY_CMD_CODE
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_EraseSectorQuick
- * Description   : Erases one or more sectors in P-Flash or D-Flash memory.
- * This API always returns STATUS_SUCCESS if size provided by the user is
- * zero regardless of the input validation.
- * This API is used for the case that the flash need to be erased quickly.
- *
- * Implements    : FLASH_DRV_EraseSector_Activity
- *END**************************************************************************/
+/*!
+ * @brief Quick-erase one or more flash sectors with automatic retry.
+ */
 status_t FLASH_DRV_EraseSectorQuick(uint32_t instance, uint32_t dest, uint32_t size)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -1218,141 +1183,152 @@ status_t FLASH_DRV_EraseSectorQuick(uint32_t instance, uint32_t dest, uint32_t s
     status_t status = STATUS_SUCCESS; /* Return code variable */
     uint32_t sectorSize;              /* Size of one sector   */
     uint32_t i = 0;
-    sectorSize = FLASH_GetSectorSize(dest);
-    DEV_ASSERT((dest & (sectorSize - 1)) == 0U);
-    DEV_ASSERT((size & (sectorSize - 1)) == 0U);
-    DEV_ASSERT(size >= sectorSize);
+
+    if (0U == size)
+    {
+        /* Zero-size is a no-op; status already STATUS_SUCCESS. */
+    }
+    else if (false == FLASH_IsEraseRangeValid(dest, size))
+    {
+        status = STATUS_EFM_ADDRESS_OUT_OF_RANGE;
+    }
+    else
+    {
+        sectorSize = FLASH_GetSectorSize(dest);
 
 #if defined(FEATURE_EFM_HAS_ERASE_TIMING_UNION) && (FEATURE_EFM_HAS_ERASE_TIMING_UNION == 1U)
-    base->TIMING2 = FEATURE_EFM_SECTOR_ERASE_RETRY_TIMING;
+        base->TIMING2 = FEATURE_EFM_SECTOR_ERASE_RETRY_TIMING;
 #endif
 
 #ifdef EFM_CTRL_CMD_VERIFY_EN_MASK
 #ifdef FEATURE_EFM_ERASE_SECTOR_VREAD_RETRY_CMD_CODE
-    base->CTRL &= ~EFM_CTRL_CMD_VERIFY_EN_MASK;
+        base->CTRL &= ~EFM_CTRL_CMD_VERIFY_EN_MASK;
 #else
-    base->CTRL |= EFM_CTRL_CMD_VERIFY_EN_MASK;
+        base->CTRL |= EFM_CTRL_CMD_VERIFY_EN_MASK;
 #endif
 #endif
-    state->cmdParam.cmdCode = FEATURE_EFM_ERASE_SECTOR_RETRY_CMD_CODE;
-    state->cmdParam.dest = (uint32_t *)dest;
-    state->cmdParam.pdata = &s_tempData;
-    state->cmdParam.word_size = 1U;
-    state->leftSize = (int32_t)size;
+        state->cmdParam.cmdCode = FEATURE_EFM_ERASE_SECTOR_RETRY_CMD_CODE;
+        state->cmdParam.dest = (uint32_t *)dest;
+        state->cmdParam.pdata = &s_tempData;
+        state->cmdParam.word_size = 1U;
+        state->leftSize = (int32_t)size;
 
-    if (state->async)
-    {
-        if ((false == FLASH_GetIdleStatus(base)) || (state->driverBusy))
+        if (state->async)
         {
-            status = STATUS_EFM_BUSY;
-        }
-        else
-        {
-            state->driverBusy = true;
-            state->retryCount = 0U;
-#ifdef EFM_CTRL_RETRY_CFG_MASK
-            base->CTRL &= ~EFM_CTRL_RETRY_CFG_MASK;
-            base->CTRL |= EFM_CTRL_RETRY_CFG(FLASH_RETRY_CFG_START);
-#endif /* EFM_CTRL_RETRY_CFG_MASK */
-            state->shiftsum = FLASH_StateCalcShiftSum(state);
-            status = FLASH_LaunchCommandSequence(instance);
-        }
-    }
-    else
-    {
-        while ((state->leftSize > 0) && (STATUS_SUCCESS == status) && (sectorSize > 0U))
-        {
-            /* Check IDLE to verify the previous command is completed */
-            if (false == FLASH_GetIdleStatus(base))
+            if ((false == FLASH_GetIdleStatus(base)) || (state->driverBusy))
             {
                 status = STATUS_EFM_BUSY;
             }
             else
             {
-                for (i = 0; i < FLASH_RETRY_MAX_COUNT; i++)
-                {
-#if defined(EFM_CTRL_RETRY_CFG_MASK)
-                    if ((FLASH_RETRY_CFG_START + i) <= 0x7U)
-                    {
-                        base->CTRL &= ~EFM_CTRL_RETRY_CFG_MASK;
-                        base->CTRL |= EFM_CTRL_RETRY_CFG(FLASH_RETRY_CFG_START + i);
-                    }
+                state->driverBusy = true;
+                state->retryCount = 0U;
+#ifdef EFM_CTRL_RETRY_CFG_MASK
+                base->CTRL &= ~EFM_CTRL_RETRY_CFG_MASK;
+                base->CTRL |= EFM_CTRL_RETRY_CFG(FLASH_RETRY_CFG_START);
 #endif /* EFM_CTRL_RETRY_CFG_MASK */
-                    state->cmdParam.cmdCode = FEATURE_EFM_ERASE_SECTOR_RETRY_CMD_CODE;
-                    state->shiftsum = FLASH_StateCalcShiftSum(state);
-                    status = FLASH_LaunchCommandSequence(instance);
-                    if (STATUS_SUCCESS == status)
-                    {
-#ifdef FEATURE_EFM_ERASE_SECTOR_VREAD_RETRY_CMD_CODE
-                        state->cmdParam.cmdCode = FEATURE_EFM_ERASE_SECTOR_VREAD_RETRY_CMD_CODE;
-                        state->shiftsum = FLASH_StateCalcShiftSum(state);
-                        status = FLASH_LaunchCommandSequence(instance);
-                        if (STATUS_SUCCESS != status)
-                        {
-                            continue;
-                        }
-#endif /* FEATURE_EFM_ERASE_SECTOR_VREAD_RETRY_CMD_CODE */
-                        break;
-                    }
-                }
-                if (i >= FLASH_RETRY_MAX_COUNT)
-                {
-                    status = STATUS_ERROR;
-                }
-                else
-                /* Append 0x7 RETRY_CFG retry after finish to ensure erase thoroughly */
-                {
-#if defined(EFM_CTRL_RETRY_CFG_MASK)
-                    base->CTRL &= ~EFM_CTRL_RETRY_CFG_MASK;
-                    base->CTRL |= EFM_CTRL_RETRY_CFG(0x7);
-#endif /* EFM_CTRL_RETRY_CFG_MASK */
-                    state->cmdParam.cmdCode = FEATURE_EFM_ERASE_SECTOR_RETRY_CMD_CODE;
-                    state->shiftsum = FLASH_StateCalcShiftSum(state);
-                    status = FLASH_LaunchCommandSequence(instance);
-                    if (STATUS_SUCCESS == status)
-                    {
-#ifdef FEATURE_EFM_ERASE_SECTOR_VREAD_RETRY_CMD_CODE
-                        state->cmdParam.cmdCode = FEATURE_EFM_ERASE_SECTOR_VREAD_RETRY_CMD_CODE;
-                        state->shiftsum = FLASH_StateCalcShiftSum(state);
-                        status = FLASH_LaunchCommandSequence(instance);
-#endif /* FEATURE_EFM_ERASE_SECTOR_VREAD_RETRY_CMD_CODE */
-                    }
-                    else
-                    {
-                        status = STATUS_ERROR;
-                    }
-                }
+                state->shiftsum = FLASH_StateCalcShiftSum(state);
+                status = FLASH_LaunchCommandSequence(instance);
             }
-
-            state->leftSize -= (int32_t)sectorSize;
-            state->cmdParam.dest += sectorSize >> 2U; /* PRQA S 0488 */
-            sectorSize = FLASH_GetSectorSize((uint32_t)state->cmdParam.dest);
-        }
-#ifdef EFM_CTRL_CMD_VERIFY_EN_MASK
-        if (true == state->readVerify)
-        {
-            base->CTRL |= EFM_CTRL_CMD_VERIFY_EN_MASK;
         }
         else
         {
-            base->CTRL &= ~EFM_CTRL_CMD_VERIFY_EN_MASK;
-        }
+            while ((state->leftSize > 0) && (STATUS_SUCCESS == status) && (sectorSize > 0U))
+            {
+                /* Check IDLE to verify the previous command is completed */
+                if (false == FLASH_GetIdleStatus(base))
+                {
+                    status = STATUS_EFM_BUSY;
+                }
+                else
+                {
+                    for (i = 0; i < FLASH_RETRY_MAX_COUNT; i++)
+                    {
+#if defined(EFM_CTRL_RETRY_CFG_MASK)
+                        if ((FLASH_RETRY_CFG_START + i) <= 0x7U)
+                        {
+                            base->CTRL &= ~EFM_CTRL_RETRY_CFG_MASK;
+                            base->CTRL |= EFM_CTRL_RETRY_CFG(FLASH_RETRY_CFG_START + i);
+                        }
+#endif /* EFM_CTRL_RETRY_CFG_MASK */
+                        state->cmdParam.cmdCode = FEATURE_EFM_ERASE_SECTOR_RETRY_CMD_CODE;
+                        state->shiftsum = FLASH_StateCalcShiftSum(state);
+                        status = FLASH_LaunchCommandSequence(instance);
+                        if (STATUS_SUCCESS == status)
+                        {
+#ifdef FEATURE_EFM_ERASE_SECTOR_VREAD_RETRY_CMD_CODE
+                            state->cmdParam.cmdCode = FEATURE_EFM_ERASE_SECTOR_VREAD_RETRY_CMD_CODE;
+                            state->shiftsum = FLASH_StateCalcShiftSum(state);
+                            status = FLASH_LaunchCommandSequence(instance);
+                            if (STATUS_SUCCESS != status)
+                            {
+                                continue;
+                            }
+#endif /* FEATURE_EFM_ERASE_SECTOR_VREAD_RETRY_CMD_CODE */
+                            break;
+                        }
+                    }
+                    if (i >= FLASH_RETRY_MAX_COUNT)
+                    {
+                        status = STATUS_ERROR;
+                    }
+                    else
+                    /* Append 0x7 RETRY_CFG retry after finish to ensure erase thoroughly */
+                    {
+#if defined(EFM_CTRL_RETRY_CFG_MASK)
+                        base->CTRL &= ~EFM_CTRL_RETRY_CFG_MASK;
+                        base->CTRL |= EFM_CTRL_RETRY_CFG(0x7);
+#endif /* EFM_CTRL_RETRY_CFG_MASK */
+                        state->cmdParam.cmdCode = FEATURE_EFM_ERASE_SECTOR_RETRY_CMD_CODE;
+                        state->shiftsum = FLASH_StateCalcShiftSum(state);
+                        status = FLASH_LaunchCommandSequence(instance);
+                        if (STATUS_SUCCESS == status)
+                        {
+#ifdef FEATURE_EFM_ERASE_SECTOR_VREAD_RETRY_CMD_CODE
+                            state->cmdParam.cmdCode = FEATURE_EFM_ERASE_SECTOR_VREAD_RETRY_CMD_CODE;
+                            state->shiftsum = FLASH_StateCalcShiftSum(state);
+                            status = FLASH_LaunchCommandSequence(instance);
+#endif /* FEATURE_EFM_ERASE_SECTOR_VREAD_RETRY_CMD_CODE */
+                        }
+                        else
+                        {
+                            status = STATUS_ERROR;
+                        }
+                    }
+                }
+
+                state->leftSize -= (int32_t)sectorSize;
+                state->cmdParam.dest += sectorSize >> 2U; /* PRQA S 0488 */
+                sectorSize = FLASH_GetSectorSize((uint32_t)state->cmdParam.dest);
+            }
+
+            /* Defense-in-depth: detect boundary violation when sectorSize
+             * dropped to 0 while data remained to erase. 
+			 * Even if the FLASH IsEraseRangeValid function has performed the size check. */
+            if ((state->leftSize > 0) && (0U == sectorSize) && (STATUS_SUCCESS == status))
+            {
+                status = STATUS_EFM_ADDRESS_OUT_OF_RANGE;
+            }
+#ifdef EFM_CTRL_CMD_VERIFY_EN_MASK
+            if (true == state->readVerify)
+            {
+                base->CTRL |= EFM_CTRL_CMD_VERIFY_EN_MASK;
+            }
+            else
+            {
+                base->CTRL &= ~EFM_CTRL_CMD_VERIFY_EN_MASK;
+            }
 #endif
+        }
     }
 
     return status;
 }
 #endif /* FEATURE_EFM_ERASE_SECTOR_RETRY_CMD_CODE */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_Program
- * Description   : Program command on flash
- * This API always returns STATUS_SUCCESS if size provided by user is
- * zero regardless of the input validation.
- *
- * Implements    : FLASH_DRV_Program_Activity
- *END**************************************************************************/
+/*!
+ * @brief Program data to P-Flash or D-Flash memory.
+ */
 status_t FLASH_DRV_Program(uint32_t instance, uint32_t dest, uint32_t size, const void * pData)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -1430,15 +1406,9 @@ status_t FLASH_DRV_Program(uint32_t instance, uint32_t dest, uint32_t size, cons
 }
 
 #ifdef FEATURE_EFM_PROGRAM_DATA_CMD_CODE
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_ProgramDFlash
- * Description   : Program command on DFlash
- * This API always returns STATUS_SUCCESS if size provided by user is
- * zero regardless of the input validation.
- *
- * Implements    : FLASH_DRV_Program_Activity
- *END**************************************************************************/
+/*!
+ * @brief Program data to D-Flash (data flash) memory.
+ */
 status_t FLASH_DRV_ProgramDFlash(uint32_t instance, uint32_t dest, uint32_t size, const void * pData)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -1503,20 +1473,9 @@ status_t FLASH_DRV_ProgramDFlash(uint32_t instance, uint32_t dest, uint32_t size
 #endif /* FEATURE_EFM_WRITE_DATA_UNIT_SIZE */
 
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_CheckSum
- * Description   : Performs 32 bit sum of each byte data over a specified Flash
- * memory range without carry which provides rapid method for checking data integrity.
- * The callback time period of this API is determined via FLASH_CALLBACK_CS macro in the
- * flash_driver.h which is used as a counter value for the CallBack() function calling in
- * this API. This value can be changed as per the user requirement. User can change this value
- * to obtain the maximum permissible callback time period.
- * This API always returns STATUS_SUCCESS if size provided by user is zero regardless of the input
- * validation.
- *
- * Implements    : FLASH_DRV_CheckSum_Activity
- *END**************************************************************************/
+/*!
+ * @brief Compute a 32-bit byte-sum checksum over a flash memory range.
+ */
 status_t FLASH_DRV_CheckSum(uint32_t instance, uint32_t dest, uint32_t size, uint32_t * pSum)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -1554,14 +1513,9 @@ status_t FLASH_DRV_CheckSum(uint32_t instance, uint32_t dest, uint32_t size, uin
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_EnableCmdCompleteInterrupt
- * Description   : Enable the command complete interrupt is generated when
- * an EFM command completes.
- *
- * Implements    : FLASH_DRV_EnableCmdCompleteInterrupt_Activity
- *END**************************************************************************/
+/*!
+ * @brief Enable the command-complete interrupt.
+ */
 void FLASH_DRV_EnableCmdCompleteInterrupt(uint32_t instance)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -1571,13 +1525,9 @@ void FLASH_DRV_EnableCmdCompleteInterrupt(uint32_t instance)
     base->CTRL |= EFM_CTRL_DONEIE_MASK;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_DisableCmdCompleteInterrupt
- * Description   : Disable the command complete interrupt.
- *
- * Implements    : FLASH_DRV_DisableCmdCompleteInterrupt_Activity
- *END**************************************************************************/
+/*!
+ * @brief Disable the command-complete interrupt.
+ */
 void FLASH_DRV_DisableCmdCompleteInterrupt(uint32_t instance)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -1587,14 +1537,9 @@ void FLASH_DRV_DisableCmdCompleteInterrupt(uint32_t instance)
     base->CTRL &= ~EFM_CTRL_DONEIE_MASK;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_EnableReadCollisionInterrupt
- * Description   : Enable the read collision error interrupt generation when an
- * EFM read collision error occurs.
- *
- * Implements    : FLASH_DRV_EnableReadCollisionInterrupt_Activity
- *END**************************************************************************/
+/*!
+ * @brief Enable the read-collision error interrupt.
+ */
 void FLASH_DRV_EnableReadCollisionInterrupt(uint32_t instance)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -1604,13 +1549,9 @@ void FLASH_DRV_EnableReadCollisionInterrupt(uint32_t instance)
     base->CTRL |= EFM_CTRL_ACCERRIE_MASK;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_DisableReadCollisionInterrupt
- * Description   : Disable the read collision error interrupt
- *
- * Implements    : FLASH_DRV_DisableReadCollisionInterrupt_Activity
- *END**************************************************************************/
+/*!
+ * @brief Disable the read-collision error interrupt.
+ */
 void FLASH_DRV_DisableReadCollisionInterrupt(uint32_t instance)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -1620,15 +1561,9 @@ void FLASH_DRV_DisableReadCollisionInterrupt(uint32_t instance)
     base->CTRL &= ~EFM_CTRL_ACCERRIE_MASK;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_EnableSingleBitFaultInterrupt
- * Description   : Enable the platform Flash single bit fault detect interrupt 
- * generation when an recovery ECC fault is detected during a valid flash 
- * read access from the platform flash controller.
- *
- * Implements    : FLASH_DRV_EnableSingleBitFaultInterrupt
- *END**************************************************************************/
+/*!
+ * @brief Enable the single-bit ECC fault interrupt.
+ */
 void FLASH_DRV_EnableSingleBitFaultInterrupt(uint32_t instance)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -1638,13 +1573,9 @@ void FLASH_DRV_EnableSingleBitFaultInterrupt(uint32_t instance)
     base->CTRL |= EFM_CTRL_RECOVERRIE_MASK;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_DisableSingleBitFaultInterrupt
- * Description   : Disable the platform Flash single bit fault detect interrupt
- *
- * Implements    : FLASH_DRV_DisableSingleBitFaultInterrupt
- *END**************************************************************************/
+/*!
+ * @brief Disable the single-bit ECC fault interrupt.
+ */
 void FLASH_DRV_DisableSingleBitFaultInterrupt(uint32_t instance)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -1654,15 +1585,9 @@ void FLASH_DRV_DisableSingleBitFaultInterrupt(uint32_t instance)
     base->CTRL &= ~EFM_CTRL_RECOVERRIE_MASK;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_EnableDoubleBitFaultInterrupt
- * Description   : Enable the platform Flash double bit fault detect interrupt 
- * generation when an uncorrectable ECC fault is detected during a valid flash 
- * read access from the platform flash controller.
- *
- * Implements    : FLASH_DRV_EnableDoubleBitFaultInterrupt_Activity
- *END**************************************************************************/
+/*!
+ * @brief Enable the double-bit ECC fault interrupt.
+ */
 void FLASH_DRV_EnableDoubleBitFaultInterrupt(uint32_t instance)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -1672,13 +1597,9 @@ void FLASH_DRV_EnableDoubleBitFaultInterrupt(uint32_t instance)
     base->CTRL |= EFM_CTRL_UNRECOVERRIE_MASK;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_DisableDoubleBitFaultInterrupt
- * Description   : Disable the platform Flash double bit fault detect interrupt
- *
- * Implements    : FLASH_DRV_DisableDoubleBitFaultInterrupt_Activity
- *END**************************************************************************/
+/*!
+ * @brief Disable the double-bit ECC fault interrupt.
+ */
 void FLASH_DRV_DisableDoubleBitFaultInterrupt(uint32_t instance)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -1689,15 +1610,9 @@ void FLASH_DRV_DisableDoubleBitFaultInterrupt(uint32_t instance)
 }
 
 #ifdef FEATURE_EFM_ERASE_NVR_CMD_CODE
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_EraseNVR
- * Description   : Erase NVR one sector on flash
- * This API always returns STATUS_SUCCESS even if the address passed 
- * in is incorrect.
- *
- * Implements    : FLASH_DRV_EraseNVR_Activity
- *END**************************************************************************/
+/*!
+ * @brief Erase a single NVR sector.
+ */
 status_t FLASH_DRV_EraseNVR(uint32_t instance, uint32_t dest)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -1744,15 +1659,9 @@ status_t FLASH_DRV_EraseNVR(uint32_t instance, uint32_t dest)
 #endif /* FEATURE_EFM_ERASE_NVR_CMD_CODE */
 
 #ifdef FEATURE_EFM_PROGRAM_NVR_CMD_CODE
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_ProgramNVR
- * Description   : Program NVR command on flash
- * This API always returns STATUS_SUCCESS if size provided by user is
- * zero regardless of the input validation.
- *
- * Implements    : FLASH_DRV_ProgramNVR_Activity
- *END**************************************************************************/
+/*!
+ * @brief Program data to an NVR sector.
+ */
 status_t FLASH_DRV_ProgramNVR(uint32_t instance, uint32_t dest, uint32_t size, const void *pData)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -1766,11 +1675,9 @@ status_t FLASH_DRV_ProgramNVR(uint32_t instance, uint32_t dest, uint32_t size, c
     DEV_ASSERT(size > FEATURE_EFM_WRITE_UNIT_SIZE);
     DEV_ASSERT(((uint32_t)pData & 0x03U) == 0U);
 
-    uint32_t efm_data[FEATURE_EFM_WRITE_UNIT_WORD_SIZE + 1U];
-
     state->cmdParam.cmdCode = FEATURE_EFM_PROGRAM_NVR_CMD_CODE;
     state->cmdParam.dest = &base->NVR_ADDR;
-    state->cmdParam.pdata = (uint32_t *)efm_data;
+    state->cmdParam.pdata = state->efm_data;
     state->cmdParam.word_size = FEATURE_EFM_WRITE_UNIT_WORD_SIZE + 1U;
     state->leftSize = (int32_t)size;
     state->nvr_addr = dest;
@@ -1785,10 +1692,10 @@ status_t FLASH_DRV_ProgramNVR(uint32_t instance, uint32_t dest, uint32_t size, c
         else
         {
             state->driverBusy = true;
-            efm_data[0] = state->nvr_addr;
+            state->efm_data[0] = state->nvr_addr;
             for (uint32_t i = 0U; i < FEATURE_EFM_WRITE_UNIT_WORD_SIZE; i++)
             {
-                efm_data[i + 1U] = state->nvr_data[i];
+                state->efm_data[i + 1U] = state->nvr_data[i];
             }
             state->shiftsum = FLASH_StateCalcShiftSum(state);
             status = FLASH_LaunchCommandSequence(instance);
@@ -1805,10 +1712,10 @@ status_t FLASH_DRV_ProgramNVR(uint32_t instance, uint32_t dest, uint32_t size, c
             }
             else
             {
-                efm_data[0] = state->nvr_addr;
+                state->efm_data[0] = state->nvr_addr;
                 for (uint8_t i = 0U; i < FEATURE_EFM_WRITE_UNIT_WORD_SIZE; i++)
                 {
-                    efm_data[i + 1U] = state->nvr_data[i];
+                    state->efm_data[i + 1U] = state->nvr_data[i];
                 }
                 /* Calling flash command sequence function to execute the command */
                 state->shiftsum = FLASH_StateCalcShiftSum(state);
@@ -1828,15 +1735,9 @@ status_t FLASH_DRV_ProgramNVR(uint32_t instance, uint32_t dest, uint32_t size, c
 #endif /* FEATURE_EFM_PROGRAM_NVR_CMD_CODE */
 
 #ifdef FEATURE_EFM_READ_NVR_CMD_CODE
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_ReadNVR
- * Description   : Read NVR command on flash
- * This API always returns STATUS_SUCCESS if size provided by user is
- * zero regardless of the input validation.
- *
- * Implements    : FLASH_DRV_ReadNVR_Activity
- *END**************************************************************************/
+/*!
+ * @brief Read data from an NVR region.
+ */
 status_t FLASH_DRV_ReadNVR(uint32_t instance, uint32_t address, uint32_t size, void * dest)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -1892,6 +1793,7 @@ status_t FLASH_DRV_ReadNVR(uint32_t instance, uint32_t address, uint32_t size, v
             state->nvr_data += FEATURE_EFM_WRITE_UNIT_WORD_SIZE; /* PRQA S 0488 */
         }
     }
+    FLASH_ClearDoneStatusFlag(base);
     state->async = pre_state;
     if (state->async == true)
     {
@@ -1924,6 +1826,9 @@ static status_t FLASH_BootSwap(uint32_t instance)
     }
     else
     {
+#if defined(FEATURE_EFM_HAS_ERASE_TIMING_UNION) && (FEATURE_EFM_HAS_ERASE_TIMING_UNION == 1U)
+        base->TIMING2 = FEATURE_EFM_SECTOR_ERASE_TIMING;
+#endif
         state->cmdParam.cmdCode = FEATURE_EFM_BOOT_SWAP_CMD_CODE;
         state->cmdParam.pdata = &s_tempData;
         state->cmdParam.word_size = 0U;
@@ -1938,13 +1843,9 @@ static status_t FLASH_BootSwap(uint32_t instance)
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_BootSwap
- * Description   : Swap MCU boot flash blocks
- *
- * Implements    : FLASH_DRV_BootSwap_Activity
- *END**************************************************************************/
+/*!
+ * @brief Swap the active boot flash block.
+ */
 status_t FLASH_DRV_BootSwap(uint32_t instance)
 {
     status_t status = STATUS_SUCCESS;    /* Return code variable */
@@ -1981,6 +1882,7 @@ status_t FLASH_DRV_BootSwap(uint32_t instance)
         }   
     }
 
+    FLASH_ClearDoneStatusFlag(base);
     state->async = pre_state;
     if (state->async == true)
     {
@@ -1992,13 +1894,9 @@ status_t FLASH_DRV_BootSwap(uint32_t instance)
 #endif
 
 #ifdef FEATURE_EFM_LOAD_AES_KEY_CMD_CODE
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_LoadAESKey
- * Description   : Load AES key for HCU
- *
- * Implements    : FLASH_DRV_LoadAESKey_Activity
- *END**************************************************************************/
+/*!
+ * @brief Load an AES key from NVR into the HCU.
+ */
 status_t FLASH_DRV_LoadAESKey(uint32_t instance, uint32_t address)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -2042,6 +1940,7 @@ status_t FLASH_DRV_LoadAESKey(uint32_t instance, uint32_t address)
         /* Calling flash command sequence function to execute the command */
         state->shiftsum = FLASH_StateCalcShiftSum(state);
         status = FLASH_LaunchCommandSequence(instance);
+        FLASH_ClearDoneStatusFlag(base);
         state->async = pre_state;
         if (state->async == true)
         {
@@ -2054,13 +1953,9 @@ status_t FLASH_DRV_LoadAESKey(uint32_t instance, uint32_t address)
 #endif /* FEATURE_EFM_LOAD_AES_KEY_CMD_CODE */
 
 #ifdef FEATURE_EFM_LOAD_RSA_KEY_CMD_CODE
-/*FUNCTION**********************************************************************
- *
- * Function Name : FLASH_DRV_LoadRSAKey
- * Description   : Load RSA key for HCU
- *
- * Implements    : FLASH_DRV_LoadRSAKey_Activity
- *END**************************************************************************/
+/*!
+ * @brief Load an RSA key from NVR into the HCU.
+ */
 status_t FLASH_DRV_LoadRSAKey(uint32_t instance, uint32_t address, uint8_t keyLen)
 {
     DEV_ASSERT(instance < EFM_INSTANCE_COUNT);
@@ -2098,6 +1993,7 @@ status_t FLASH_DRV_LoadRSAKey(uint32_t instance, uint32_t address, uint8_t keyLe
             /* Calling flash command sequence function to execute the command */
             state->shiftsum = FLASH_StateCalcShiftSum(state);
             status = FLASH_LaunchCommandSequence(instance);
+            FLASH_ClearDoneStatusFlag(base);
             state->async = pre_state;
             if (state->async == true)
             {

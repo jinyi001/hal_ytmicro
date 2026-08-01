@@ -8,6 +8,13 @@
 /*!
  * @file etmr_oc_driver.h
  * @version 1.4.1
+ *
+ * @brief eTMR Output Compare Driver — public API declarations.
+ *
+ * This header declares the output compare (OC) mode API for the eTMR
+ * peripheral. In this mode the eTMR generates timed output pulses by
+ * comparing the counter value against CHx_VAL0/VAL1 match values,
+ * with configurable output actions (set, clear, toggle) on each match.
  */
 
 #ifndef eTMR_OC_DRIVER_H
@@ -20,9 +27,10 @@
  ******************************************************************************/
 
 /*!
- * @brief eTMR Mode configuration for output compare mode
+ * @brief Output compare action mode.
  *
- * Implements : etmr_oc_mode_t_Class
+ * Specifies the channel output state change on a compare match event.
+ *
  */
 typedef enum
 {
@@ -32,9 +40,12 @@ typedef enum
 } etmr_oc_mode_t;
 
 /*!
- * @brief eTMR driver PWM parameters each channel in the output compare mode
+ * @brief Output compare per-channel configuration.
  *
- * Implements : etmr_oc_ch_param_t_Class
+ * Contains the hardware channel ID, initial output level, compare
+ * values, match actions, trigger enable flags, and interrupt enable
+ * for a single output compare channel.
+ *
  */
 typedef struct
 {
@@ -53,9 +64,11 @@ typedef struct
 } etmr_oc_ch_param_t;
 
 /*!
- * @brief eTMR driver PWM parameters which is configured for the list of channels
+ * @brief Output compare overall configuration.
  *
- * Implements : etmr_oc_param_t_Class
+ * Groups the number of output channels, counter initial value,
+ * maximum count, and per-channel configuration array.
+ *
  */
 typedef struct
 {
@@ -77,44 +90,66 @@ extern "C" {
 #endif
 
 /*!
- * @brief Configures the eTMR to generate timed pulses (Output compare mode).
+ * @name OC Initialization
+ * @{
+ */
+
+/*!
+ * @brief Initialize the eTMR in output compare mode.
  *
- * When the eTMR counter matches the value of CHxVAL0 or CHxVAL1, the channel output is 
- * changed based on what is specified in the mode argument. The signal period can be modified 
- * using param->maxCountValue. 
+ * Configures the specified channels to generate timed pulses. When the
+ * counter matches CHxVAL0 or CHxVAL1, the channel output changes
+ * according to the configured compare mode (set, clear, or toggle).
+ * The signal period is determined by maxCountValue.
  *
- * @param [in] instance The eTMR peripheral instance number.
- * @param [in] param configuration of the output compare channels
- * @return success
- *        - STATUS_SUCCESS : Completed successfully.
- *        - STATUS_ERROR : Error occurred.
+ * @param[in] instance The eTMR peripheral instance number.
+ * @param[in] param    Pointer to output compare configuration.
+ * @return Operation status.
+ * @retval STATUS_SUCCESS Completed successfully.
+ * @retval STATUS_ERROR   Error occurred.
  */
 status_t eTMR_DRV_InitOutputCompare(uint32_t instance, const etmr_oc_param_t *param);
 
 /*!
- * @brief  Disables compare match output control and clears eTMR timer configuration
+ * @brief De-initialize output compare mode.
  *
- * @param [in] instance The eTMR peripheral instance number.
- * @param [in] param Configuration of the output compare channel
- * @return success
- *        - STATUS_SUCCESS : Completed successfully.
- *        - STATUS_ERROR : Error occurred.
+ * Disables compare match output control and resets the channel
+ * configuration to defaults. Stops the eTMR counter.
+ *
+ * @param[in] instance The eTMR peripheral instance number.
+ * @param[in] param    Pointer to the output compare configuration
+ *                     (used to identify which channels to de-init).
+ * @return Operation status.
+ * @retval STATUS_SUCCESS Completed successfully.
+ * @retval STATUS_ERROR   Error occurred.
  */
 status_t eTMR_DRV_DeinitOutputCompare(uint32_t instance, const etmr_oc_param_t *param);
 
+/*! @} */
+
 /*!
- * @brief Sets the next compare match value based on the current counter value
+ * @name OC Update
+ * @{
+ */
+
+/*!
+ * @brief Update the compare match values and modes for a channel.
  *
- * @param [in] instance The eTMR peripheral instance number.
- * @param [in] channel  output compare channel
- * @param [in] nextCmpMatchVal0 the new value 0
- * @param [in] nextCmpMatchVal1 the new value 1
- * @param [in] val0CmpMode the mode of output compare
- * @param [in] val1CmpMode the mode of output compare
- * @param [in] softwareTrigger This parameter will be true if software trigger sync is enabled
- * @return success
- *        - STATUS_SUCCESS : Completed successfully.
- *        - STATUS_ERROR : Error occurred.
+ * Sets new VAL0/VAL1 compare values and their corresponding output
+ * modes. Optionally triggers a software synchronization to load the
+ * new values immediately.
+ *
+ * @param[in] instance          The eTMR peripheral instance number.
+ * @param[in] channel           Output compare channel index.
+ * @param[in] nextCmpMatchVal0  New VAL0 compare value.
+ * @param[in] nextCmpMatchVal1  New VAL1 compare value.
+ * @param[in] val0CmpMode       Output action on VAL0 match.
+ * @param[in] val1CmpMode       Output action on VAL1 match.
+ * @param[in] softwareTrigger   true to issue a software trigger for
+ *                              immediate register synchronization.
+ * @return Operation status.
+ * @retval STATUS_SUCCESS Completed successfully.
+ * @retval STATUS_ERROR   VAL0 > VAL1 or other error.
  */
 status_t eTMR_DRV_UpdateOutputCompareChannel(uint32_t instance,
                                              uint8_t channel,
@@ -123,6 +158,8 @@ status_t eTMR_DRV_UpdateOutputCompareChannel(uint32_t instance,
                                              etmr_oc_mode_t val0CmpMode,
                                              etmr_oc_mode_t val1CmpMode,
                                              bool softwareTrigger);
+
+/*! @} */
 
 #if defined(__cplusplus)
 }

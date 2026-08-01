@@ -8,6 +8,12 @@
 /*!
  * @file etmr_hw_access.h
  * @version 1.4.1
+ *
+ * @brief eTMR HW Access Layer — inline register-level helper functions.
+ *
+ * This internal header provides static-inline functions for direct
+ * read/write of eTMR peripheral registers. These are used by the
+ * driver source files and are not part of the public API.
  */
 
 #ifndef eTMR_HW_ACCESS_H
@@ -670,8 +676,8 @@ static inline void eTMR_InitChnOutput(eTMR_Type *const etmrBase, uint8_t channel
  */
 static inline void eTMR_SetChnOutInitVal(eTMR_Type *const etmrBase, uint8_t channel, uint32_t val)
 {
-    etmrBase->CHINIT &= ~((eTMR_CHINIT_CH0INITV_MASK << channel) | 0xFFU);
-    etmrBase->CHINIT |= ((val << channel) << eTMR_CHINIT_CH0INITV_SHIFT);
+    etmrBase->CHINIT &= (~(0x1U << channel) & 0xFFU);
+    etmrBase->CHINIT |= val << channel;
 }
 #endif
 /******************************************** CHSWV Register **************************************************/
@@ -1286,8 +1292,8 @@ static inline void eTMR_InitChnOutput(eTMR_Type *const etmrBase, uint8_t channel
  */
 static inline void eTMR_SetChnOutInitVal(eTMR_Type *const etmrBase, uint8_t channel, uint32_t val)
 {
-    etmrBase->CHINIT &= ~(((uint32_t)eTMR_CHINIT_CH0INIT_MASK << channel) | 0xFFU);
-    etmrBase->CHINIT |= ((val << channel) << eTMR_CHINIT_CH0INIT_SHIFT);
+    etmrBase->CHINIT &= (~(0x1U << channel) & 0xFFU);
+    etmrBase->CHINIT |= val << channel;
 }
 #endif
 

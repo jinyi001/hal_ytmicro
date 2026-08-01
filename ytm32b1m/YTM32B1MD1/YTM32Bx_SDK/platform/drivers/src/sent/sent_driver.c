@@ -8,6 +8,7 @@
 /*!
  * @file sent_driver.c
  * @version 1.4.1
+ * @brief SENT driver implementation — SAE J2716 receiver for the YTMicro SDK.
  */
 
 /*!
@@ -33,9 +34,7 @@
  * Definitions
  ******************************************************************************/
 
-/**
- * Defines 1s/x = SENT_ONE_MICROSECOND_CYCLES
- */
+/*! Number of input-clock cycles in one microsecond. */
 #define SENT_ONE_MICROSECOND_CYCLES (1000000u)
 
 /*******************************************************************************
@@ -46,42 +45,37 @@
  * Private data
  ******************************************************************************/
 
-/**
- * Array with clock instances to SENT peripherals
- */
+/*! Clock name array indexed by SENT peripheral instance number. */
 static const clock_names_t s_sentClockNames[SENT_INSTANCE_COUNT] = FEATURE_SENT_CLOCK_NAMES;
 
-/**
- * DMA multiplexer for the Fast channel.
- */
+/*! DMA request source for the Fast channel, indexed by peripheral instance. */
 static const dma_request_source_t s_sentFastDMASrc[SENT_INSTANCE_COUNT] = FEATURE_SENT_FAST_DMA_REQS;
 
-/**
- * DMA multiplexer for the Slow channel.
- */
+/*! DMA request source for the Slow channel, indexed by peripheral instance. */
 static const dma_request_source_t s_sentSlowDMASrc[SENT_INSTANCE_COUNT] = FEATURE_SENT_SLOW_DMA_REQS;
 
-/**
- * Pointers to the configuration structures
- */
+/*! Runtime state pointers, one entry per SENT peripheral instance. */
 static sent_state_t * s_sentStatePtr[SENT_INSTANCE_COUNT];
 
-/**
- * Base image of the configuration structure used for DMA transfers.
+/*!
+ * @brief Base DMA transfer configuration template for SENT channels.
+ *
+ * Fields annotated with "Modified at runtime" are overwritten before each
+ * DMA_DRV_ConfigLoopTransfer() call and must not be treated as fixed values.
  */
 static const dma_transfer_config_t sentDmaBaseConfig =
 {
-    .srcAddr = 0u, /* Modified by function */
-    .destAddr = 0u, /* Modified by function */
+    .srcAddr = 0u,                              /*!< Modified at runtime */
+    .destAddr = 0u,                             /*!< Modified at runtime */
     .srcTransferSize = DMA_TRANSFER_SIZE_4B,
     .destTransferSize = DMA_TRANSFER_SIZE_4B,
-    .srcOffset = 0, /* Modified by function */
+    .srcOffset = 0,                             /*!< Modified at runtime */
     .destOffset = (int16_t)sizeof(uint32_t),
-    .srcLastAddrAdjust = 0, /* Modified by function */
-    .destLastAddrAdjust = 0, /* Modified by function */
+    .srcLastAddrAdjust = 0,                     /*!< Modified at runtime */
+    .destLastAddrAdjust = 0,                    /*!< Modified at runtime */
     .srcModulo = DMA_MODULO_OFF,
     .destModulo = DMA_MODULO_OFF,
-    .transferLoopByteCount = 0, /* Modified by function */
+    .transferLoopByteCount = 0,                 /*!< Modified at runtime */
     .ramReloadEnable = false,
     .ramReloadNextDescAddr = 0u,
     .interruptEnable = true,
@@ -102,12 +96,9 @@ static const dma_transfer_config_t sentDmaBaseConfig =
  * Private functions
  ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_InitDiag
- * Description   : Initializes the diagnostics side of the driver.
- *
- *END**************************************************************************/
+/*!
+ * @brief Configure the diagnostics hardware for one channel.
+ */
 static void SENT_DRV_InitDiag(const uint32_t instance, const uint8_t channel, const sent_diag_config_t * config)
 {
     /* Set bus IDLE count */
@@ -126,12 +117,9 @@ static void SENT_DRV_InitDiag(const uint32_t instance, const uint8_t channel, co
     SENT_DRV_HW_SetSuccCalChk(instance, channel, config->successiveCal);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_InitSlowMes
- * Description   : Initializes the Slow message reception side of the driver.
- *
- *END**************************************************************************/
+/*!
+ * @brief Configure the Slow message reception hardware for one channel.
+ */
 static void SENT_DRV_InitSlowMsg(const uint32_t instance, const uint8_t channel, const sent_slow_msg_config_t * config)
 {
     /* CRC related */
@@ -139,36 +127,27 @@ static void SENT_DRV_InitSlowMsg(const uint32_t instance, const uint8_t channel,
 }
 
 #if FEATURE_SENT_HAS_SPC
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_InitSPC
- * Description   : Initializes the SPC configuration.
- *
- *END**************************************************************************/
+/*!
+ * @brief Configure the SPC hardware for one channel.
+ */
 static void SENT_DRV_InitSPC(const uint32_t instance, const uint8_t channel, const sent_spc_config_t * config)
 {
     /* SPC configuration */
     SENT_DRV_HW_ConfigSPC(instance, channel, config);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_SwTrigger
- * Description   : Generate a software trigger for SPC pulse.
- *
- *END**************************************************************************/
+/*!
+ * @brief Generate a software trigger for SPC pulse.
+ */
 void SENT_DRV_SwTrigger(uint32_t instance, uint8_t channel)
 {
     SENT_DRV_HW_SPCSwTrigger(instance, channel);
 }
 #endif /* FEATURE_SENT_HAS_SPC */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_InitFastMes
- * Description   : Initializes the Fast message reception side of the driver.
- *
- *END**************************************************************************/
+/*!
+ * @brief Configure the Fast message reception hardware for one channel.
+ */
 static void SENT_DRV_InitFastMsg(const uint32_t instance, const uint8_t channel, const sent_fast_msg_config_t * config)
 {
     /* Number of nibbles */
@@ -180,12 +159,9 @@ static void SENT_DRV_InitFastMsg(const uint32_t instance, const uint8_t channel,
     SENT_DRV_HW_SetFastDisableCrc(instance, channel, config->disableCrcCheck);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_ComputeTimestampPrescaler
- * Description   : Computes the message timestamp base prescaler.
- *
- *END**************************************************************************/
+/*!
+ * @brief Compute the global timestamp prescaler from the input clock frequency.
+ */
 static uint8_t SENT_DRV_ComputeTimestampPrescaler(const uint32_t inputClock)
 {
     uint32_t tsPre;
@@ -198,12 +174,9 @@ static uint8_t SENT_DRV_ComputeTimestampPrescaler(const uint32_t inputClock)
     return (uint8_t)tsPre;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_ComputeChannelPrescaler
- * Description   : Computes the channel reception clock prescaler.
- *
- *END**************************************************************************/
+/*!
+ * @brief Compute the per-channel clock prescaler for the requested tick duration.
+ */
 static uint32_t SENT_DRV_ComputeChannelPrescaler(const uint8_t reqTick, const uint32_t inputClock)
 {
     uint32_t chPre;
@@ -216,13 +189,9 @@ static uint32_t SENT_DRV_ComputeChannelPrescaler(const uint8_t reqTick, const ui
     return chPre;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_FastRxCompleteDma
- * Description   : Reception complete DMA notification
- * for the Fast channel.
- *
- *END**************************************************************************/
+/*!
+ * @brief DMA completion callback for the Fast message channel.
+ */
 static void SENT_DRV_FastRxCompleteDma(void * parameter, dma_chn_status_t status)
 {
     uint8_t instance = *(const uint8_t *)parameter; /*PRQA S 0316*/
@@ -242,13 +211,9 @@ static void SENT_DRV_FastRxCompleteDma(void * parameter, dma_chn_status_t status
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_SlowRxCompleteDma
- * Description   : Reception complete DMA notification
- * for the Slow channel.
- *
- *END**************************************************************************/
+/*!
+ * @brief DMA completion callback for the Slow message channel.
+ */
 static void SENT_DRV_SlowRxCompleteDma(void * parameter, dma_chn_status_t status)
 {
     uint8_t instance = *(const uint8_t *)parameter; /*PRQA S 0316*/
@@ -268,12 +233,9 @@ static void SENT_DRV_SlowRxCompleteDma(void * parameter, dma_chn_status_t status
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_ConfigureDmaTransfer
- * Description   : Configures a loop DMA transfer for the given channel.
- *
- *END**************************************************************************/
+/*!
+ * @brief Configure a looping DMA transfer for the given channel.
+ */
 static void SENT_DRV_ConfigureDmaTransfer(const uint8_t channel, const uint32_t srcAddr,
                                          const uint32_t destAddr, const bool hasFifo,
                                          const uint8_t lenFifo)
@@ -319,12 +281,9 @@ static void SENT_DRV_ConfigureDmaTransfer(const uint8_t channel, const uint32_t 
     (void)DMA_DRV_ConfigLoopTransfer(channel, &transferConfig);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_InstallCallbacks
- * Description   : Installs callbacks for the driver events.
- *
- *END**************************************************************************/
+/*!
+ * @brief Install or remove interrupt and DMA callbacks for all active channels.
+ */
 static void SENT_DRV_InstallCallbacks(const uint32_t instance)
 {
     uint32_t chInd;
@@ -463,16 +422,12 @@ static void SENT_DRV_InstallCallbacks(const uint32_t instance)
 }
 
 /*******************************************************************************
- * Public functions
+ * IRQ handlers
  ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_IRQ_FastHandler
- * Description   : Gets called from the low level handler
- * with instance and channel as parameter.
- *
- *END**************************************************************************/
+/*!
+ * @brief Fast channel IRQ handler — dispatches to the user callback.
+ */
 void SENT_DRV_IRQ_FastHandler(const uint32_t instance, const uint32_t channel)
 {
     DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
@@ -502,13 +457,9 @@ void SENT_DRV_IRQ_FastHandler(const uint32_t instance, const uint32_t channel)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_IRQ_SlowHandler
- * Description   : Gets called from the low level handler
- * with instance and channel as parameter.
- *
- *END**************************************************************************/
+/*!
+ * @brief Slow channel IRQ handler — dispatches to the user callback.
+ */
 void SENT_DRV_IRQ_SlowHandler(const uint32_t instance, const uint32_t channel)
 {
     DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
@@ -528,13 +479,9 @@ void SENT_DRV_IRQ_SlowHandler(const uint32_t instance, const uint32_t channel)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_IRQ_WakeupHandler
- * Description   : Gets called from the low level handler
- * with instance and channel as parameter.
- *
- *END**************************************************************************/
+/*!
+ * @brief Wakeup event IRQ handler — dispatches to the user callback.
+ */
 void SENT_DRV_IRQ_WakeupHandler(const uint32_t instance, const uint32_t channel)
 {
     DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
@@ -554,13 +501,9 @@ void SENT_DRV_IRQ_WakeupHandler(const uint32_t instance, const uint32_t channel)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_IRQ_RxErrHandler
- * Description   : Gets called from the low level handler
- * with instance and channel as parameter.
- *
- *END**************************************************************************/
+/*!
+ * @brief Receive error IRQ handler — dispatches to the user callback when events are active.
+ */
 void SENT_DRV_IRQ_RxErrHandler(const uint32_t instance, const uint32_t channel)
 {
     DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
@@ -596,14 +539,9 @@ void SENT_DRV_IRQ_RxErrHandler(const uint32_t instance, const uint32_t channel)
  * API implementation
  ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_Init
- * Description   : Initializes the driver for a given peripheral
- * according to the given configuration structure.
- *
- * Implements    : SENT_DRV_Init_Activity
- *END**************************************************************************/
+/*!
+ * @brief Initialize the SENT driver for a peripheral instance.
+ */
 status_t SENT_DRV_Init(const uint32_t instance, const sent_driver_user_config_t * configPtr, sent_state_t * state)
 {
     uint32_t inputClock;
@@ -766,267 +704,9 @@ status_t SENT_DRV_Init(const uint32_t instance, const sent_driver_user_config_t 
     return retVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_GetEvents
- * Description   : Returns a list containing masks for the current active events.
- * Also clears the active events in the process.
- *
- * Implements    : SENT_DRV_GetEvents_Activity
- *END**************************************************************************/
-status_t SENT_DRV_GetEvents(const uint32_t instance, const uint32_t channel, sent_event_t * events)
-{
-    status_t retVal;
-    sent_event_t locEv;
-
-    /* Invalid instance or channel */
-    DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
-    DEV_ASSERT(channel < SENT_CH_COUNT);
-    DEV_ASSERT(s_sentStatePtr[instance] != NULL);
-
-    /* Only if channel is enabled */
-    if(s_sentStatePtr[instance]->activeChannels[channel] != false)
-    {
-        /* Get, clear and return */
-        locEv = SENT_DRV_HW_GetActiveEvents(instance, (uint8_t)channel);
-        SENT_DRV_HW_ClearActiveEvents(instance, (uint8_t)channel, locEv);
-        *events = locEv;
-        retVal = STATUS_SUCCESS;
-    }
-    else
-    {
-        retVal = STATUS_ERROR;
-    }
-
-    return retVal;
-}
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_GetFastMsg
- * Description   : Returns last received fast message and clears the
- * Rx complete flag.
- *
- * Implements    : SENT_DRV_GetFastMsg_Activity
- *END**************************************************************************/
-status_t SENT_DRV_GetFastMsg(const uint32_t instance, const uint32_t channel, sent_fast_msg_t * message)
-{
-    sent_raw_msg_t locMsg;
-    status_t retVal;
-
-    /* Invalid instance or channel */
-    DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
-    DEV_ASSERT(channel < SENT_CH_COUNT);
-    DEV_ASSERT(s_sentStatePtr[instance] != NULL);
-
-    /* Only if channel is enabled */
-    if(s_sentStatePtr[instance]->activeChannels[channel] != false)
-    {
-        SENT_DRV_HW_GetFastRawMsg(instance, (uint8_t)channel, &locMsg);
-        SENT_DRV_HW_ConvertFastRaw(message, &locMsg);
-        retVal = STATUS_SUCCESS;
-    }
-    else
-    {
-        retVal = STATUS_ERROR;
-    }
-
-    return retVal;
-}
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_GetSlowMsg
- * Description   : Returns last received slow message and clears the
- * Rx complete flag.
- *
- * Implements    : SENT_DRV_GetSlowMsg_Activity
- *END**************************************************************************/
-status_t SENT_DRV_GetSlowMsg(const uint32_t instance, const uint32_t channel, sent_slow_msg_t * message)
-{
-    sent_raw_msg_t locMsg;
-    status_t retVal;
-
-    /* Invalid instance or channel */
-    DEV_ASSERT(channel < SENT_CH_COUNT);
-    DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
-    DEV_ASSERT(s_sentStatePtr[instance] != NULL);
-
-
-    /* Only if channel is enabled */
-    if(s_sentStatePtr[instance]->activeChannels[channel] != false)
-    {
-        SENT_DRV_HW_GetSlowRawMsg(instance, (uint8_t)channel, &locMsg);
-        SENT_DRV_HW_ConvertSlowRaw(message, &locMsg);
-        retVal = STATUS_SUCCESS;
-    }
-    else
-    {
-        retVal = STATUS_ERROR;
-    }
-
-    return retVal;
-}
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_GetFastMsgFromRaw
- * Description   : Transforms a RAW fast message into a normal fast message.
- *
- * Implements    : SENT_DRV_GetFastMsgFromRaw_Activity
- *END**************************************************************************/
-void SENT_DRV_GetFastMsgFromRaw(sent_fast_msg_t * msg, const sent_raw_msg_t * rawMsg)
-{
-    /* Just call the conversion function */
-    SENT_DRV_HW_ConvertFastRaw(msg, rawMsg);
-}
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_GetSlowMsgFromRaw
- * Description   : Transforms a RAW slow message into a normal slow message.
- *
- * Implements    : SENT_DRV_GetSlowMsgFromRaw_Activity
- *END**************************************************************************/
-void SENT_DRV_GetSlowMsgFromRaw(sent_slow_msg_t * msg, const sent_raw_msg_t * rawMsg)
-{
-    /* Just call the conversion function */
-    SENT_DRV_HW_ConvertSlowRaw(msg, rawMsg);
-}
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_GetSlowRxStatus
- * Description   : Returns the buffer status for any incoming SLOW message.
- *
- * Implements    : SENT_DRV_GetSlowRxStatus_Activity
- *END**************************************************************************/
-bool SENT_DRV_GetSlowRxStatus(const uint32_t instance, const uint32_t channel)
-{
-    bool retVal;
-
-    /* Invalid instance or channel */
-    DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
-    DEV_ASSERT(channel < SENT_CH_COUNT);
-    DEV_ASSERT(s_sentStatePtr[instance] != NULL);
-
-    /* Only if channel is enabled */
-    if(s_sentStatePtr[instance]->activeChannels[channel] != false)
-    {
-        retVal = SENT_DRV_HW_GetSlowRxStatus(instance, (uint8_t)channel);
-    }
-    else
-    {
-        retVal = false;
-    }
-
-    return retVal;
-}
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_GetFastRxStatus
- * Description   : Returns the buffer status for any incoming FAST message.
- *
- * Implements    : SENT_DRV_GetFastRxStatus_Activity
- *END**************************************************************************/
-bool SENT_DRV_GetFastRxStatus(const uint32_t instance, const uint32_t channel)
-{
-    bool retVal;
-
-    /* Invalid instance or channel */
-    DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
-    DEV_ASSERT(channel < SENT_CH_COUNT);
-    DEV_ASSERT(s_sentStatePtr[instance] != NULL);
-
-    /* Only if channel is enabled */
-    if(s_sentStatePtr[instance]->activeChannels[channel] != false)
-    {
-        retVal = SENT_DRV_HW_GetFastRxStatus(instance, (uint8_t)channel);
-    }
-    else
-    {
-        retVal = false;
-    }
-
-    return retVal;
-}
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_SetFastMsgDmaBuffer
- * Description   : Sets (modifies) the buffer in which the DMA driven
- * reception for Fast messages is made. Length of the
- * buffer must be (fastDmaFIFOSize)
- * bytes in case fastDmaFIFOEnable is TRUE.
- *
- * Implements    : SENT_DRV_SetFastMsgDmaBuffer_Activity
- *END**************************************************************************/
-status_t SENT_DRV_SetFastMsgDmaBuffer(const uint32_t instance, sent_raw_msg_t * buffer)
-{
-    /* Invalid instance */
-    DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
-    DEV_ASSERT(s_sentStatePtr[instance] != NULL);
-
-    /* Store and update */
-    s_sentStatePtr[instance]->fastMsgDmaPtr = buffer;
-    DMA_DRV_SetDestAddr(s_sentStatePtr[instance]->fastDmaChannel, (uint32_t)buffer);
-
-    return STATUS_SUCCESS;
-}
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_SetRxCallbackFunction
- * Description   : Sets (modifies) the callback function assigned to the
- * peripheral instance
- *
- * Implements    : SENT_DRV_SetRxCallbackFunction_Activity
- *END**************************************************************************/
-status_t SENT_DRV_SetRxCallbackFunction(const uint32_t instance, sent_callback_func_t function, void * param)
-{
-    /* Invalid instance */
-    DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
-    DEV_ASSERT(s_sentStatePtr[instance] != NULL);
-
-    /* Copy to state structure */
-    s_sentStatePtr[instance]->callbackFunc.function = function;
-    s_sentStatePtr[instance]->callbackFunc.param = param;
-
-    /* Notification setup */
-    SENT_DRV_InstallCallbacks(instance);
-
-    return STATUS_SUCCESS;
-}
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_SetSlowMsgDmaBuffer
- * Description   : Sets (modifies) the buffer in which the DMA driven
- * reception for slow messages is made.
- *
- * Implements    : SENT_DRV_SetSlowMsgDmaBuffer_Activity
- *END**************************************************************************/
-status_t SENT_DRV_SetSlowMsgDmaBuffer(const uint32_t instance, sent_raw_msg_t * buffer)
-{
-    /* Invalid instance or channel */
-    DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
-    DEV_ASSERT(s_sentStatePtr[instance] != NULL);
-
-    /* Store and update */
-    s_sentStatePtr[instance]->slowMsgDmaPtr = buffer;
-    DMA_DRV_SetDestAddr(s_sentStatePtr[instance]->slowDmaChannel, (uint32_t)buffer);
-
-    return STATUS_SUCCESS;
-}
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_DeInit
- * Description   : De-Initializes the peripheral and brings it's registers into a reset state.
- *
- * Implements    : SENT_DRV_DeInit_Activity
- *END**************************************************************************/
+/*!
+ * @brief De-initialize the SENT driver and reset peripheral registers.
+ */
 status_t SENT_DRV_Deinit(const uint32_t instance)
 {
     uint8_t indChan;
@@ -1061,13 +741,9 @@ status_t SENT_DRV_Deinit(const uint32_t instance)
     return retVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SENT_DRV_GetDefaultConfig
- * Description   : Returns a default configuration for the TLE4998 sensor.
- *
- * Implements    : SENT_DRV_GetDefaultConfig_Activity
- *END**************************************************************************/
+/*!
+ * @brief Populate a configuration structure with TLE4998 sensor defaults.
+ */
 void SENT_DRV_GetDefaultConfig(sent_driver_user_config_t * config)
 {
     DEV_ASSERT(config->channelConfig != NULL);
@@ -1119,6 +795,212 @@ void SENT_DRV_GetDefaultConfig(sent_driver_user_config_t * config)
     config->fastDmaFIFOSize = 1U;
     config->channelConfig = &chConfig;
     config->numOfConfigs = 1U;
+}
+
+/*!
+ * @brief Check whether a new Fast message is available.
+ */
+bool SENT_DRV_GetFastRxStatus(const uint32_t instance, const uint32_t channel)
+{
+    bool retVal;
+
+    /* Invalid instance or channel */
+    DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
+    DEV_ASSERT(channel < SENT_CH_COUNT);
+    DEV_ASSERT(s_sentStatePtr[instance] != NULL);
+
+    /* Only if channel is enabled */
+    if(s_sentStatePtr[instance]->activeChannels[channel] != false)
+    {
+        retVal = SENT_DRV_HW_GetFastRxStatus(instance, (uint8_t)channel);
+    }
+    else
+    {
+        retVal = false;
+    }
+
+    return retVal;
+}
+
+/*!
+ * @brief Read the most recently received Fast message.
+ */
+status_t SENT_DRV_GetFastMsg(const uint32_t instance, const uint32_t channel, sent_fast_msg_t * message)
+{
+    sent_raw_msg_t locMsg;
+    status_t retVal;
+
+    /* Invalid instance or channel */
+    DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
+    DEV_ASSERT(channel < SENT_CH_COUNT);
+    DEV_ASSERT(s_sentStatePtr[instance] != NULL);
+
+    /* Only if channel is enabled */
+    if(s_sentStatePtr[instance]->activeChannels[channel] != false)
+    {
+        SENT_DRV_HW_GetFastRawMsg(instance, (uint8_t)channel, &locMsg);
+        SENT_DRV_HW_ConvertFastRaw(message, &locMsg);
+        retVal = STATUS_SUCCESS;
+    }
+    else
+    {
+        retVal = STATUS_ERROR;
+    }
+
+    return retVal;
+}
+
+/*!
+ * @brief Update the DMA destination buffer for Fast messages.
+ */
+status_t SENT_DRV_SetFastMsgDmaBuffer(const uint32_t instance, sent_raw_msg_t * buffer)
+{
+    /* Invalid instance */
+    DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
+    DEV_ASSERT(s_sentStatePtr[instance] != NULL);
+
+    /* Store and update */
+    s_sentStatePtr[instance]->fastMsgDmaPtr = buffer;
+    DMA_DRV_SetDestAddr(s_sentStatePtr[instance]->fastDmaChannel, (uint32_t)buffer);
+
+    return STATUS_SUCCESS;
+}
+
+/*!
+ * @brief Convert a raw DMA Fast message to a structured Fast message.
+ */
+void SENT_DRV_GetFastMsgFromRaw(sent_fast_msg_t * msg, const sent_raw_msg_t * rawMsg)
+{
+    /* Just call the conversion function */
+    SENT_DRV_HW_ConvertFastRaw(msg, rawMsg);
+}
+
+/*!
+ * @brief Check whether a new Slow message is available.
+ */
+bool SENT_DRV_GetSlowRxStatus(const uint32_t instance, const uint32_t channel)
+{
+    bool retVal;
+
+    /* Invalid instance or channel */
+    DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
+    DEV_ASSERT(channel < SENT_CH_COUNT);
+    DEV_ASSERT(s_sentStatePtr[instance] != NULL);
+
+    /* Only if channel is enabled */
+    if(s_sentStatePtr[instance]->activeChannels[channel] != false)
+    {
+        retVal = SENT_DRV_HW_GetSlowRxStatus(instance, (uint8_t)channel);
+    }
+    else
+    {
+        retVal = false;
+    }
+
+    return retVal;
+}
+
+/*!
+ * @brief Read the most recently received Slow message.
+ */
+status_t SENT_DRV_GetSlowMsg(const uint32_t instance, const uint32_t channel, sent_slow_msg_t * message)
+{
+    sent_raw_msg_t locMsg;
+    status_t retVal;
+
+    /* Invalid instance or channel */
+    DEV_ASSERT(channel < SENT_CH_COUNT);
+    DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
+    DEV_ASSERT(s_sentStatePtr[instance] != NULL);
+
+
+    /* Only if channel is enabled */
+    if(s_sentStatePtr[instance]->activeChannels[channel] != false)
+    {
+        SENT_DRV_HW_GetSlowRawMsg(instance, (uint8_t)channel, &locMsg);
+        SENT_DRV_HW_ConvertSlowRaw(message, &locMsg);
+        retVal = STATUS_SUCCESS;
+    }
+    else
+    {
+        retVal = STATUS_ERROR;
+    }
+
+    return retVal;
+}
+
+/*!
+ * @brief Update the DMA destination buffer for Slow messages.
+ */
+status_t SENT_DRV_SetSlowMsgDmaBuffer(const uint32_t instance, sent_raw_msg_t * buffer)
+{
+    /* Invalid instance or channel */
+    DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
+    DEV_ASSERT(s_sentStatePtr[instance] != NULL);
+
+    /* Store and update */
+    s_sentStatePtr[instance]->slowMsgDmaPtr = buffer;
+    DMA_DRV_SetDestAddr(s_sentStatePtr[instance]->slowDmaChannel, (uint32_t)buffer);
+
+    return STATUS_SUCCESS;
+}
+
+/*!
+ * @brief Convert a raw DMA Slow message to a structured Slow message.
+ */
+void SENT_DRV_GetSlowMsgFromRaw(sent_slow_msg_t * msg, const sent_raw_msg_t * rawMsg)
+{
+    /* Just call the conversion function */
+    SENT_DRV_HW_ConvertSlowRaw(msg, rawMsg);
+}
+
+/*!
+ * @brief Set or replace the event callback function.
+ */
+status_t SENT_DRV_SetRxCallbackFunction(const uint32_t instance, sent_callback_func_t function, void * param)
+{
+    /* Invalid instance */
+    DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
+    DEV_ASSERT(s_sentStatePtr[instance] != NULL);
+
+    /* Copy to state structure */
+    s_sentStatePtr[instance]->callbackFunc.function = function;
+    s_sentStatePtr[instance]->callbackFunc.param = param;
+
+    /* Notification setup */
+    SENT_DRV_InstallCallbacks(instance);
+
+    return STATUS_SUCCESS;
+}
+
+/*!
+ * @brief Read and atomically clear the active diagnostic event flags.
+ */
+status_t SENT_DRV_GetEvents(const uint32_t instance, const uint32_t channel, sent_event_t * events)
+{
+    status_t retVal;
+    sent_event_t locEv;
+
+    /* Invalid instance or channel */
+    DEV_ASSERT(instance < SENT_INSTANCE_COUNT);
+    DEV_ASSERT(channel < SENT_CH_COUNT);
+    DEV_ASSERT(s_sentStatePtr[instance] != NULL);
+
+    /* Only if channel is enabled */
+    if(s_sentStatePtr[instance]->activeChannels[channel] != false)
+    {
+        /* Get, clear and return */
+        locEv = SENT_DRV_HW_GetActiveEvents(instance, (uint8_t)channel);
+        SENT_DRV_HW_ClearActiveEvents(instance, (uint8_t)channel, locEv);
+        *events = locEv;
+        retVal = STATUS_SUCCESS;
+    }
+    else
+    {
+        retVal = STATUS_ERROR;
+    }
+
+    return retVal;
 }
 
 /*******************************************************************************

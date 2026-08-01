@@ -7,7 +7,12 @@
 
 /*!
  * @file spi_shared_function.h
- * @version 1.4.1
+ * @brief SPI shared types, state structure, and internal function declarations.
+ *
+ * This header defines common types, enumerations, and the runtime state
+ * structure shared between the SPI master and slave drivers. It also
+ * declares internal helper functions used by the IRQ handler and
+ * transfer routines.
  */
 
 /*!
@@ -30,7 +35,7 @@
 #endif /* FEATURE_SPI_HAS_DMA_ENABLE */
 
 /*!
- * @addtogroup spi_driver
+ * @addtogroup spi
  * @{
  */
 
@@ -39,20 +44,40 @@
  ******************************************************************************/
 
 /*!
- * @brief Extern for the SPI master driver's interrupt handler.
+ * @name IRQ Handler Declarations
+ * @{
+ */
+
+/*!
+ * @brief Master mode interrupt handler (implemented in spi_master_driver.c).
  *
+ * @param[in] instance  SPI peripheral instance number.
  */
 extern void SPI_DRV_MasterIRQHandler(uint32_t instance);
 
 /*!
- * @brief Extern for the SPI slave driver's interrupt handler.
+ * @brief Slave mode interrupt handler (implemented in spi_slave_driver.c).
  *
+ * @param[in] instance  SPI peripheral instance number.
  */
 extern void SPI_DRV_SlaveIRQHandler(uint32_t instance);
 
-/*! 
- * @brief SPI Peripheral Chip Select (PCS) configuration (which PCS to configure).
- * Implements : spi_which_pcs_t_Class
+/*@}*/
+
+/*!
+ * @name Common Enumerations
+ * @{
+ */
+
+/*!
+ * @brief SPI Peripheral Chip Select (PCS) signal selection.
+ *
+ * | Value    | Signal |
+ * |----------|--------|
+ * | SPI_PCS0 | PCS[0] |
+ * | SPI_PCS1 | PCS[1] |
+ * | SPI_PCS2 | PCS[2] |
+ * | SPI_PCS3 | PCS[3] |
  */
 typedef enum
 {
@@ -68,9 +93,8 @@ typedef enum
 #endif
 } spi_which_pcs_t;
 
-/*! 
- * @brief SPI Signal (PCS and Host Request) Polarity configuration.
- * Implements : spi_signal_polarity_t_Class
+/*!
+ * @brief SPI signal polarity configuration (PCS and Host Request).
  */
 typedef enum
 {
@@ -78,9 +102,10 @@ typedef enum
     SPI_ACTIVE_LOW = 0U   /*!< Signal is Active Low (idles high). */
 } spi_signal_polarity_t;
 
-/*! 
+/*!
  * @brief SPI clock phase configuration.
- * Implements : spi_clock_phase_t_Class
+ *
+ * Determines the SCK edge on which data is captured and changed.
  */
 typedef enum
 {
@@ -89,8 +114,9 @@ typedef enum
 } spi_clock_phase_t;
 
 /*!
- * @brief SPI Clock Signal (SCK) Polarity configuration.
- * Implements : spi_sck_polarity_t_Class
+ * @brief SPI clock signal (SCK) polarity configuration.
+ *
+ * Determines the idle state of the SCK signal.
  */
 typedef enum
 {
@@ -99,9 +125,11 @@ typedef enum
 } spi_sck_polarity_t;
 
 /*!
-  * @brief Type of SPI transfer (based on interrupts or DMA).
-  * Implements : spi_transfer_type_Class
-  */
+ * @brief SPI transfer mechanism selection.
+ *
+ * Selects whether the driver uses interrupt-driven or DMA-driven
+ * data movement for SPI transfers.
+ */
 typedef enum
 {
     SPI_USING_DMA = 0,    /*!< The driver will use DMA to perform SPI transfer */
@@ -109,8 +137,11 @@ typedef enum
 } spi_transfer_type;
 
 /*!
-  * @brief Type of error reported by SPI
-  */
+ * @brief SPI transfer error status codes.
+ *
+ * Reported via the spi_state_t::status field to indicate the
+ * outcome of the most recent transfer.
+ */
 typedef enum
 {
     SPI_TRANSFER_OK = 0U, /*!< Transfer OK */
@@ -120,6 +151,14 @@ typedef enum
 
 /*!
  * @brief SPI transfer width configuration.
+ *
+ * Controls how many data lines are used for each shift clock cycle.
+ *
+ * | Value              | Data Lines  | Description              |
+ * |--------------------|:-----------:|--------------------------|
+ * | SPI_SINGLE_BIT_XFER| 1           | Normal SDI/SDO mode      |
+ * | SPI_TWO_BIT_XFER   | 2           | Dual I/O on SDI and SDO  |
+ * | SPI_FOUR_BIT_XFER  | 4           | Quad I/O using PCS[3:2]  |
  */
 typedef enum
 {
@@ -128,15 +167,23 @@ typedef enum
     SPI_FOUR_BIT_XFER = 2U              /*!< 4-bits shift out on SDO/SDI/PCS[3:2] and in on SDO/SDI/PCS[3:2] */
 } spi_transfer_width_t;
 
+/*@}*/
+
 /*!
- * @brief Runtime state structure for the SPI master driver.
+ * @name Runtime State
+ * @{
+ */
+
+/*!
+ * @brief SPI driver runtime state structure.
  *
- * This structure holds data that is used by the SPI peripheral driver to
- * communicate between the transfer function and the interrupt handler. The
- * interrupt handler also uses this information to keep track of its progress.
- * The user must pass  the memory for this run-time state structure. The
- * SPI master driver populates the members.
- * Implements : spi_state_t_Class
+ * Holds all per-instance runtime data needed by the SPI master and
+ * slave drivers to manage transfers. The user must allocate this
+ * structure and pass it to the init function; the driver populates
+ * the members internally.
+ *
+ * @warning This structure must not be modified by the application
+ * while a transfer is in progress.
  */
 typedef struct
 {
@@ -168,62 +215,92 @@ typedef struct
     uint32_t dummy;                     /*!< This field is used for the cases when TX is NULL and SPI is in DMA mode */
 } spi_state_t;
 
+/*@}*/
+
 /*******************************************************************************
  * Variables
  ******************************************************************************/
-/*! 
- * @brief Table of base pointers for SPI instances. 
+
+/*!
+ * @name Global Instance Tables
+ * @{
+ */
+
+/*!
+ * @brief Table of base pointers for SPI peripheral instances.
  */
 extern SPI_Type *g_spiBase[SPI_INSTANCE_COUNT];
 
-/*! 
- * @brief Table to save SPI clock names as defined in clock manager. 
+/*!
+ * @brief Table of clock names for SPI instances (used with clock_manager).
  */
 extern const clock_names_t s_spiClkNames[SPI_INSTANCE_COUNT];
 
 /*!
- * @brief Table to save SPI IRQ enumeration numbers defined in the CMSIS header file.
+ * @brief Table of IRQ numbers for SPI instances.
  */
 extern IRQn_Type g_spiIrqId[SPI_INSTANCE_COUNT];
 
 /*!
- * @brief Pointer to runtime state structure.
+ * @brief Pointer to the runtime state structure for each SPI instance.
  */
 extern spi_state_t *g_spiStatePtr[SPI_INSTANCE_COUNT];
+
+/*@}*/
 
 /*******************************************************************************
  * Function Prototypes
  ******************************************************************************/
 
 /*!
- * @brief The function SPI_DRV_IRQHandler passes IRQ control to either the master or
- * slave driver.
+ * @name Internal Transfer Helpers
+ * These functions are used internally by the master/slave drivers
+ * and IRQ handlers. They are not intended for direct application use.
+ * @{
+ */
+
+/*!
+ * @brief Dispatch SPI IRQ to the appropriate master or slave handler.
  *
- * The address of the IRQ handlers are checked to make sure they are non-zero before
- * they are called. If the IRQ handler's address is zero, it means that driver was
- * not present in the link (because the IRQ handlers are marked as weak). This would
- * actually be a program error, because it means the master/slave config for the IRQ
- * was set incorrectly.
+ * Checks the master/slave mode of the given SPI instance and
+ * dispatches the interrupt to SPI_DRV_MasterIRQHandler() or
+ * SPI_DRV_SlaveIRQHandler() accordingly.
+ *
+ * @param[in] instance  SPI peripheral instance number.
  */
 void SPI_DRV_IRQHandler(uint32_t instance);
 
 /*!
- * @brief The function SPI_DRV_FillupTxBuffer writes data in TX hardware buffer
- * depending on driver state and number of bytes remained to send.
+ * @brief Fill the TX FIFO from the software transmit buffer.
+ *
+ * Writes data from the spi_state_t transmit buffer into the hardware
+ * TX FIFO, handling frame-size packing and continuous mode logic.
+ *
+ * @param[in] instance  SPI peripheral instance number.
  */
 void SPI_DRV_FillupTxBuffer(uint32_t instance);
 
 /*!
- * @brief The function SPI_DRV_ReadRXBuffer reads data from RX hardware buffer and
- * writes this data in RX software buffer.
+ * @brief Read data from the RX FIFO into the software receive buffer.
+ *
+ * Transfers all available words from the hardware RX FIFO into the
+ * spi_state_t receive buffer, handling frame-size unpacking.
+ *
+ * @param[in] instance  SPI peripheral instance number.
  */
 void SPI_DRV_ReadRXBuffer(uint32_t instance);
 
 /*!
- * @brief Disable the TEIE interrupts at the end of a transfer.
- * Disable the interrupts and clear the status for transmit/receive errors.
+ * @brief Disable transmit/receive error interrupts and clear error flags.
+ *
+ * Called at the end of a transfer to clean up error interrupt state.
+ *
+ * @param[in] instance  SPI peripheral instance number.
  */
 void SPI_DRV_DisableTEIEInterrupts(uint32_t instance);
+
+/*@}*/
+
 /*! @} */
 
 #endif /* __SPI_SHARED_FUNCTION_H__*/

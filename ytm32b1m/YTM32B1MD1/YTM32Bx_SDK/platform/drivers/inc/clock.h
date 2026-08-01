@@ -8,6 +8,16 @@
 /*!
  * @file clock.h
  * @version 1.4.1
+ *
+ * @brief Clock Driver — Common public API declarations.
+ *
+ * This header dispatches to the correct device-specific clock implementation
+ * based on the CPU macro, and declares the two core driver-layer functions
+ * shared by all device families:
+ *   - CLOCK_DRV_Init() — Apply a clock configuration.
+ *   - CLOCK_DRV_GetFreq() — Query a named clock frequency.
+ *
+ * @note Include clock_manager.h (which includes this file) from application code.
  */
 
 #ifndef CLOCK_H
@@ -24,7 +34,7 @@
     /* YTM32B1LD0 Clock System Level API header file */
     #include "../src/clock/YTM32B1LD0/clock_YTM32B1LD0.h"
 #elif (defined(YTM32B1L_SERIES))
-    /* YTM32B1L series Clock System Level API header file */
+    /* YTM32B1Lx Clock System Level API header file */
     #include "../src/clock/YTM32B1Lx/clock_YTM32B1Lx.h"
 #elif (defined(CPU_YTM32B1MD0))
     /* YTM32B1MD0 Clock System Level API header file */
@@ -33,21 +43,21 @@
     /* YTM32B1Mx Clock System Level API header file */
     #include "../src/clock/YTM32B1Mx/clock_YTM32B1Mx.h"
 #elif (defined(YTM32B1H_SERIES))
-    /* YTM32B1Mx Clock System Level API header file */
+    /* YTM32B1Hx Clock System Level API header file */
     #include "../src/clock/YTM32B1Hx/clock_YTM32B1Hx.h"
 #elif (defined(YTM32Z1M_SERIES))
     /* YTM32Z1x Clock System Level API header file */
     #include "../src/clock/YTM32Z1x/clock_YTM32Z1x.h"
 #elif (defined(YTM32Z1DS_SERIES))
-    /* YTM32Z1x Clock System Level API header file */
+    /* YTM32Z1DSx Clock System Level API header file */
     #include "../src/clock/YTM32Z1DSx/clock_YTM32Z1DSx.h"
 #else
     #error "No valid CPU defined!"
 #endif
 
-/*! 
-* @addtogroup clock_manager
-*/
+/*!
+ * @addtogroup clock_manager
+ */
 /*! @{*/
 
 /*******************************************************************************
@@ -60,59 +70,60 @@ extern "C" {
 #endif /* __cplusplus*/
 
 /*******************************************************************************
- * API
+ * Initialization & Frequency Query
  ******************************************************************************/
-
 /*!
- * @name Dynamic clock setting
+ * @name Initialization & Frequency Query
+ * @brief Core driver-layer functions common to all device families.
  * @{
  */
 
-/*******************************************************************************
- * API
- ******************************************************************************/
-
 /*!
-* @brief Gets the clock frequency for a specific clock name.
-*
-* This function checks the current clock configurations and then calculates
-* the clock frequency for a specific clock name defined in clock_names_t.
-* Clock modules must be properly configured before using this function.
-* See features.h for supported clock names for different chip families.
-* The returned value is in Hertz. If it cannot find the clock name
-* or the name is not supported for a specific chip family, it returns an
-* STATUS_UNSUPPORTED. If frequency is required for a peripheral and the
-* module is not clocked, then STATUS_MCU_GATED_OFF status is returned.
-* Frequency is returned if a valid address is provided. If frequency is
-* required for a peripheral that doesn't support protocol clock, the zero
-* value is provided.
-*
-* @param[in] clockName Clock names defined in clock_names_t
-* @param[out] frequency Returned clock frequency value in Hertz
-* @return status   Error code defined in status_t
-*/
+ * @brief Get the clock frequency for a named clock.
+ *
+ * Reads the current hardware configuration and computes the frequency
+ * (in Hz) for the clock identified by @a clockName. Supported names
+ * are defined in the device-specific clock_names_t enumeration.
+ *
+ * @param[in]  clockName  Clock identifier (from clock_names_t).
+ * @param[out] frequency  Pointer to receive the frequency in Hz.
+ *                        Set to 0 if the clock is gated or unsupported.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS       Frequency retrieved successfully.
+ * @retval STATUS_UNSUPPORTED   Clock name not supported on this device.
+ * @retval STATUS_MCU_GATED_OFF Peripheral clock is gated (disabled).
+ *
+ * @pre The clock module must be initialized via CLOCK_DRV_Init().
+ */
 status_t CLOCK_DRV_GetFreq(clock_names_t clockName, uint32_t *frequency);
 
 
 /*!
- * @brief Set clock configuration according to pre-defined structure.
+ * @brief Initialize clocks from a user configuration structure.
  *
- * This function sets system to target clock configuration; It sets the
- * clock modules registers for clock mode change. 
+ * Configures the system clock source, dividers, peripheral clocks, and
+ * optional CMU monitoring based on the provided configuration. This is
+ * the primary entry point for clock initialization at startup and for
+ * runtime reconfiguration.
  *
- * @param[in] config  Pointer to configuration structure.
+ * @param[in] config  Pointer to the clock configuration structure.
+ *                    Must not be NULL.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS                 Clock initialization completed.
+ * @retval STATUS_SCU_FXOSC_READY_TIMEOUT FXOSC did not start within timeout.
+ * @retval STATUS_SCU_PLL_LOCK_TIMEOUT    PLL did not lock within timeout.
+ * @retval STATUS_SCU_CLK_SWITCH_TIMEOUT  System clock source switch timed out.
  *
- * @return Error code.
+ * @pre  Peripheral clocks used by the clock module itself must be available.
+ * @post The system clock tree is configured per @a config. SystemCoreClock
+ *       is updated with the new core frequency.
  *
- * @note If external clock is used in the target mode, please make sure it is
- * enabled, for example, if the external oscillator is used, please setup correctly.
- *
- * @note If the configuration structure is NULL, the function will set a default
- * configuration for clock.
+ * @note If an external oscillator is used, ensure the crystal or clock
+ *       input is properly connected before calling this function.
  */
 status_t CLOCK_DRV_Init(clock_user_config_t const *config);
 
-/*! @} */
+/*! @} */ /* End of Initialization & Frequency Query */
 
 
 #if defined(__cplusplus)
@@ -125,4 +136,3 @@ status_t CLOCK_DRV_Init(clock_user_config_t const *config);
 /*******************************************************************************
  * EOF
  ******************************************************************************/
-

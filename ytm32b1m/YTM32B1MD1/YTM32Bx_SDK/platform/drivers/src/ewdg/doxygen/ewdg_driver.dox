@@ -1,124 +1,211 @@
 /*!
-@defgroup ewdg_driver EWDG Driver
-@ingroup ewdg
-@brief External Watchdog Monitor Peripheral Driver.
+@addtogroup ewdg
+@brief Instance-based driver layer for the External Watchdog Monitor.
 
-## Hardware background ##
+@details
+The EWDG driver wraps the low-level register helpers and exposes the public
+`EWDG_DRV_*` API set used by applications. The driver validates startup
+parameters, protects the two-key refresh sequence from interrupt latency, and
+provides lightweight helpers for input-mode query and interrupt masking.
 
-Features:
+@section ewdg_driver_features Key Features
+- Validates the requested refresh window before enabling the watchdog.
+- Resolves the peripheral base address internally from the instance index.
+- Masks global interrupts around refresh and restore sequences.
+- Exposes a default-configuration helper for `ewdg_init_config_t`.
+- Provides a readback helper for the configured `EWDG_in` assert behavior.
+- Supports optional interrupt-driven safety handling while leaving IRQ setup to
+  the application.
 
- - Independent LPO clock source
- - Programmable time-out period specified in terms of number of EWDG LPO clock cycles.
- - Windowed refresh option
-     - Provides robust check that program flow is faster than expected.
-     - Programmable window.
-     - Refresh outside window leads to assertion of EWDG_out.
- - Robust refresh mechanism
-     - Write values of ``0xA8`` and ``0x6C`` to EWDG Refresh Register within 15 ``EWDG_service_time`` peripheral bus clock cycles.
- - One output port, ``EWDG_out``, when asserted is used to reset or place the external circuit into safe mode
- - One Input port, ``EWDG_in``, allows an external circuit to control the ``EWDG_out`` signal.
+@section ewdg_driver_modes Supported Workflows
 
-The EWDG can be initialized only once as all the configuration registers are write once per reset.
+| Workflow | APIs | Description |
+|----------|------|-------------|
+| Default startup | EWDG_DRV_GetDefaultConfig() + EWDG_DRV_Init() | Build a valid startup configuration and enable the watchdog. |
+| Periodic servicing | EWDG_DRV_Refresh() | Service the watchdog inside the valid refresh window. |
+| Input-behavior query | EWDG_DRV_GetInputPinAssertLogic() | Read back the external input-pin mode encoded in `CTRL`. |
+| Interrupt masking | EWDG_DRV_DisableInterrupt() | Switch from interrupt-assisted handling to polling or logging only. |
+| Reset-like restore | EWDG_DRV_DeInit() | Restore the register block to reset-like values. |
 
+@section ewdg_driver_arch Driver Architecture
 
-## Integration guideline ##
+The public driver layer sits between application code and the inline hardware
+access helpers:
 
-### Compilation units ###
+@verbatim
++-----------------------------------------------+
+|               Application Code                |
+|          (calls EWDG_DRV_* functions)         |
++-----------------------------------------------+
+|         EWDG Driver Layer (ewdg_driver.c)     |
+|  - Window validation                          |
+|  - Instance-to-base resolution                |
+|  - Refresh / restore interrupt protection     |
++-----------------------------------------------+
+|       EWDG HW Access Layer (ewdg_hw_access.h) |
+|  - Raw register programming helpers           |
+|  - Refresh-key write helper                   |
+|  - Reset-like restore helper                  |
++-----------------------------------------------+
+@endverbatim
 
-The following files need to be compiled in the project:
+@subsection ewdg_driver_arch_init Startup Flow
+EWDG_DRV_Init() first verifies that the module is not already enabled and that
+the requested compare window is valid. It then programs the prescaler, optional
+clock source, compare registers, and finally writes the control-register image
+that enables the watchdog.
 
-```
-${S32SDK_PATH}\platform\drivers\src\ewdg\ewdg_driver.c
-```
+@subsection ewdg_driver_arch_service Refresh Flow
+EWDG_DRV_Refresh() masks global interrupts, calls EWDG_Refresh(), and then
+restores the global interrupt state so the two-key service sequence is not
+interrupted.
 
-### Include path ###
+@section ewdg_driver_config Configuration Parameters
 
-The following paths need to be added to the include path of the toolchain:
+@subsection ewdg_driver_config_struct ewdg_init_config_t Fields
+| Field | Type | Description | Default From EWDG_DRV_GetDefaultConfig() |
+|-------|------|-------------|------------------------------------------|
+| clockSource | ewdg_clock_source_t | Watchdog clock source when the field is present. | EWDG_SIRC_CLOCK |
+| assertLogic | ewdg_in_assert_logic_t | External input-pin assert behavior. | EWDG_IN_ASSERT_ON_LOGIC_ZERO |
+| interruptEnable | bool | Enable watchdog interrupt generation. | false |
+| prescaler | uint8_t | Prescaler field written to `CLK_CTRL`. | 255U |
+| compareLow | uint16_t | Earliest accepted refresh count. | FEATURE_EWDG_CMPL_MIN_VALUE |
+| compareHigh | uint16_t | Latest accepted refresh count. | FEATURE_EWDG_CMPH_MAX_VALUE |
 
-```
-${S32SDK_PATH}\platform\drivers\inc\
-```
+@subsection ewdg_driver_config_input Input Assert Modes
+| Value | Description |
+|-------|-------------|
+| EWDG_IN_ASSERT_DISABLED | Do not use `EWDG_in` in the watchdog decision path. |
+| EWDG_IN_ASSERT_ON_LOGIC_ZERO | Assert when `EWDG_in` is low. |
+| EWDG_IN_ASSERT_ON_LOGIC_ONE | Assert when `EWDG_in` is high. |
 
-### Compile symbols ###
+@section ewdg_driver_usage Usage Patterns
 
-No special symbols are required for this component
+@subsection ewdg_driver_usage_basic Pattern 1: Default Driver Startup
+Start the watchdog with the default configuration and service it in the main
+loop.
 
-### Dependencies ###
+@code{.c}
+#define INST_EWDG (0U)
 
-No special dependencies are required for this component
+ewdg_init_config_t ewdgConfig;
 
-## Clocking and pin configuration ##
+EWDG_DRV_GetDefaultConfig(&ewdgConfig);
+if (EWDG_DRV_Init(INST_EWDG, &ewdgConfig) == STATUS_SUCCESS)
+{
+    while (1)
+    {
+        EWDG_DRV_Refresh(INST_EWDG);
+    }
+}
+@endcode
 
-The EWDG Driver does not handle clock setup (from PCC) or any kind of pin
-configuration (done by PORT module). This is handled by the Clock Manager and
-PORT module, respectively. The driver assumes that correct clock
-configurations have been made, so it is the user's responsibility to set up
-clocking and pin configurations correctly.
+@subsection ewdg_driver_usage_irq Pattern 2: Install an Interrupt Handler Before Startup
+When interrupt-assisted handling is required, install the shared watchdog IRQ
+handler before enabling the module.
 
-## Interrupts ##
+@code{.c}
+#define INST_EWDG (0U)
 
-The EWDG module can generate interrupts, if enabled on ``EWDG_DRV_Init()`` but they
-are not handled by the driver. The EWDG shares the interrupt vector with the Watchdog Timer.
-The following code snippet is an example of how enable the interrupt and assign a handler:
+void EWDG_Watchdog_ISR(void)
+{
+    /* Log the event or trigger a controlled safety action here. */
+    EWDG_DRV_DisableInterrupt(INST_EWDG);
+}
 
-```c
- /* EWDG and watchdog interrupt service routine */
- void EWDG_Watchdog_ISR()
- {
-      /* Do something(e.g perform a clean reset) */
-      ...
- }
- int main()
-  {
-      /* Init clocks, pins, other modules */
-      ...
-      /* Install interrupt handler for EWDG and Watchdog */
-      INT_SYS_InstallHandler(WDOG_EWDG_IRQn, &EWDG_Watchdog_ISR, (isr_t *)0);
-      /* Enable the interrupt */
-      INT_SYS_EnableIRQ(WDOG_EWDG_IRQn);
+void EWDG_InitWithInterrupt(void)
+{
+    ewdg_init_config_t ewdgConfig;
 
-      /* Init EWDG */
-      ...
-      /* Infinite loop*/
-      while(1)
-      {
-          /* Do something until the counter needs to be refreshed */
-          ...
-          /* Refresh the counter */
-          EWDG_DRV_Refresh(EWDG_INSTANCE);
-      }
-  }
-  ```
+    INT_SYS_InstallHandler(WDOG_EWDG_IRQn, &EWDG_Watchdog_ISR, (isr_t *)0);
+    INT_SYS_EnableIRQ(WDOG_EWDG_IRQn);
 
- ## Using the EWDG driver in your application ##
+    EWDG_DRV_GetDefaultConfig(&ewdgConfig);
+    ewdgConfig.interruptEnable = true;
+    (void)EWDG_DRV_Init(INST_EWDG, &ewdgConfig);
+}
+@endcode
 
-```c
-  /* Declare the EWDG instance you want to use */
-  #define EWDG_INSTANCE    0UL
+@subsection ewdg_driver_usage_query Pattern 3: Read Back the Input Mode
+Use the driver helper to convert the raw control bits into the public enum.
 
-  int main()
-  {
-      /* Declare the EWDG configuration structure */
-      ewdg_init_config_t ewdgConfig;
-      /* Variable where to store the init status */
-      status_t ewdgStatus;
-      /* Init clocks, pins, other modules */
-      ...
+@code{.c}
+#define INST_EWDG (0U)
 
-      /* Get the default configuration values */
-      EWDG_DRV_GetDefaultConfig(&ewdgConfig);
-      /* Init the module instance */
-      ewdgStatus = EWDG_DRV_Init(EWDG_INSTANCE, &ewdgConfig);
+ewdg_in_assert_logic_t inputMode;
 
-      /* Infinite loop*/
-      while(1)
-      {
-          /* Do something until the counter needs to be refreshed */
-          ...
-          /* Refresh the counter */
-          EWDG_DRV_Refresh(EWDG_INSTANCE);
-      }
-  }
-```
+inputMode = EWDG_DRV_GetInputPinAssertLogic(INST_EWDG);
+if (inputMode == EWDG_IN_ASSERT_ON_LOGIC_ONE)
+{
+    /* The external input asserts the safety path when it goes high. */
+}
+@endcode
 
+@section ewdg_driver_api API Quick Reference
+
+@subsection ewdg_driver_api_init Initialization & De-initialization
+| Function | Description |
+|----------|-------------|
+| EWDG_DRV_Init() | Validate the startup configuration and enable the watchdog. |
+| EWDG_DRV_GetDefaultConfig() | Populate an `ewdg_init_config_t` structure with default values. |
+| EWDG_DRV_DeInit() | Restore the register block to reset-like values. |
+
+@subsection ewdg_driver_api_service Watchdog Service
+| Function | Description |
+|----------|-------------|
+| EWDG_DRV_Refresh() | Perform the protected two-key refresh sequence. |
+
+@subsection ewdg_driver_api_ctrl Status & Interrupt Control
+| Function | Description |
+|----------|-------------|
+| EWDG_DRV_GetInputPinAssertLogic() | Decode the current `EWDG_in` behavior. |
+| EWDG_DRV_DisableInterrupt() | Clear the watchdog interrupt-enable bit. |
+
+@section ewdg_driver_notes Important Notes
+
+@subsection ewdg_driver_notes_clock Clocks and Pins Are External Responsibilities
+The driver assumes the EWDG peripheral clock and external watchdog pins have
+already been configured. It does not call the clock manager or the PORT driver.
+
+@subsection ewdg_driver_notes_once Startup Is Intended to Happen Once Per Reset
+If the hardware already reports the EWDG as enabled, EWDG_DRV_Init() returns
+`STATUS_ERROR` and leaves the instance unchanged.
+
+@subsection ewdg_driver_notes_window Refresh Timing Must Match the Programmed Window
+The driver only validates the compare values during startup. It does not read
+the running counter before each refresh, so the application must schedule
+EWDG_DRV_Refresh() correctly.
+
+@subsection ewdg_driver_notes_irq Shared Interrupt Routing
+The EWDG interrupt shares the watchdog interrupt vector on supported devices.
+The application must install and enable the IRQ handler explicitly.
+
+@subsection ewdg_driver_notes_mask Interrupt Masking Scope
+EWDG_DRV_DisableInterrupt() only clears the interrupt-enable bit. It does not
+deinitialize the module, change the input-pin mode, or clear external safety
+outputs.
+
+@section ewdg_driver_integration Integration Guide
+
+@subsection ewdg_driver_integration_units Compilation Units
+Compile the following file into the application:
+
+@verbatim
+${SDK_PATH}/platform/drivers/src/ewdg/ewdg_driver.c
+@endverbatim
+
+@subsection ewdg_driver_integration_include Include Path
+Add the driver include directory to the toolchain include path:
+
+@verbatim
+${SDK_PATH}/platform/drivers/inc/
+@endverbatim
+
+@subsection ewdg_driver_integration_symbols Compile Symbols
+No special compile symbols are required beyond the active device selection.
+
+@subsection ewdg_driver_integration_deps Dependencies
+The public driver depends on `device_registers.h`, `status.h`, and
+`interrupt_manager.h`. The inline hardware access layer is pulled in through
+`ewdg_hw_access.h`.
 */

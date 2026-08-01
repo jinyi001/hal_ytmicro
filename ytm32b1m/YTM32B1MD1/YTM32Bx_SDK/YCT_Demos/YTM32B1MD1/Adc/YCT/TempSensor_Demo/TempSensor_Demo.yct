@@ -254,6 +254,7 @@
             "ovrunIntEnable": false
           },
           "adcCompareCnt": 1,
+          "compIntEnable": false,
           "compareConfig": [
             {
               "resolution": "ADC_RESOLUTION_12BIT",
@@ -262,7 +263,6 @@
               "compHigh": 4095,
               "compLow": 0,
               "comWdchIndex": 0,
-              "compIntEnable": false,
               "effectiveMode": "ADC_AWG_EFFECTIVE_OUTSIDE"
             },
             {
@@ -272,7 +272,6 @@
               "compHigh": 4095,
               "compLow": 0,
               "comWdchIndex": 0,
-              "compIntEnable": false,
               "effectiveMode": "ADC_AWG_EFFECTIVE_OUTSIDE"
             },
             {
@@ -282,7 +281,6 @@
               "compHigh": 4095,
               "compLow": 0,
               "comWdchIndex": 0,
-              "compIntEnable": false,
               "effectiveMode": "ADC_AWG_EFFECTIVE_OUTSIDE"
             },
             {
@@ -292,7 +290,6 @@
               "compHigh": 4095,
               "compLow": 0,
               "comWdchIndex": 0,
-              "compIntEnable": false,
               "effectiveMode": "ADC_AWG_EFFECTIVE_OUTSIDE"
             }
           ]
@@ -1075,6 +1072,7 @@
         "sdkVer": "dev",
         "useFreeRtos": false,
         "useSecureBoot": false,
+        "enableHFReset": true,
         "stack_top": "STACK_end",
         "vector_ram": "IVT_RAM_start",
         "vector_flash_region": ".isr_vector",

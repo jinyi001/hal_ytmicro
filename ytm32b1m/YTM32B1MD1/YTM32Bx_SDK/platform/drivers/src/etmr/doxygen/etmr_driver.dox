@@ -1,33 +1,65 @@
 /*!
-   @defgroup etmr eTMR (eTMR)
-   @details
-   @brief eTMR Peripheral Driver.
+@defgroup etmr
+@ingroup mod_timer eTMR (Enhanced Timer)
+@details
+@brief eTMR Peripheral Driver.
 
-   ## Hardware background ##
-   The eTMR of the YTM32B1L is based on a 16 bits counter and supports: input capture, output compare, PWM and some instances
-   include quadrature decoder.
-   The main features are:
+## Overview
 
-   - eTMR source clock is selectable (Source clock can be the system clock, the fixed frequency clock, or an external clock)
+The eTMR (Enhanced Timer) module is a versatile timer/counter peripheral
+supporting multiple operating modes: PWM, Input Capture, Output Compare,
+Timer/Counter, and Quadrature Decoder.
 
-   - Prescaler: 1, 2, 4, 8, 16, 32, 64, 128
+## Hardware Features
 
-   - 16 bit counter (up and up-down counting)
+- Configurable clock source (internal, external, or IPC clock)
+- Prescaler: 1, 2, 4, 8, 16, 32, 64, 128
+- 16-bit counter with up-counting and center-aligned modes
+- Up to 8 independent channels per instance
+- PWM mode with complementary outputs, dead-time insertion, and fault protection
+- Input Capture mode with edge detection, pulse-width and period measurement
+- Output Compare mode with set, clear, or toggle on match
+- Quadrature Decoder mode with input filtering and direction detection
+- Register synchronization with software/hardware triggers
+- Global time-base support for multi-instance synchronization
+- Up to 4 fault inputs for global fault control
 
-   - Each channel can be configured for input capture, output compare, or PWM mode.
+## Sub-modules
 
-   - Input Capture mode (single edge, dual edge or measure period/duty cycle)
+| Sub-module | Group | Description |
+|---|---|---|
+| Common | @ref etmr_common | Initialization, counter control, sync, interrupt, and status |
+| PWM | @ref etmr_pwm_driver | PWM channel initialization, duty-cycle and period updates |
+| IC | @ref etmr_ic_driver | Input capture with edge detection and measurement |
+| OC | @ref etmr_oc_driver | Output compare channel configuration and match updates |
+| MC | @ref etmr_mc_driver | Timer/counter mode with start/stop and period control |
+| QD | @ref etmr_qd_driver | Quadrature decoder mode with direction and position |
 
-   - Output Compare mode (set, cleared or toggle on match)
+## Integration Guide
 
-   - All channels can be configured for center-aligned PWM mode.
+### Compilation Units
 
-   - Each pair of channels can be combined to generate a PWM signal with independent control of both edges of PWM signal and with dead-time insertion.
+The following files need to be compiled in the project:
+@verbatim
+${SDK_PATH}/platform/drivers/src/etmr/etmr_common.c
+${SDK_PATH}/platform/drivers/src/etmr/etmr_hw_access.c
+${SDK_PATH}/platform/drivers/src/etmr/etmr_pwm_driver.c
+${SDK_PATH}/platform/drivers/src/etmr/etmr_ic_driver.c
+${SDK_PATH}/platform/drivers/src/etmr/etmr_oc_driver.c
+${SDK_PATH}/platform/drivers/src/etmr/etmr_mc_driver.c
+${SDK_PATH}/platform/drivers/src/etmr/etmr_qd_driver.c
+@endverbatim
 
-   - Up to 4 fault inputs for global fault control
+### Include Paths
 
-   - Dual edge capture for pulse and period width measurement
+@verbatim
+${SDK_PATH}/platform/drivers/inc/etmr/
+${SDK_PATH}/platform/drivers/src/etmr/
+@endverbatim
 
-   - Quadrature decoder with input filters, relative position counting, and interrupt on position count or capture of position count on external event.
+### Dependencies
+
+- @ref clock_manager — Required for enabling the eTMR peripheral clock.
+- @ref interrupt_manager — Required for channel and fault interrupt handling.
 
 */

@@ -8,6 +8,12 @@
 /*!
  * @file etmr_ic_driver.h
  * @version 1.4.1
+ *
+ * @brief eTMR Input Capture Driver — public API declarations and data types.
+ *
+ * This header declares the input capture (IC) mode API for the eTMR
+ * peripheral, including edge detection, pulse-width measurement,
+ * period measurement, and optional combination capture mode.
  */
 
 #ifndef eTMR_IC_DRIVER_H
@@ -19,11 +25,18 @@
  * Definitions
  ******************************************************************************/
 
+/*!
+ * @name IC Type Definitions
+ * @{
+ */
+
 #if FEATURE_eTMR_HAS_COMBINATION_CAPTURE
 /*!
- * @brief eTMR input capture combination source
+ * @brief Input capture combination source selection.
  *
- * Implements : etmr_comb_src_t_Class
+ * Determines which channel of a pair provides the combination
+ * capture trigger.
+ *
  */
 typedef enum
 {
@@ -32,9 +45,12 @@ typedef enum
 } etmr_comb_src_t;
 
 /*!
- * @brief eTMR input capture combination parameters
+ * @brief Input capture combination pair parameters.
  *
- * Implements : etmr_ic_ch_pair_param_t_Class
+ * Configures a channel pair for combination capture mode, where
+ * two adjacent channels share a single input with separate edge
+ * detection.
+ *
  */
 typedef struct
 {
@@ -45,9 +61,11 @@ typedef struct
 #endif
 
 /*!
- * @brief eTMR driver Input capture parameters for each channel
+ * @brief Per-channel input capture configuration.
  *
- * Implements : etmr_ic_ch_param_t_Class
+ * Specifies the capture edge, measurement type, input filter settings,
+ * interrupt/DMA enables, and user callback for a single IC channel.
+ *
  */
 typedef struct
 {
@@ -67,9 +85,11 @@ typedef struct
 } etmr_ic_ch_param_t;
 
 /*!
- * @brief eTMR driver input capture parameters
+ * @brief Overall input capture configuration.
  *
- * Implements : etmr_ic_param_t_Class
+ * Groups the number of channels, counter period, per-channel configs,
+ * and optional combination-capture pair configs.
+ *
  */
 typedef struct
 {
@@ -82,6 +102,8 @@ typedef struct
 #endif
 } etmr_ic_param_t;
 
+/*! @} */
+
 /*******************************************************************************
  * API
  ******************************************************************************/
@@ -89,6 +111,11 @@ typedef struct
 #if defined(__cplusplus)
 extern "C" {
 #endif
+
+/*!
+ * @name IRQ Handlers
+ * @{
+ */
 
 #if defined(CPU_YTM32B1LE0) || defined(CPU_YTM32B1LE1) || defined(CPU_YTM32Z1LS0)
 
@@ -137,118 +164,147 @@ void eTMR5_Ch6_Ch7_IRQHandler(void);
 
 #endif /* CPU_<device> */
 
+/*! @} */
+
 /*!
- * @brief This function initialize the channel in the Input Capture mode
+ * @name IC Initialization
+ * @{
+ */
+
+/*!
+ * @brief Initialize the eTMR channels in input capture mode.
+ *
+ * Configures edge detection, input filters, interrupts/DMA, and
+ * optional combination capture for each specified channel.
  *
  * @param[in] instance The eTMR peripheral instance number.
- * @param[in] param Configuration of the input capture channel.
- * @return status
- *        - STATUS_SUCCESS : Completed successfully.
- *        - STATUS_ERROR : Error occurred.
+ * @param[in] param    Pointer to the input capture configuration.
+ * @return Operation status.
+ * @retval STATUS_SUCCESS Completed successfully.
+ * @retval STATUS_ERROR   Error occurred.
  */
 status_t eTMR_DRV_InitInputCapture(uint32_t instance, const etmr_ic_param_t *param);
 
 /*!
- * @brief This function de-initialize input capture mode
+ * @brief De-initialize input capture mode.
  *
+ * Disables capture channels, clears input filters, and disables
+ * channel interrupts.
  *
  * @param[in] instance The eTMR peripheral instance number.
- * @param[in] param Configuration of the input capture mode.
- * @return status
- *        - STATUS_SUCCESS : Completed successfully.
- *        - STATUS_ERROR : Error occurred.
+ * @param[in] param    Pointer to the input capture configuration
+ *                     (used to identify which channels to de-init).
+ * @return Operation status.
+ * @retval STATUS_SUCCESS Completed successfully.
+ * @retval STATUS_ERROR   Error occurred.
  */
 status_t eTMR_DRV_DeinitInputCapture(uint32_t instance, const etmr_ic_param_t *param);
 
+/*! @} */
+
 /*!
- * @brief This function is used to get the complete state.
+ * @name Measurement Query
+ * @{
+ */
+
+/*!
+ * @brief Check whether an input capture measurement is complete.
  *
  * @param[in] instance The eTMR peripheral instance number.
- * @param[in] channel  The eTMR channel
- *
- * @return state   Input capture complete state.
+ * @param[in] channel  The eTMR channel index.
+ * @return true if capture is complete, false otherwise.
  */
 bool eTMR_DRV_GetInputCaptureComplete(uint32_t instance, uint8_t channel);
 
 /*!
- * @brief This function is used to clear the complete state.
+ * @brief Clear the input capture complete flag.
  *
  * @param[in] instance The eTMR peripheral instance number.
- * @param[in] channel  The eTMR channel
- *
- * @return state
+ * @param[in] channel  The eTMR channel index.
+ * @return Operation status.
  */
 status_t eTMR_DRV_ClearInputCaptureComplete(uint32_t instance, uint8_t channel);
 
 /*!
- * @brief This function is used to get the input capture measurement period.
+ * @brief Get the measured input signal period.
  *
  * @param[in] instance The eTMR peripheral instance number.
- * @param[in] channel  The eTMR channel
- *
- * @return value   The input capture measurement period.
+ * @param[in] channel  The eTMR channel index.
+ * @return The measured period in timer ticks.
  */
 uint32_t eTMR_DRV_GetInputCaptureMeasurementPeriod(uint32_t instance, uint8_t channel);
 
 /*!
- * @brief This function is used to get the positive pulse count.
+ * @brief Get the positive pulse width count.
  *
  * @param[in] instance The eTMR peripheral instance number.
- * @param[in] channel  The eTMR channel
- *
- * @return value   The positive pulse count value.
+ * @param[in] channel  The eTMR channel index.
+ * @return The positive pulse count value in timer ticks.
  */
 uint32_t eTMR_DRV_GetInputCapturePositivePulseCount(uint32_t instance, uint8_t channel);
 
 /*!
- * @brief This function is used to get the negative pulse count.
+ * @brief Get the negative pulse width count.
  *
  * @param[in] instance The eTMR peripheral instance number.
- * @param[in] channel  The eTMR channel
- *
- * @return value   The negative pulse count value.
+ * @param[in] channel  The eTMR channel index.
+ * @return The negative pulse count value in timer ticks.
  */
 uint32_t eTMR_DRV_GetInputCaptureNegativePulseCount(uint32_t instance, uint8_t channel);
 
 /*!
- * @brief This function is used to get the CVAL value.
+ * @brief Get the raw capture value (CVAL register).
  *
  * @param[in] instance The eTMR peripheral instance number.
- * @param[in] channel  The eTMR channel
- *
- * @return value   The CVAL value.
+ * @param[in] channel  The eTMR channel index.
+ * @return The captured counter value.
  */
 uint32_t eTMR_DRV_GetInputCaptureValue(uint32_t instance, uint8_t channel);
 
+/*! @} */
+
 /*!
- * @brief Input capture handler
+ * @name Capture Handler
+ * @{
+ */
+
+/*!
+ * @brief Input capture interrupt handler (software capture).
  *
- * This function is used to calculate measurement for input capture.
+ * Called from the channel ISR to process edge events and calculate
+ * period/pulse-width measurements using software logic.
  *
- * @param[in] instance  The input capture instance number.
- * @param[in] channel   The channel number.
+ * @param[in] instance The eTMR peripheral instance number.
+ * @param[in] channel  The channel that triggered the interrupt.
  */
 void eTMR_DRV_InputCaptureHandler(uint32_t instance, uint8_t channel);
 
 #if FEATURE_eTMR_HAS_HARDWARE_CAPTURE
 /*!
- * @brief    Input capture handler through hardware process way
- * @details  Positive pulse and Negative pulse both obtained by hardware
- *           and do not need to use eTMR_DRV_CalculateChannelCaptureValue function.
- * 
- * @param[in] instance  The input capture instance number
- * @param[in] channel   The channel number
+ * @brief Input capture interrupt handler (hardware capture).
+ *
+ * Similar to eTMR_DRV_InputCaptureHandler but uses hardware-measured
+ * positive/negative pulse-width registers, eliminating the need for
+ * the eTMR_DRV_CalculateChannelCaptureValue function.
+ *
+ * @param[in] instance The eTMR peripheral instance number.
+ * @param[in] channel  The channel that triggered the interrupt.
  */
 void eTMR_DRV_InputCaptureHardwareHandler(uint32_t instance, uint8_t channel);
 #endif
 
 /*!
- * @brief This function is used to calculate period, positive pulse or negative pulse count for each channel.
+ * @brief Calculate period and pulse-width measurements for a channel.
+ *
+ * Post-processes captured edge timestamps to derive the period,
+ * positive pulse count, and negative pulse count values.
  *
  * @param[in] instance The eTMR peripheral instance number.
- * @param[in] channel  The eTMR channel
+ * @param[in] channel  The channel to calculate measurements for.
  */
 void eTMR_DRV_CalculateChannelCaptureValue(uint32_t instance, uint8_t channel);
+
+/*! @} */
 
 #if defined(__cplusplus)
 }

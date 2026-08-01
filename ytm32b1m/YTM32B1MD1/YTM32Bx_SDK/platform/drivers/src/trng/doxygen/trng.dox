@@ -1,66 +1,289 @@
 /*!
-@defgroup trng True Random Number Generator (TRNG)
-@brief The YTMicro SDK provides Peripheral Drivers for the True Random Number Generator module. @details The standalone true random number generator is a a hardware accelerator module that generates a 256-bit entropy as needed by an entropy-consuming module or by other post-processing functions. .
+@defgroup trng
+@ingroup mod_security True Random Number Generator (TRNG)
+@brief Hardware entropy source module for the YTMicro SDK.
 
-## The TRNG supports features:
+@details
+The TRNG module provides a hardware entropy source that samples an internal
+ring oscillator, applies built-in statistical checks, and exposes the resulting
+entropy words through the ENT register bank. The SDK driver offers a compact
+polling workflow for initializing the peripheral, waiting for a validated
+entropy block, and reading the generated data.
 
-- Generate a 256-bit entropy
-- Monobit limit test
-- Long run test
-- 1 ring OSC with clock checker
-- 3 interrupt source
+@section trng_features Key Features
+- Generates entropy blocks through the ENT[] register bank.
+- Supports device-dependent entropy block sizes of four or eight 32-bit words.
+- Performs built-in long-run, monobit, and frequency-count monitoring.
+- Supports configurable entropy delay, sample size, retry count, and
+  statistical thresholds through the low-level configuration shadow.
+- Supports optional system-clock forcing and divided TRNG clock output.
+- Exposes status conditions for entropy-valid, frequency-count-valid,
+  frequency-count-fail, and hardware-error handling.
 
-## Integration guideline
+@section trng_standards Supported Modes
 
-The following files need to be compiled in the project:
+The TRNG driver supports the following operating modes and usage styles:
 
-```sh
-${SDK_PATH}\platform\drivers\src\trng\trng_driver.c
-```
+| Mode / Usage Style         | Key Setting or API Path                  | Description                                                   |
+|----------------------------|------------------------------------------|---------------------------------------------------------------|
+| Default polling mode       | TRNG_DRV_Init() + TRNG_DRV_GetStatus()   | Recommended flow for waiting until a validated block is ready.|
+| Entropy readout            | TRNG_DRV_Get_Ent()                       | Copies the ENT register bank into a caller-supplied buffer.   |
+| Low-level custom setup     | trngCfgSetting + TRNG_Set_*()            | Allows manual threshold, clock, and interrupt programming.    |
+| Error/status servicing     | TRNG_GetStatusFlag(), TRNG_ClearStatusFlag() | Inspects and clears low-level status conditions.          |
 
-## Include path
+@subsection trng_modes_entropy Device-Dependent Entropy Word Count
+| Condition                                                     | ENT Words Read by TRNG_DRV_Get_Ent() |
+|---------------------------------------------------------------|--------------------------------------|
+| FEATURE_TRNG_ENTROPY_COUNT_OPTIMIZE not defined or not equal 1 | 8 words                              |
+| FEATURE_TRNG_ENTROPY_COUNT_OPTIMIZE == 1                      | 4 words                              |
 
-The following paths need to be added to the include path of the toolchain:
+@section trng_arch Module Architecture
 
-```sh
-${SDK_PATH}\platform\drivers\inc\
-```
+The TRNG module is organized in a two-layer architecture:
 
-## Preprocessor symbols
+@verbatim
+┌──────────────────────────────────────────────┐
+│              Application Code                │
+│        (calls TRNG_DRV_* functions)          │
+├──────────────────────────────────────────────┤
+│        TRNG Driver Layer (trng_driver.h/c)   │
+│  ● Instance-based polling API                │
+│  ● Starts entropy generation and reads ENT[] │
+├──────────────────────────────────────────────┤
+│   TRNG HW Access Layer (trng_hw_access.h/c)  │
+│  ● Direct register programming helpers       │
+│  ● Status/entropy register accessors         │
+│  ● Shared configuration shadow               │
+├──────────────────────────────────────────────┤
+│            TRNG Peripheral Hardware          │
+│   (CTRL, STAT, SDCTL, FRQ*, SCM*, ENT[])     │
+└──────────────────────────────────────────────┘
+@endverbatim
 
-No special symbols are required for this component
+@subsection trng_arch_driver Driver Layer (trng_driver.h)
+Application code typically uses the TRNG driver layer only. The public driver
+accepts a zero-based instance index, resets the TRNG, loads the internal
+default configuration, applies the requested entropy delay, and starts a new
+entropy-generation cycle.
 
-## Dependencies
+@subsection trng_arch_hw HW Access Layer (trng_hw_access.h)
+The hardware-access layer exposes the shared `trngCfgSetting` configuration
+shadow together with helper functions for programming protected registers,
+reading entropy words, and checking or clearing status conditions. Use this
+layer only when the default polling driver is not sufficient.
 
-- \ref clock_manager
+@section trng_config Configuration Parameters
 
-## TRNG Driver Operation
+@subsection trng_config_struct trng_config_setting_t Fields
+| Field                   | Type            | Description                                                | Default Value from TRNG_DRV_GetDefaultConfig() |
+|-------------------------|-----------------|------------------------------------------------------------|------------------------------------------------|
+| lrunMax                 | uint32_t        | Long-run test threshold.                                   | 0x22                                           |
+| retryCnt                | uint8_t         | Retry count before reporting an error.                     | 0x0F                                           |
+| forceSystemClockEn      | bool            | Use the system clock instead of the ring oscillator.       | false                                          |
+| clkOutputEn             | bool            | Output the divided TRNG clock for debug observation.       | false                                          |
+| oscDiv                  | trng_osc_div_t  | Divider applied to the ring oscillator.                    | TRNG_OSC_NO_DEVIDER                            |
+| frqCntInterruptEn       | bool            | Enable frequency-count-fail interrupt generation.          | false                                          |
+| entroptValidInterruptEn | bool            | Enable entropy-valid interrupt generation.                 | false                                          |
+| hwErrInterruptEn        | bool            | Enable hardware-error interrupt generation.                | false                                          |
+| sampleSize              | uint32_t        | Number of entropy samples collected per generation cycle.  | 0x200                                          |
+| entropyDelay            | uint32_t        | Delay inserted between entropy samples.                    | 0x1A0 (replaced by TRNG_DRV_Init() parameter)  |
+| frqMin                  | uint32_t        | Minimum accepted frequency-count value.                    | 0x00000010                                     |
+| frqMax                  | uint32_t        | Maximum accepted frequency-count value.                    | 0x003FFFFF                                     |
+| monobitRange            | uint32_t        | Monobit range threshold.                                   | 0x2F0                                          |
+| monobitMax              | uint32_t        | Monobit maximum threshold.                                 | 0x300                                          |
+| pEntValue               | uint32_t *      | Optional pointer reserved for entropy-buffer management.   | NULL                                           |
 
-This is example code to configure the TRNG driver:
+@subsection trng_config_features Device Feature Macros
+| Macro                               | Description                                                          |
+|-------------------------------------|----------------------------------------------------------------------|
+| TRNG_INSTANCE_COUNT                 | Number of TRNG instances supported by the device.                    |
+| TRNG_ENT_COUNT                      | Number of entropy words implemented in the device register bank.      |
+| FEATURE_TRNG_ENTROPY_COUNT_OPTIMIZE | Selects the reduced entropy-read path used by TRNG_DRV_Get_Ent().    |
+| TRNG_TRNG_INT_IRQS_CH_COUNT         | Number of interrupt channels exposed by the TRNG instance.           |
 
-```c
-#define UNITY_TRNG (0U)
+@section trng_usage Usage Patterns
 
-int main(void)
+@subsection trng_usage_basic Pattern 1: Initialize, Poll, and Read One Entropy Block
+Initialize the TRNG with an entropy delay, wait until a validated block is
+ready, and copy the entropy words into a software buffer.
+
+@code{.c}
+#define INST_TRNG (0U)
+
+#if defined(FEATURE_TRNG_ENTROPY_COUNT_OPTIMIZE) && (FEATURE_TRNG_ENTROPY_COUNT_OPTIMIZE == 1U)
+#define TRNG_WORD_COUNT (4U)
+#else
+#define TRNG_WORD_COUNT (8U)
+#endif
+
+uint32_t entropy[TRNG_WORD_COUNT] = {0U};
+status_t status;
+
+TRNG_DRV_Init(INST_TRNG, 0x0A00U);
+
+do
 {
-    uint32_t value[8] = {0};
-    
-    /* Initialize clocks */
-    ...
+    status = TRNG_DRV_GetStatus(INST_TRNG);
+} while (status == STATUS_BUSY);
 
-    /* Initialize trng */
-    TRNG_DRV_Init(UNITY_TRNG,0x0A00);
-
-    /* Wait until TRNG generation is complete */
-    while(STATUS_BUSY == TRNG_DRV_GetStatus(UNITY_TRNG));
-
-    /* Gets a set of random numbers and stores trng in a value array*/
-    if(STATUS_SUCCESS == TRNG_DRV_GetStatus(UNITY_TRNG))
-    {
-        TRNG_DRV_Get_Ent(UNITY_TRNG,&value[0]);
-    }
-
-    return 0;
+if (status == STATUS_SUCCESS)
+{
+    TRNG_DRV_Get_Ent(INST_TRNG, entropy);
 }
-```
+@endcode
+
+@subsection trng_usage_stream Pattern 2: Read Consecutive Entropy Blocks
+Reading the highest ENT word clears the current block and starts the next
+generation cycle. Poll again before reading the next block.
+
+@code{.c}
+#define INST_TRNG (0U)
+
+#if defined(FEATURE_TRNG_ENTROPY_COUNT_OPTIMIZE) && (FEATURE_TRNG_ENTROPY_COUNT_OPTIMIZE == 1U)
+#define TRNG_WORD_COUNT (4U)
+#else
+#define TRNG_WORD_COUNT (8U)
+#endif
+
+uint32_t firstBlock[TRNG_WORD_COUNT] = {0U};
+uint32_t secondBlock[TRNG_WORD_COUNT] = {0U};
+
+TRNG_DRV_Init(INST_TRNG, 0x0800U);
+
+while (TRNG_DRV_GetStatus(INST_TRNG) == STATUS_BUSY)
+{
+}
+if (TRNG_DRV_GetStatus(INST_TRNG) == STATUS_SUCCESS)
+{
+    TRNG_DRV_Get_Ent(INST_TRNG, firstBlock);
+}
+
+while (TRNG_DRV_GetStatus(INST_TRNG) == STATUS_BUSY)
+{
+}
+if (TRNG_DRV_GetStatus(INST_TRNG) == STATUS_SUCCESS)
+{
+    TRNG_DRV_Get_Ent(INST_TRNG, secondBlock);
+}
+@endcode
+
+@subsection trng_usage_lowlevel Pattern 3: Inspect Low-Level Status and Test Results
+The low-level helper APIs can be used to inspect validation counters and clear
+status conditions after an error or test failure.
+
+@code{.c}
+#define INST_TRNG (0U)
+
+TRNG_Type *const trngBaseTable[TRNG_INSTANCE_COUNT] = TRNG_BASE_PTRS;
+TRNG_Type *base = trngBaseTable[INST_TRNG];
+uint32_t frequencyCount;
+uint32_t monobitCount;
+
+if (TRNG_GetStatusFlag(base, TRNG_FREQUENCY_COUNT_FAIL))
+{
+    frequencyCount = TRNG_Get_FRQCNT(base);
+    monobitCount = TRNG_Get_SCMC(base);
+    TRNG_ClearStatusFlag(base, TRNG_ALL_STATUS);
+}
+@endcode
+
+@section trng_api API Quick Reference
+
+@subsection trng_api_init Initialization & De-initialization
+| Function              | Description                                                  |
+|-----------------------|--------------------------------------------------------------|
+| TRNG_DRV_Init()       | Reset the TRNG, load default configuration, and enable it.   |
+| TRNG_DRV_DeInit()     | Restore the TRNG register block to its default state.        |
+
+@subsection trng_api_entropy Entropy Data Access
+| Function              | Description                                                  |
+|-----------------------|--------------------------------------------------------------|
+| TRNG_DRV_Get_Ent()    | Copy the current entropy block from the ENT register bank.   |
+
+@subsection trng_api_status Status Query
+| Function              | Description                                                  |
+|-----------------------|--------------------------------------------------------------|
+| TRNG_DRV_GetStatus()  | Report whether entropy generation is busy, ready, or failed. |
+
+@subsection trng_api_hwctrl Module Control
+| Function              | Description                                                  |
+|-----------------------|--------------------------------------------------------------|
+| TRNG_Enable()         | Enable the TRNG module.                                      |
+| TRNG_HW_Init()        | Restore the TRNG registers to their reset values.            |
+| TRNG_Disable()        | Disable the TRNG module.                                     |
+| TRNG_SWReset()        | Request a software reset through the CTRL register.          |
+
+@subsection trng_api_hwcfg Configuration Register Programming
+| Function              | Description                                                  |
+|-----------------------|--------------------------------------------------------------|
+| TRNG_Set_CTRL()       | Program CTRL from the shared configuration shadow.           |
+| TRNG_Set_SDCTL()      | Program SDCTL from the shared configuration shadow.          |
+| TRNG_Set_FRQMIN()     | Program the minimum frequency-count threshold.               |
+| TRNG_Set_FRQMAX()     | Program the maximum frequency-count threshold.               |
+| TRNG_Set_SCML()       | Program the monobit thresholds.                              |
+
+@subsection trng_api_hwdata Data & Status Access
+| Function                 | Description                                               |
+|--------------------------|-----------------------------------------------------------|
+| TRNG_Get_FRQCNT()        | Read the frequency-count result after validation.         |
+| TRNG_Get_SCMC()          | Read the monobit counter value.                           |
+| TRNG_Get_ENT()           | Read one entropy word from the ENT register bank.         |
+| TRNG_GetStatusFlag()     | Read one low-level TRNG status condition.                 |
+| TRNG_ClearStatusFlag()   | Clear one status condition or all writable status bits.   |
+
+@section trng_notes Important Notes
+
+@subsection trng_notes_clock Clock Dependency
+The TRNG peripheral clock must be enabled before calling TRNG_DRV_Init() or
+any low-level TRNG helper. Use @ref clock_manager to configure and enable the
+device clock tree.
+
+@subsection trng_notes_delay Entropy Delay Range
+TRNG_DRV_Init() only applies the requested entropy delay when
+`entroyDelay <= 0xFFFFU`. Larger values are ignored silently because the API
+returns no status. Passing an out-of-range value leaves the hardware
+unmodified.
+
+@subsection trng_notes_read Entropy Read Side Effect
+Reading the highest valid ENT register clears the current entropy block and
+starts the next generation cycle. Mixing partial low-level ENT reads with
+TRNG_DRV_Get_Ent() can cause the caller to lose part of a block.
+
+@subsection trng_notes_device Device Variations
+Devices that define `FEATURE_TRNG_ENTROPY_COUNT_OPTIMIZE == 1` use the reduced
+entropy-read path in TRNG_DRV_Get_Ent(), which updates only the first four
+destination words. Size entropy buffers according to the device variant, or
+use `TRNG_ENT_COUNT` / `FEATURE_TRNG_ENTROPY_COUNT_OPTIMIZE` to select the
+buffer length at compile time.
+
+@subsection trng_notes_defaults Driver Configuration Scope
+The public driver API exposes only the entropy-delay parameter. All other TRNG
+thresholds, retry counts, clock-selection fields, and interrupt enables come
+from the internal defaults loaded by TRNG_DRV_GetDefaultConfig(). Use the
+hardware-access layer if custom low-level configuration is required.
+
+@section trng_integration Integration Guide
+
+@subsection trng_integration_files Compilation Units
+The following source files must be added to the project build:
+@verbatim
+${SDK_PATH}/platform/drivers/src/trng/trng_driver.c
+${SDK_PATH}/platform/drivers/src/trng/trng_hw_access.c
+@endverbatim
+
+@subsection trng_integration_include Include Paths
+Add the following directories to the toolchain include path:
+@verbatim
+${SDK_PATH}/platform/drivers/inc/
+${SDK_PATH}/platform/drivers/src/trng/
+@endverbatim
+
+@subsection trng_integration_symbols Compile Symbols
+No special compile-time symbols are required for this module. Device feature
+macros such as `FEATURE_TRNG_ENTROPY_COUNT_OPTIMIZE` and `TRNG_ENT_COUNT` are
+provided by the selected device header.
+
+@subsection trng_integration_deps Dependencies
+- @ref clock_manager - Required for TRNG clock enable and clock-tree setup.
+
 */

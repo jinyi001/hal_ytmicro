@@ -14,55 +14,54 @@
 #include "rcu_driver.h"
 #include "rcu_hw_access.h"
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RCU_DRV_Init
- * Description   : Initialize RCU mode with user config
- *
- *END**************************************************************************/
+/*!
+ * @brief Apply the caller-provided reset pin configuration.
+ */
 void RCU_DRV_Init(const rcu_config_t *rcuUserCfg)
 {
     DEV_ASSERT(rcuUserCfg != NULL);
 
-    /* Enable/disable reset pin filter */
+    /* Apply the external reset pin filter enable state. */
     if (rcuUserCfg->pinFilterEnable)
     {
         RCU_EnablePinFilter(RCU);
-    } else
+    }
+    else
     {
         RCU_DisablePinFilter(RCU);
     }
 
-    /* Enable/disable reset pin filter in deepsleep mode */
+    /* Apply the deep-sleep filter enable state. */
     if (rcuUserCfg->pinFilterEnableInDeepsleep)
     {
         RCU_EnablePinFilterInDeepsleep(RCU);
-    } else
+    }
+    else
     {
         RCU_DisablePinFilterInDeepsleep(RCU);
     }
 
-    /* Set filter count value */
+    /* Program the reset pin filter counter value. */
     RCU_SetPinFilterCount(RCU, rcuUserCfg->filterCount);
 
 #if defined(FEATURE_RCU_HAS_PIN_OUTPUT) && (FEATURE_RCU_HAS_PIN_OUTPUT == 1)
+    /* Update the optional reset pin output driver state. */
     RCU_SetPinOutput(RCU, rcuUserCfg->pinOutputEnable);
 #endif
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RCU_DRV_GetResetReason
- * Description   : Get mcu reset reason
- *
- *END**************************************************************************/
+/*!
+ * @brief Decode the latched reset reason from the RSSR register.
+ */
 rcu_reset_reason_t RCU_DRV_GetResetReason(void)
 {
     uint32_t resetReasonRawValue;
     rcu_reset_reason_t resetReason;
-    /* Get reset raw reason for register */
+
+    /* Read the raw reset-source flags captured by the RCU. */
     resetReasonRawValue = RCU_GetResetReasonRawValue(RCU);
-    /* Analyse reset reason */
+
+    /* Map single asserted RSSR bits to the public driver enumeration. */
     if (0U != resetReasonRawValue)
     {
         switch (resetReasonRawValue)
@@ -71,7 +70,7 @@ rcu_reset_reason_t RCU_DRV_GetResetReason(void)
         case RCU_RSSR_HVD_MASK:
             resetReason = RESET_REASON_HVD;
             break;
-#endif
+#endif /* defined(RCU_RSSR_HVD_MASK) */
         case RCU_RSSR_LPACK_MASK:
             resetReason = RESET_REASON_DEEPSLEEPACK;
             break;
@@ -86,7 +85,7 @@ rcu_reset_reason_t RCU_DRV_GetResetReason(void)
         case RCU_RSSR_WDG_MASK:
             resetReason = RESET_REASON_WDG;
             break;
-#endif
+#endif /* defined(NUMBER_OF_CORES) && (NUMBER_OF_CORES > 1U) */
         case RCU_RSSR_CMU_MASK:
             resetReason = RESET_REASON_CMU;
             break;
@@ -97,7 +96,7 @@ rcu_reset_reason_t RCU_DRV_GetResetReason(void)
         case RCU_RSSR_DBG_MASK:
             resetReason = RESET_REASON_DEBUG;
             break;
-#endif /* RCU_RSSR_DBG_MASK */
+#endif /* defined(RCU_RSSR_DBG_MASK) */
         case RCU_RSSR_SW_MASK:
             resetReason = RESET_REASON_SOFTWARE_RESET;
             break;
@@ -108,19 +107,19 @@ rcu_reset_reason_t RCU_DRV_GetResetReason(void)
         case RCU_RSSR_POR_BOR_MASK:
 #else
         case RCU_RSSR_POR_LVD_MASK:
-#endif /* YTM32B1L_SERIES */
+#endif /* defined(RCU_RSSR_POR_BOR_MASK) */
             resetReason = RESET_REASON_POR_LVD;
             break;
 #ifdef RCU_RSSR_FMU_FAIL_REACT_MASK
         case RCU_RSSR_FMU_FAIL_REACT_MASK:
             resetReason = RESET_REASON_FMU_FAIL_REACT;
             break;
-#endif
+#endif /* defined(RCU_RSSR_FMU_FAIL_REACT_MASK) */
 #ifdef RCU_RSSR_FMU_FUNC_MASK
         case RCU_RSSR_FMU_FUNC_MASK:
             resetReason = RESET_REASON_FMU;
             break;
-#endif
+#endif /* defined(RCU_RSSR_FMU_FUNC_MASK) */
         default:
             resetReason = RESET_REASON_MUTI_REASON;
             break;
@@ -128,23 +127,24 @@ rcu_reset_reason_t RCU_DRV_GetResetReason(void)
     }
     else
     {
+        /* Treat a cleared RSSR register as the POR/LVD baseline state. */
         resetReason = RESET_REASON_POR_LVD;
     }
 
     return resetReason;
 }
 
+/*!
+ * @brief Return the raw reset status register value.
+ */
 uint32_t RCU_DRV_GetResetReasonRawValue(void)
 {
     return RCU_GetResetReasonRawValue(RCU);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RCU_DRV_ClearResetReasonFlag
- * Description   : Clear mcu reset reason flag
- *
- *END**************************************************************************/
+/*!
+ * @brief Clear one or more latched reset reason flags.
+ */
 void RCU_DRV_ClearResetReasonFlag(rcu_reset_reason_t resetReason)
 {
     switch (resetReason)
@@ -153,7 +153,7 @@ void RCU_DRV_ClearResetReasonFlag(rcu_reset_reason_t resetReason)
     case RESET_REASON_HVD:
         RCU_ClearRSSRFlag(RCU, RCU_RSSR_HVD_MASK);
         break;
-#endif /* RCU_RSSR_HVD_MASK */
+#endif /* defined(RCU_RSSR_HVD_MASK) */
     case RESET_REASON_DEEPSLEEPACK:
         RCU_ClearRSSRFlag(RCU, RCU_RSSR_LPACK_MASK);
         break;
@@ -168,7 +168,7 @@ void RCU_DRV_ClearResetReasonFlag(rcu_reset_reason_t resetReason)
     case RESET_REASON_WDG:
         RCU_ClearRSSRFlag(RCU, RCU_RSSR_WDG_MASK);
         break;
-#endif /* FEATURE_SOC_HAS_MULTI_CORE */
+#endif /* defined(NUMBER_OF_CORES) && (NUMBER_OF_CORES > 1U) */
     case RESET_REASON_CMU:
         RCU_ClearRSSRFlag(RCU, RCU_RSSR_CMU_MASK);
         break;
@@ -179,7 +179,7 @@ void RCU_DRV_ClearResetReasonFlag(rcu_reset_reason_t resetReason)
     case RESET_REASON_DEBUG:
         RCU_ClearRSSRFlag(RCU, RCU_RSSR_DBG_MASK);
         break;
-#endif /* RCU_RSSR_DBG_MASK */
+#endif /* defined(RCU_RSSR_DBG_MASK) */
     case RESET_REASON_SOFTWARE_RESET:
         RCU_ClearRSSRFlag(RCU, RCU_RSSR_SW_MASK);
         break;
@@ -194,26 +194,27 @@ void RCU_DRV_ClearResetReasonFlag(rcu_reset_reason_t resetReason)
     case RESET_REASON_POR_LVD:
         RCU_ClearRSSRFlag(RCU, RCU_RSSR_POR_LVD_MASK);
         break;
-#endif /* YTM32B1L_SERIES */
+#endif /* defined(RCU_RSSR_POR_BOR_MASK) */
 #ifdef RCU_RSSR_FMU_FAIL_REACT_MASK
     case RESET_REASON_FMU_FAIL_REACT:
         RCU_ClearRSSRFlag(RCU, RCU_RSSR_FMU_FAIL_REACT_MASK);
         break;
-#endif /* RCU_RSSR_FMU_FAIL_REACT_MASK */
+#endif /* defined(RCU_RSSR_FMU_FAIL_REACT_MASK) */
 #ifdef RCU_RSSR_FMU_FUNC_MASK
     case RESET_REASON_FMU:
         RCU_ClearRSSRFlag(RCU, RCU_RSSR_FMU_FUNC_MASK);
         break;
-#endif /* RCU_RSSR_FMU_FUNC_MASK */
+#endif /* defined(RCU_RSSR_FMU_FUNC_MASK) */
     case RESET_REASON_MUTI_REASON:
+        /* Clear every reset-source flag that is currently latched. */
         RCU_ClearRSSRFlag(RCU, RCU->RSSR);
         break;
     default:
-        /* default */
+        /* Ignore unsupported or already-cleared reset reasons. */
         break;
     }
 }
 
 /*******************************************************************************
- * EOF
+ * End of file
  ******************************************************************************/

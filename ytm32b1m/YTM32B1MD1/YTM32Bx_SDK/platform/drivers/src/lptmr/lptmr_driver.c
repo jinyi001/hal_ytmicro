@@ -8,6 +8,8 @@
 /*!
  * @file lptmr_driver.c
  * @version 1.4.1
+ *
+ * @brief lpTMR Driver — implementation of the public `lpTMR_DRV_*` API.
  */
 
 #include "lptmr_driver.h"
@@ -17,8 +19,7 @@
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
-/* Takes into consideration that LPTMR compare events take place
- * when "the CNR equals the value of the CMR and increments" */
+/* The compare register represents one tick less than the effective timeout. */
 #define lpTMR_MAX_CMR_NTICKS (lpTMR_CMP_CMP_MASK + 1u)
 #define lpTMR_MAX_PRESCALER  (1u << lpTMR_PRS_PRES_WIDTH)
 
@@ -28,19 +29,22 @@
 
 /*! @cond DRIVER_INTERNAL_USE_ONLY */
 
-/* Table of base addresses for LPTMR instances */
+/*! @brief Base-address table for lpTMR instances. */
 static lpTMR_Type* const g_lptmrBase[lpTMR_INSTANCE_COUNT] = lpTMR_BASE_PTRS;
-/* Table to save LPTMR clock names as defined in clock manager. */
+/*! @brief Clock-manager name table for instances that use IPC clock lookup. */
 #if FEATURE_lpTMR_CLKSRC_SUPPORT_IPC
 static const clock_names_t s_lptmrClkNames[lpTMR_INSTANCE_COUNT] = lpTMR_CLOCK_NAMES;
 #endif /* FEATURE_lpTMR_CLKSRC_SUPPORT_IPC */
 
-/* lpTMR current clock frequency */
+/*! @brief Cached timer clock frequency used by the microsecond conversion helpers. */
 static uint32_t s_lptmrClkFreq;
 
 /*******************************************************************************
- * Private Functions
+ * Timer Conversion Helpers
  ******************************************************************************/
+/*!
+ * @brief Convert prescaler configuration fields to a power-of-two shift value.
+ */
 static inline uint8_t lptmr_cfg2p(
     const lptmr_prescaler_t prescval,
     const bool bypass
@@ -77,56 +81,9 @@ static bool lptmr_ChooseClkConfig(
     uint16_t* const ticks
     );
 
-/*TIMER MODE CONFIGURATION******************************************************
- *
- * Timer Mode - Prescaler settings calculations
- * --------------------------------------------
- *
- * Timer Mode configuration takes a period (timeout) value expressed in
- * micro-seconds. To convert this to LPTMR prescaler (and compare value)
- * settings, the closest match must be found.
- * For best precision, the lowest prescaler that allows the corresponding
- * compare value to fit in the 16-bit register will be chosen.
- *
- * Algorithm for choosing prescaler and compare values:
- * =============================================================================
- * In: tper_us (period in microseconds), fclk (input clock frequency in Hertz)
- * Out: nticks (timer ticks), p (prescaler coefficient, 2^p = prescaler value)
- * ---
- * 1) Compute nn = tper_us * fclk / 1000000
- * 2) for p = 0..16
- *  2.1) nticks = nn / 2^p
- *  2.2) if nticks < 0x10000
- *      2.2.1) STOP, found nticks and p
- * 3) nticks = 0xFFFF, p = 16
- * =============================================================================
- *
- * A few names used throughout the static functions affecting Timer mode:
- *  nn - total number of timer ticks (undivided, unprescaled) that is necessary
- *      for a particular timeout.
- *      nn = (tper_us * fclk) / 1000000 = nticks * npresc
- *
- *  tper_us - a period (or timeout) expressed in microsecond units. In most
- *      functions will be denoted as 'us' for microseconds.
- *
- *  nticks - number of timer ticks that is necessary for a particular timeout,
- *      after prescaling
- *
- *  npresc - prescaler value (1, 2, 4 ... 65536)
- *
- *  p - prescaler coefficient, 2^p = npresc
- *
- *  fclk - input clock frequency, in Hertz. In most function will be denoted as
- *      'clkfreq'.
- *END**************************************************************************/
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : lptmr_cfg2p
- * Description   : Transform prescaler settings (bypass on/off, prescaler value)
- *  to prescaler coefficient value (2's power), p.
- * Return: the value of p.
- *END**************************************************************************/
+/*!
+ * @brief Convert prescaler configuration fields to a power-of-two shift value.
+ */
 static inline uint8_t lptmr_cfg2p(
     const lptmr_prescaler_t prescval,
     const bool bypass
@@ -142,45 +99,24 @@ static inline uint8_t lptmr_cfg2p(
     return p;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : lptmr_us2nn
- * Description   : Transform microseconds to undivided (unprescaled) timer units,
- * nn.
- * Return: the value of nn.
- *END**************************************************************************/
+/*!
+ * @brief Convert a microsecond period to unprescaled timer ticks.
+ */
 static inline uint64_t lptmr_us2nn(
     const uint32_t clkfreq,
     const uint32_t us
     )
 {
-    /* Approximate the timeout in undivided (unprescaled) timer ticks.
-        - us is the timeout in microseconds (1/10^6 seconds)
-        - clkfreq is the frequency in Hertz
-        Operation:
-        nn = (us/1000000) * clkfreq
-        In C:
-        For better precision, first to the multiplication (us * clkfreq)
-        To overcome the truncation of the div operator in C, add half of the
-        denominator before the division. Hence:
-        nn = (us * clkfreq + 500000) / 1000000
-    */
-    /* There is no risk of overflow since us is 32-bit wide and clkfreq can be
-       a theoretical maximum of ~100 MHz (platform maximum), which is over the
-       maximum input of the LPTMR anyway
-     */
+    /* Round to the nearest input-clock tick when converting from microseconds. */
+    /* The 64-bit intermediate avoids precision loss for supported clock ranges. */
     uint64_t nn = (uint64_t)( (uint64_t)us * (uint64_t)clkfreq );
     nn = (nn + 500000u) / 1000000u;
     return nn;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : lptmr_compute_nticks
- * Description   : Compute total number of divided (prescaled) timer ticks,
- * nticks.
- * Return: the value of nticks.
- *END**************************************************************************/
+/*!
+ * @brief Apply the selected prescaler shift to an unprescaled tick count.
+ */
 static inline uint64_t lptmr_compute_nticks(
     uint64_t nn,
     uint8_t p
@@ -189,23 +125,15 @@ static inline uint64_t lptmr_compute_nticks(
     uint64_t npresc = (uint64_t) 1u << p;
     DEV_ASSERT(npresc != 0u);
 
-    /* integer division */
+    /* Divide with rounding to the nearest prescaled tick. */
     uint64_t nticks = ((nn + (npresc >> 1u)) / npresc);
 
     return nticks;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : nticks2compare_ticks
- * Description   : Transform the value of divided (prescaled) timer ticks, nticks
- * to a 16-bit value to be written to the hardware register. Cap or underflow
- * cause an error.
- * Return: the success state.
- *  - true: no underflow or overflow detected
- *  - false: value written was capped, underflow or overflow detected
- *
- *END**************************************************************************/
+/*!
+ * @brief Convert an effective tick count to the value expected by the compare register.
+ */
 static inline bool nticks2compare_ticks(
     uint64_t nticks,
     uint16_t* ticks
@@ -213,23 +141,22 @@ static inline bool nticks2compare_ticks(
 {
     bool success = true;
 
-    /* if nticks fits, write the value to ticks */
+    /* Accept values that fit in the 16-bit compare register domain. */
     if (nticks <= lpTMR_MAX_CMR_NTICKS)
     {
         if (nticks == 0u)
         {
-            /* timeout period (us) too low for prescaler settings */
+            /* The requested period is too short for the current prescaler choice. */
             *ticks = 0u;
             success = false;
         }
         else{
-            /* According to RM, the LPTMR compare events take place when "the CNR equals the value of the CMR and increments".
-             * The additional increment is compensated here by decrementing the calculated compare value with 1, before being written to CMR. */
+            /* Compensate for the extra increment described by the reference manual. */
             *ticks = (uint16_t)(nticks - 1u);
         }
     }
     else {
-        /* timeout period (us) too high for prescaler settings */
+        /* Saturate when the requested period exceeds the compare register range. */
         *ticks = lpTMR_CMP_CMP_MASK;
         success = false;
     }
@@ -237,16 +164,9 @@ static inline bool nticks2compare_ticks(
     return success;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : lptmr_Ticks2Us
- * Description   : Transform timer ticks to microseconds using the given
- * prescaler settings. Clock frequency must be valid (different from 0).
- * Possible return values:
- * - true: conversion success
- * - false: conversion failed, result did not fit in 32-bit.
- *
- *END**************************************************************************/
+/*!
+ * @brief Convert the active compare setting from ticks back to microseconds.
+ */
 static bool lptmr_Ticks2Us(
     const uint32_t clkfreq,
     const lptmr_prescaler_t pval,
@@ -275,18 +195,9 @@ static bool lptmr_Ticks2Us(
     return success;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : lptmr_ChooseClkConfig
- * Description   : Choose clocking configuration (prescaler value, timer ticks)
- * for the desired timeout period, given in microseconds. Input clock frequency,
- * clkfreq, must be greater than 0.
- * Possible return values:
- * - true: configuration found
- * - false: configuration mismatch, desired timeout period is too small or too
- * big for the clock settings.
- *
- *END**************************************************************************/
+/*!
+ * @brief Choose the best prescaler and compare value for a microsecond period.
+ */
 static bool lptmr_ChooseClkConfig(
     const uint32_t clkfreq,
     const uint32_t us,
@@ -301,30 +212,30 @@ static bool lptmr_ChooseClkConfig(
 
     uint64_t nn = lptmr_us2nn(clkfreq, us);
 
-    /* Find the lowest prescaler value that allows the compare value in 16-bits */
+    /* Choose the smallest prescaler that keeps the compare value in range. */
     for (p = 0u; p <= lpTMR_MAX_PRESCALER; p++)
     {
         nticks = lptmr_compute_nticks(nn, p);
 
         if (nticks <= lpTMR_MAX_CMR_NTICKS)
         {
-            /* Search finished, value will fit in the 16-bit register */
+            /* Stop at the first prescaler that satisfies the 16-bit register limit. */
             break;
         }
     }
 
     success = nticks2compare_ticks(nticks, ticks);
 
-    /* Convert p to prescaler configuration */
+    /* Translate the shift value back to the hardware configuration encoding. */
     if (p == 0u)
     {
-        /* Prescaler value of 1 */
+        /* A shift of zero means the prescaler path is bypassed. */
         *bypass = true;
         *prescval = lpTMR_PRESCALE_2;
     }
     else{
         *bypass = false;
-        p--; /* Decrement to match lptmr_prescaler_t.  */
+        p--; /* Adjust the shift count to the enum encoding. */
         *prescval = (lptmr_prescaler_t) p;
     }
 
@@ -333,22 +244,19 @@ static bool lptmr_ChooseClkConfig(
 
 
 /*******************************************************************************
- * Public Functions
+ * Initialization & De-initialization
  ******************************************************************************/
 
+/*! @endcond */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : lpTMR_DRV_InitConfigStruct
- * Description   : Initialize a configuration structure with default values.
- *
- * Implements : lpTMR_DRV_InitConfigStruct_Activity
- *END**************************************************************************/
+/*!
+ * @brief Populate a configuration structure with lpTMR driver defaults.
+ */
 void lpTMR_DRV_InitConfigStruct(lptmr_config_t * const config)
 {
     DEV_ASSERT(config != NULL);
 
-    /* General parameters */
+    /* Initialize the general configuration fields. */
 #if defined(lpTMR_DIE_DMAEN_MASK)
     config->dmaRequest      = false;
 #endif /* lpTMR_DIE_DMAEN_MASK */
@@ -356,13 +264,13 @@ void lpTMR_DRV_InitConfigStruct(lptmr_config_t * const config)
     config->freeRun         = false;
     config->workMode        = lpTMR_WORKMODE_TIMER;
 
-    /* Counter parameters */
+    /* Initialize the timer and compare configuration fields. */
     config->prescaler       = lpTMR_PRESCALE_2;
     config->bypassPrescaler = false;
     config->compareValue    = 0u;
     config->counterUnits    = lpTMR_COUNTER_UNITS_TICKS;
 
-    /* Pulse Counter specific parameters */
+    /* Initialize the pulse-counter specific fields. */
     config->pinSelect       = lpTMR_PINSELECT_TMU;
     config->pinPolarity     = lpTMR_PINPOLARITY_RISING;
 #if (defined(FEATURE_lpTMR_HAS_CLOCK_SELECTION) && FEATURE_lpTMR_HAS_CLOCK_SELECTION)
@@ -370,32 +278,9 @@ void lpTMR_DRV_InitConfigStruct(lptmr_config_t * const config)
 #endif /* FEATURE_lpTMR_HAS_CLOCK_SELECTION */
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : lpTMR_DRV_Init
- * Description   : Initialize a LPTMR instance based on the input configuration
- * structure.
- *
- * When (counterUnits == lpTMR_COUNTER_UNITS_MICROSECONDS) the function will
- * automatically configure the timer for the input compareValue in microseconds.
- * The input parameters for 'prescaler' and 'bypassPrescaler' will be ignored
- * - their values will be adapted by the function, to best fit the input compareValue
- * (in microseconds) for the operating clock frequency.
- *
- * lpTMR_COUNTER_UNITS_MICROSECONDS may only be used for lpTMR_WORKMODE_TIMER mode.
- * Otherwise the function shall not convert 'compareValue' in ticks
- * and this is likely to cause erroneous behavior.
- *
- * When (counterUnits == lpTMR_COUNTER_UNITS_TICKS) the function will use the
- * 'prescaler' and 'bypassPrescaler' provided in the input configuration structure.
- *
- * When (counterUnits == lpTMR_COUNTER_UNITS_TICKS), 'compareValue' must be lower
- * than 0xFFFFu. Only the least significant 16bits of 'compareValue' will be used.
- * When (counterUnits == lpTMR_COUNTER_UNITS_MICROSECONDS), 'compareValue'
- * may take any 32bits unsigned value.
- *
- * Implements : lpTMR_DRV_Init_Activity
- *END**************************************************************************/
+/*!
+ * @brief Initialize an lpTMR instance from a user configuration.
+ */
 void lpTMR_DRV_Init(const uint32_t instance,
                     const lptmr_config_t * const config,
                     const bool startCounter)
@@ -407,20 +292,16 @@ void lpTMR_DRV_Init(const uint32_t instance,
 
     lpTMR_DRV_SetConfig(instance, config);
 
-    /* Start the counter if requested */
+    /* Start the counter immediately when requested by the caller. */
     if (startCounter)
     {
         lpTMR_Enable(base);
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : lpTMR_DRV_Deinit
- * Description   : De-initialize the LPTMR (stop the counter and reset all registers to default value).
- *
- * Implements : lpTMR_DRV_Deinit_Activity
- *END**************************************************************************/
+/*!
+ * @brief Stop an lpTMR instance and restore reset-state register values.
+ */
 void lpTMR_DRV_Deinit(const uint32_t instance)
 {
     DEV_ASSERT(instance < lpTMR_INSTANCE_COUNT);
@@ -431,32 +312,13 @@ void lpTMR_DRV_Deinit(const uint32_t instance)
     lpTMR_Init(base);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : lpTMR_DRV_SetConfig
- * Description   : Configure a LPTMR instance based on the input configuration
- * structure.
- *
- * When (counterUnits == lpTMR_COUNTER_UNITS_MICROSECONDS) the function will
- * automatically configure the timer for the input compareValue in microseconds.
- * The input parameters for 'prescaler' and 'bypassPrescaler' will be ignored
- * - their values will be adapted by the function, to best fit the input compareValue
- * (in microseconds) for the operating clock frequency.
- *
- * lpTMR_COUNTER_UNITS_MICROSECONDS may only be used for lpTMR_WORKMODE_TIMER mode.
- * Otherwise the function shall not convert 'compareValue' in ticks
- * and this is likely to cause erroneous behavior.
- *
- * When (counterUnits == lpTMR_COUNTER_UNITS_TICKS) the function will use the
- * 'prescaler' and 'bypassPrescaler' provided in the input configuration structure.
- *
- * When (counterUnits == lpTMR_COUNTER_UNITS_TICKS), 'compareValue' must be lower
- * than 0xFFFFu. Only the least significant 16bits of 'compareValue' will be used.
- * When (counterUnits == lpTMR_COUNTER_UNITS_MICROSECONDS), 'compareValue'
- * may take any 32bits unsigned value.
- *
- * Implements : lpTMR_DRV_SetConfig_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Configuration
+ ******************************************************************************/
+
+/*!
+ * @brief Apply a new configuration to an lpTMR instance.
+ */
 void lpTMR_DRV_SetConfig(const uint32_t instance,
                          const lptmr_config_t * const config)
 {
@@ -475,7 +337,7 @@ void lpTMR_DRV_SetConfig(const uint32_t instance,
     if(configWorkMode == lpTMR_WORKMODE_TIMER)
     {
 #if (defined(FEATURE_lpTMR_HAS_CLOCK_SELECTION) && (FEATURE_lpTMR_HAS_CLOCK_SELECTION == 1U))
-        /* Get the LPTMR clock as configured in the clock manager */
+        /* Resolve the timer clock selected for this lpTMR configuration. */
         switch (config->clockSource)
         {
         #if defined(FEATURE_lpTMR_CLKSRC_SUPPORT_FIRC) && (FEATURE_lpTMR_CLKSRC_SUPPORT_FIRC == 1U)
@@ -523,21 +385,18 @@ void lpTMR_DRV_SetConfig(const uint32_t instance,
             break;
         }
 #elif (FEATURE_lpTMR_CLKSRC_SUPPORT_IPC)
-        /* Get the lpTMR clock as configured in the clock manager */
+        /* Resolve the instance clock from the clock manager. */
         (void)CLOCK_SYS_GetFreq(s_lptmrClkNames[instance], &clkFreq);
 #endif /* FEATURE_lpTMR_HAS_CLOCK_SELECTION */
 
-        DEV_ASSERT(clkFreq != 0U); /* Clock frequency equal to '0', signals invalid value.  */
+        DEV_ASSERT(clkFreq != 0U); /* A zero frequency indicates an invalid clock selection. */
         s_lptmrClkFreq = clkFreq;
 
         if(configCounterUnits == lpTMR_COUNTER_UNITS_MICROSECONDS)
         {
             bool chooseClkConfigStatus;
 
-            /* When workmode is set to Timer Mode and compare value is provided in microseconds,
-             * then the input parameters for prescale value and prescaleBypass are ignored.
-             * The prescaleValue, prescaleBypass and cmpValue in ticks, are calculated to best fit
-             * the input configCmpValue (in us) for the current operating clk frequency.  */
+            /* Derive the best-fit prescaler and compare value for the requested time period. */
             chooseClkConfigStatus = lptmr_ChooseClkConfig(clkFreq, configCmpValue, &prescVal, &prescBypass, &cmpValueTicks);
             DEV_ASSERT(chooseClkConfigStatus == true);
             (void) chooseClkConfigStatus;
@@ -545,27 +404,27 @@ void lpTMR_DRV_SetConfig(const uint32_t instance,
         else
         {
             DEV_ASSERT(configCounterUnits == lpTMR_COUNTER_UNITS_TICKS);
-            DEV_ASSERT(configCmpValue <= lpTMR_CMP_CMP_MASK); /* Compare Value in Tick Units must fit in CMR. */
+            DEV_ASSERT(configCmpValue <= lpTMR_CMP_CMP_MASK); /* Tick-based compare values must fit in the register. */
 
             cmpValueTicks = (uint16_t)(configCmpValue & lpTMR_CMP_CMP_MASK);
         }
     }
     else
     {
-        /* If configWorkMode is not lpTMR_WORKMODE_TIMER, then it must be lpTMR_WORKMODE_PULSECOUNTER. */
+        /* Any non-timer configuration must be Pulse-Counter Mode. */
         DEV_ASSERT(configWorkMode == lpTMR_WORKMODE_PULSECOUNTER);
 
-        /* Only lpTMR_COUNTER_UNITS_TICKS can be used when LPTMR is configured as Pulse Counter. */
+        /* Pulse counting always uses raw tick units for the compare register. */
         DEV_ASSERT(config->counterUnits == lpTMR_COUNTER_UNITS_TICKS);
-        /* Glitch filter does not support lpTMR_PRESCALE_2. */
+        /* The glitch filter path does not support the divide-by-2 setting. */
         DEV_ASSERT(prescBypass || (prescVal != lpTMR_PRESCALE_2));
 
-        DEV_ASSERT(configCmpValue <= lpTMR_CMP_CMP_MASK); /* Compare Value in Tick Units must fit in CMR. */
+        DEV_ASSERT(configCmpValue <= lpTMR_CMP_CMP_MASK); /* Tick-based compare values must fit in the register. */
 
         cmpValueTicks = (uint16_t)(configCmpValue & lpTMR_CMP_CMP_MASK);
     }
 
-    /* Initialize and write configuration parameters. */
+    /* Reset the peripheral first, then program the requested configuration. */
     lpTMR_Init(base);
 
 #if defined(lpTMR_DIE_DMAEN_MASK)
@@ -584,14 +443,9 @@ void lpTMR_DRV_SetConfig(const uint32_t instance,
 #endif /* FEATURE_lpTMR_HAS_CLOCK_SELECTION */
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : lpTMR_DRV_GetConfig
- * Description   : Get the current configuration of the LPTMR instance.
- * Always returns compareValue in lpTMR_COUNTER_UNITS_TICKS.
- *
- * Implements : lpTMR_DRV_GetConfig_Activity
- *END**************************************************************************/
+/*!
+ * @brief Read back the active configuration of an lpTMR instance.
+ */
 void lpTMR_DRV_GetConfig(const uint32_t instance,
                          lptmr_config_t * const config)
 {
@@ -600,7 +454,7 @@ void lpTMR_DRV_GetConfig(const uint32_t instance,
 
     const lpTMR_Type* const base = g_lptmrBase[instance];
 
-    /* Read current configuration */
+    /* Read the fields that are directly available in the hardware registers. */
 #if defined(lpTMR_DIE_DMAEN_MASK)
     config->dmaRequest      = lpTMR_GetDmaRequest(base);
 #endif /* lpTMR_DIE_DMAEN_MASK */
@@ -615,17 +469,13 @@ void lpTMR_DRV_GetConfig(const uint32_t instance,
     config->pinPolarity     = lpTMR_GetPinPolarity(base);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : lpTMR_DRV_SetCompareValueByCount
- * Description   : Set the compare value in counter tick units, for a LPTMR instance.
- * Possible return values:
- * - STATUS_SUCCESS: completed successfully
- * - STATUS_ERROR: cannot reconfigure compare value (TCF not set)
- * - STATUS_TIMEOUT: compare value is smaller than current counter value
- *
- * Implements : lpTMR_DRV_SetCompareValueByCount_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Compare Value Access
+ ******************************************************************************/
+
+/*!
+ * @brief Program the compare value directly in counter ticks.
+ */
 status_t lpTMR_DRV_SetCompareValueByCount(const uint32_t instance,
                                           const uint16_t compareValueByCount)
 {
@@ -639,7 +489,7 @@ status_t lpTMR_DRV_SetCompareValueByCount(const uint32_t instance,
 
     uint16_t counterVal;
 
-    /* Check if a valid clock is selected for the timer/glitch filter */
+    /* Preserve the debug-only reads used by the original implementation path. */
 #if (defined (DEV_ERROR_DETECT) || defined (CUSTOM_DEVASSERT))
     bool bypass = lpTMR_GetBypass(base);
     lptmr_workmode_t workMode = lpTMR_GetWorkMode(base);
@@ -648,14 +498,14 @@ status_t lpTMR_DRV_SetCompareValueByCount(const uint32_t instance,
 #endif /* (defined (DEV_ERROR_DETECT) || defined (CUSTOM_DEVASSERT)) */
 
 
-    /* The compare value can only be written if counter is disabled or the compare flag is set. */
+    /* Writes are allowed only while stopped or after a compare event has occurred. */
     if (timerEnabled && !compareFlag)
     {
         statusCode = STATUS_ERROR;
     }
     else
     {
-        /* Check if new value is below the current counter value */
+        /* Reject compare values that are already behind the running counter state. */
         lpTMR_SetCompareValue(base, compareValueByCount);
         counterVal = lpTMR_GetCounterValue(base);
         if (counterVal >= compareValueByCount)
@@ -668,13 +518,9 @@ status_t lpTMR_DRV_SetCompareValueByCount(const uint32_t instance,
 }
 
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : lpTMR_DRV_GetCompareValueByCount
- * Description   : Get the compare value of timer in ticks units.
- *
- * Implements : lpTMR_DRV_GetCompareValueByCount_Activity
- *END**************************************************************************/
+/*!
+ * @brief Read the compare value in counter ticks.
+ */
 void lpTMR_DRV_GetCompareValueByCount(const uint32_t instance,
                                       uint16_t * const compareValueByCount)
 {
@@ -686,24 +532,14 @@ void lpTMR_DRV_GetCompareValueByCount(const uint32_t instance,
 }
 
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LPTMR_DRV_SetCompareValueUs
- * Description   : Set the compare value for Timer Mode in microseconds,
- * for a LPTMR instance.
- * Can be used only in Timer Mode.
- * Possible return values:
- * - STATUS_SUCCESS: completed successfully
- * - STATUS_ERROR: cannot reconfigure compare value
- * - STATUS_TIMEOUT: compare value greater then current counter value
- *
- * Implements : lpTMR_DRV_SetCompareValueByUs_Activity
- *END**************************************************************************/
+/*!
+ * @brief Program the compare value in microseconds for Timer Mode.
+ */
 status_t lpTMR_DRV_SetCompareValueByUs(const uint32_t instance,
                                        const uint32_t compareValueUs)
 {
     DEV_ASSERT(instance < lpTMR_INSTANCE_COUNT);
-    DEV_ASSERT(s_lptmrClkFreq != 0U); /* Check the calculated clock frequency: '0' - invalid*/
+    DEV_ASSERT(s_lptmrClkFreq != 0U); /* A zero cached frequency indicates invalid timer-clock state. */
 
     status_t returnCode     = STATUS_SUCCESS;
     lpTMR_Type* const base  = g_lptmrBase[instance];
@@ -712,12 +548,12 @@ status_t lpTMR_DRV_SetCompareValueByUs(const uint32_t instance,
     lptmr_prescaler_t prescVal;
     bool prescBypass;
 
-    /* This function can only be used if LPTMR is configured in Timer Mode. */
+    /* This API is defined only for Timer Mode configurations. */
     DEV_ASSERT(lpTMR_GetWorkMode(base) == lpTMR_WORKMODE_TIMER);
 
     timerEnabled = lpTMR_GetEnable(base);
     compareFlag  = lpTMR_GetCompareFlag(base);
-    /* The compare value can only be written if counter is disabled or the compare flag is set. */
+    /* Writes are allowed only while stopped or after a compare event has occurred. */
     if (timerEnabled && !compareFlag)
     {
         returnCode = STATUS_ERROR;
@@ -726,15 +562,12 @@ status_t lpTMR_DRV_SetCompareValueByUs(const uint32_t instance,
     {
         bool chooseClkConfigStatus;
 
-        /* When workmode is set to Timer Mode and compare value is provided in microseconds,
-         * then the input parameters for prescale value and prescaleBypass are ignored.
-         * The prescaleValue, prescaleBypass and cmpValue in ticks, are calculated to best fit
-         * the input configCmpValue (in us) for the current operating clk frequency.  */
+        /* Derive the best-fit prescaler and compare value for the requested period. */
         chooseClkConfigStatus = lptmr_ChooseClkConfig(s_lptmrClkFreq, compareValueUs, &prescVal, &prescBypass, &cmpValTicks);
         DEV_ASSERT(chooseClkConfigStatus == true);
         (void) chooseClkConfigStatus;
 
-        /* Write value and check if written successfully */
+        /* Apply the new compare setting and verify it is still ahead of the counter. */
         lpTMR_SetCompareValue(base, cmpValTicks);
         lpTMR_SetPrescaler(base, prescVal);
         lpTMR_SetBypass(base, prescBypass);
@@ -749,14 +582,9 @@ status_t lpTMR_DRV_SetCompareValueByUs(const uint32_t instance,
     return returnCode;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : lpTMR_DRV_GetCompareValueByUs
- * Description   : Get the compare value in microseconds representation.
- * Can be used only in Timer Mode.
- *
- * Implements : lpTMR_DRV_GetCompareValueByUs_Activity
- *END**************************************************************************/
+/*!
+ * @brief Read the active compare value as microseconds.
+ */
 void lpTMR_DRV_GetCompareValueByUs(const uint32_t instance,
                                    uint32_t * const compareValueUs)
 {
@@ -769,28 +597,28 @@ void lpTMR_DRV_GetCompareValueByUs(const uint32_t instance,
     lptmr_prescaler_t prescVal;
     bool prescBypass, conversionStatus;
 
-    /* This function can only be used if LPTMR is configured in Timer Mode. */
+    /* This API is defined only for Timer Mode configurations. */
     DEV_ASSERT(lpTMR_GetWorkMode(base) == lpTMR_WORKMODE_TIMER);
 
-    /* Get prescaler value and prescaler bypass state.*/
+    /* Read back the timer scaling fields required for unit conversion. */
     prescVal    = lpTMR_GetPrescaler(base);
     prescBypass = lpTMR_GetBypass(base);
     cmpValTicks = lpTMR_GetCompareValue(base);
 
-    /* Convert current compare value from ticks to microseconds. */
+    /* Convert the current compare register setting back to microseconds. */
     conversionStatus = lptmr_Ticks2Us(s_lptmrClkFreq, prescVal, prescBypass, cmpValTicks, compareValueUs);
-    DEV_ASSERT(conversionStatus == true); /* Check the conversion status. */
+    DEV_ASSERT(conversionStatus == true); /* The conversion result must fit in 32 bits. */
     (void) conversionStatus;
 }
 
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : lpTMR_DRV_GetCompareFlag
- * Description   : Get the current state of the Compare Flag of a LPTMR instance
- *
- * Implements : lpTMR_DRV_GetCompareFlag_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Runtime Status & Control
+ ******************************************************************************/
+
+/*!
+ * @brief Read the compare-match flag state.
+ */
 bool lpTMR_DRV_GetCompareFlag(const uint32_t instance)
 {
     DEV_ASSERT(instance < lpTMR_INSTANCE_COUNT);
@@ -802,13 +630,9 @@ bool lpTMR_DRV_GetCompareFlag(const uint32_t instance)
 }
 
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : lpTMR_DRV_ClearCompareFlag
- * Description   : Clear the Compare Flag.
- *
- * Implements : lpTMR_DRV_ClearCompareFlag_Activity
- *END**************************************************************************/
+/*!
+ * @brief Clear the compare-match flag.
+ */
 void lpTMR_DRV_ClearCompareFlag(const uint32_t instance)
 {
     DEV_ASSERT(instance < lpTMR_INSTANCE_COUNT);
@@ -819,16 +643,9 @@ void lpTMR_DRV_ClearCompareFlag(const uint32_t instance)
 }
 
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : lpTMR_DRV_IsRunning
- * Description   : Get the running state of a LPTMR instance.
- * Possible return values:
- * - true: Timer/Counter started
- * - false: Timer/Counter stopped
- *
- * Implements : lpTMR_DRV_IsRunning_Activity
- *END**************************************************************************/
+/*!
+ * @brief Report whether the counter is currently enabled.
+ */
 bool lpTMR_DRV_IsRunning(const uint32_t instance)
 {
     DEV_ASSERT(instance < lpTMR_INSTANCE_COUNT);
@@ -841,13 +658,9 @@ bool lpTMR_DRV_IsRunning(const uint32_t instance)
 }
 
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : lpTMR_DRV_SetInterrupt
- * Description   : Enable/disable the LPTMR interrupt.
- *
- * Implements : lpTMR_DRV_SetInterrupt_Activity
- *END**************************************************************************/
+/*!
+ * @brief Enable or disable compare interrupts.
+ */
 void lpTMR_DRV_SetInterrupt(const uint32_t instance,
                             const bool enableInterrupt)
 {
@@ -859,15 +672,9 @@ void lpTMR_DRV_SetInterrupt(const uint32_t instance,
 }
 
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LPTMR_DRV_GetCounterValueTicks
- * Description   : Get the current Counter Value in timer ticks representation.
- * Return:
- *  - the counter value.
- *
- * Implements : lpTMR_DRV_GetCounterValueByCount_Activity
- *END**************************************************************************/
+/*!
+ * @brief Read the current counter value in raw ticks.
+ */
 uint16_t lpTMR_DRV_GetCounterValueByCount(const uint32_t instance)
 {
     DEV_ASSERT(instance < lpTMR_INSTANCE_COUNT);
@@ -880,20 +687,16 @@ uint16_t lpTMR_DRV_GetCounterValueByCount(const uint32_t instance)
 }
 
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : lpTMR_DRV_StartCounter
- * Description   : Enable (start) the counter.
- *
- * Implements : lpTMR_DRV_StartCounter_Activity
- *END**************************************************************************/
+/*!
+ * @brief Enable the lpTMR counter.
+ */
 void lpTMR_DRV_StartCounter(const uint32_t instance)
 {
     DEV_ASSERT(instance < lpTMR_INSTANCE_COUNT);
 
     lpTMR_Type* const base = g_lptmrBase[instance];
 
-    /* Check if a valid clock is selected for the timer/glitch filter */
+    /* Preserve the debug-only reads used by the original implementation path. */
 #if (defined (DEV_ERROR_DETECT) || defined (CUSTOM_DEVASSERT))
     bool bypass = lpTMR_GetBypass(base);
     lptmr_workmode_t workMode = lpTMR_GetWorkMode(base);
@@ -905,13 +708,9 @@ void lpTMR_DRV_StartCounter(const uint32_t instance)
 }
 
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : lpTMR_DRV_StopCounter
- * Description   : Disable (stop) the counter.
- *
- * Implements : lpTMR_DRV_StopCounter_Activity
- *END**************************************************************************/
+/*!
+ * @brief Disable the lpTMR counter.
+ */
 void lpTMR_DRV_StopCounter(const uint32_t instance)
 {
     DEV_ASSERT(instance < lpTMR_INSTANCE_COUNT);
@@ -922,13 +721,13 @@ void lpTMR_DRV_StopCounter(const uint32_t instance)
 }
 
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : lpTMR_DRV_SetPinConfiguration
- * Description   : Set the Input Pin configuration for Pulse Counter mode.
- *
- * Implements : lpTMR_DRV_SetPinConfiguration_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Pulse Counter Pin Configuration
+ ******************************************************************************/
+
+/*!
+ * @brief Update the pulse input source and active edge.
+ */
 void lpTMR_DRV_SetPinConfiguration(const uint32_t instance,
                                    const lptmr_pinselect_t pinSelect,
                                    const lptmr_pinpolarity_t pinPolarity)

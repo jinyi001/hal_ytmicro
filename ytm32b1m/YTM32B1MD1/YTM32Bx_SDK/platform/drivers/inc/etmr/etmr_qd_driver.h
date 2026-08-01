@@ -8,6 +8,13 @@
 /*!
  * @file etmr_qd_driver.h
  * @version 1.4.1
+ *
+ * @brief eTMR Quadrature Decoder Driver — public API declarations.
+ *
+ * This header declares the quadrature decoder (QD) mode API for the
+ * eTMR peripheral. In this mode the eTMR decodes two-phase (A/B)
+ * encoder signals to provide position counting and direction detection,
+ * supporting both phase-encode and count-and-direction modes.
  */
 
 #ifndef eTMR_QD_DRIVER_H
@@ -18,10 +25,13 @@
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
+
 /*!
- * @brief eTMR quadrature phase polarities, normal or inverted polarity
+ * @brief Quadrature phase polarity selection.
  *
- * Implements : etmr_qd_phase_polarity_t_Class
+ * Determines whether the phase input signal is inverted before
+ * edge identification.
+ *
  */
 typedef enum
 {
@@ -32,9 +42,12 @@ typedef enum
 } etmr_qd_phase_polarity_t;
 
 /*!
- * @brief eTMR quadrature configure structure
+ * @brief Quadrature decoder configuration structure.
  *
- * Implements : etmr_quad_decode_config_t_Class
+ * Contains all parameters needed to configure and start the
+ * quadrature decoder, including mode, clock prescaler, counter
+ * range, input filtering, and phase polarities.
+ *
  */
 typedef struct
 {
@@ -53,9 +66,11 @@ typedef struct
 } etmr_qd_config_t;
 
 /*!
- * @brief eTMR quadrature state(counter value and flags)
+ * @brief Quadrature decoder state structure.
  *
- * Implements : etmr_qd_state_t_Class
+ * Reports the current counter value, overflow status, and direction
+ * of the quadrature decoder.
+ *
  */
 typedef struct
 {
@@ -75,43 +90,66 @@ extern "C" {
 #endif
 
 /*!
- * @brief Configures the quadrature mode and starts measurement
+ * @name QD Initialization
+ * @{
+ */
+
+/*!
+ * @brief Configure and start quadrature decode mode.
  *
- * @param [in] instance Instance number of the eTMR module.
- * @param [in] config   Configuration structure(quadrature decode mode, polarity for both phases,
- *                      initial and maximum value for the counter, filter configuration).
- * @return success
- *        - STATUS_SUCCESS : Completed successfully.
- *        - STATUS_ERROR : Error occurred.
+ * Sets up the quadrature decoder with the specified mode, phase
+ * polarities, input filters, clock prescaler, and counter range,
+ * then enables the decoder.
+ *
+ * @param[in] instance Instance number of the eTMR module.
+ * @param[in] config   Pointer to the quadrature decoder configuration.
+ * @return Operation status.
+ * @retval STATUS_SUCCESS Completed successfully.
+ * @retval STATUS_ERROR   Error occurred.
  */
 status_t eTMR_DRV_QuadDecodeStart(uint32_t instance, const etmr_qd_config_t *config);
 
 /*!
- * @brief De-activates the quadrature decode mode.
+ * @brief De-activate quadrature decode mode.
  *
- * @param [in] instance Instance number of the eTMR module.
- * @return success
- *        - STATUS_SUCCESS : Completed successfully.
- *        - STATUS_ERROR : Error occurred.
+ * Disables the quadrature decoder without modifying other eTMR settings.
+ *
+ * @param[in] instance Instance number of the eTMR module.
+ * @return Operation status.
+ * @retval STATUS_SUCCESS Completed successfully.
+ * @retval STATUS_ERROR   Error occurred.
  */
 status_t eTMR_DRV_QuadDecodeStop(uint32_t instance);
 
 /*!
- * @brief Return the current quadrature decoder state (counter value, overflow flag and
- * overflow direction)
+ * @brief Populate a quadrature decoder configuration with default values.
  *
- * @param [in] instance Instance number of the eTMR module.
- * @return The current state of quadrature decoder
+ * Default: phase-B-follow-A mode, no input filters, normal polarity
+ * for both phases, counter range 0–65535.
+ *
+ * @param[out] config Pointer to the structure to be filled with defaults.
+ */
+void eTMR_DRV_GetQuadDecodeDefaultConfig(etmr_qd_config_t *const config);
+
+/*! @} */
+
+/*!
+ * @name QD State Query
+ * @{
+ */
+
+/*!
+ * @brief Get the current quadrature decoder state.
+ *
+ * Returns the counter value, overflow flag, overflow direction,
+ * and current counting direction.
+ *
+ * @param[in] instance Instance number of the eTMR module.
+ * @return The current quadrature decoder state.
  */
 etmr_qd_state_t eTMR_DRV_GetQuadDecodeState(uint32_t instance);
 
-/*!
- * @brief This function will get the default configuration values
- *        in the structure which is used as a common use-case.
- * @param[out] config Pointer to the structure in which the
- *                    configuration will be saved.
- */
-void eTMR_DRV_GetQuadDecodeDefaultConfig(etmr_qd_config_t *const config);
+/*! @} */
 
 #if defined(__cplusplus)
 }

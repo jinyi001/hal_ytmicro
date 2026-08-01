@@ -8,6 +8,13 @@
 /*!
  * @file wdg_hw_access.h
  * @version 1.4.1
+ *
+ * @brief WDG HW Access Layer — inline register-level helper functions.
+ *
+ * This internal header provides static-inline helpers for direct access to the
+ * watchdog registers. These helpers are used by the driver layer to trigger
+ * refresh sequences, configure window mode, clear interrupt flags, update
+ * debug and deep-sleep behavior, and query watchdog state.
  */
 
 #ifndef WDG_HW_ACCESS_H
@@ -18,9 +25,10 @@
 #include "interrupt_manager.h"
 
 /*!
- * @brief Watchdog Timer Hardware Access.
+ * @brief Watchdog Timer hardware access helper layer.
  *
- * This hardware access provides low-level access to all hardware features of the WDG.
+ * This hardware access layer provides low-level access to all watchdog
+ * hardware features.
  * @{
  */
 
@@ -52,52 +60,44 @@ extern "C" {
  */
 
 /*!
- * @brief Disable the WDG.
- * This function disable the WDG by user
+ * @brief Restore the watchdog to reset-like values.
  *
- * @param[in] base WDG base pointer.
+ * @param[in] base  WDG base pointer.
  */
 void WDG_Deinit(WDG_Type *const base);
 
 /*!
- * @brief Set the WDG timeout interrupt.
- * This function enable/disable WDG timeout interrupt
+ * @brief Enable or disable the WDG timeout interrupt.
  *
- * @param[in] base WDG base pointer.
- * @param[in] enable enable/disable WDG timeout interrupt.
+ * @param[in] base    WDG base pointer.
+ * @param[in] enable  `true` enables the timeout interrupt.
  */
 void WDG_SetInt(WDG_Type *const base,
                 bool enable);
 
 /*!
- * @brief Configures the WDG.
- * This function configures the WDG by user configuration
+ * @brief Configure the watchdog from the user configuration.
  *
- * @param[in] base WDG base pointer.
- * @param[in] wdgUserConfig pointer to user configuration structure
- * @return the state of the WDG.
+ * @param[in] base           WDG base pointer.
+ * @param[in] wdgUserConfig  Pointer to user configuration structure.
+ * @return Execution status.
  */
 status_t WDG_Config(WDG_Type *const base,
                     const wdg_user_config_t *wdgUserConfig);
 
 /*!
- * @brief Gets the current WDG configuration.
+ * @brief Read back the current watchdog configuration.
  *
- * This function gets the current WDG configuration
- *
- *
- * @param[in] base WDG base pointer.
- * @param[in] config WDG config pointer.
+ * @param[in] base    WDG base pointer.
+ * @param[out] config WDG configuration pointer.
  */
 void WDG_GetConfig(const WDG_Type *base, wdg_user_config_t *const config);
 
 /*!
- * @brief Verifies if the WDG is enabled.
+ * @brief Check whether the watchdog is enabled.
  *
- * This function verifies the state of the WDG.
- *
- * @param[in] base WDG base pointer.
- * @return the state of the WDG.
+ * @param[in] base  WDG base pointer.
+ * @return `true` if the watchdog is enabled, `false` otherwise.
  */
 static inline bool WDG_IsEnabled(const WDG_Type *base)
 {
@@ -105,9 +105,9 @@ static inline bool WDG_IsEnabled(const WDG_Type *base)
 }
 
 /*!
- * @brief Refreshes the WDG counter
+ * @brief Refresh the watchdog counter.
  *
- * @param[in] base WDG base pointer.
+ * @param[in] base  WDG base pointer.
  */
 static inline void WDG_Trigger(WDG_Type *const base)
 {
@@ -118,12 +118,10 @@ static inline void WDG_Trigger(WDG_Type *const base)
 }
 
 /*!
- * @brief Enables/Disables window mode.
+ * @brief Enable or disable watchdog window mode.
  *
- * This function enables/disables window mode for the WDG.
- *
- * @param[in] base WDG base pointer.
- * @param[in] enable enable/disable window mode
+ * @param[in] base    WDG base pointer.
+ * @param[in] enable  `true` enables window mode.
  */
 static inline void WDG_SetWindowMode(WDG_Type *const base,
                                      bool enable)
@@ -135,12 +133,10 @@ static inline void WDG_SetWindowMode(WDG_Type *const base,
 }
 
 /*!
- * @brief Sets the value of the WDG window.
+ * @brief Set the watchdog window threshold value.
  *
- * This sets the value of the WDG window.
- *
- * @param[in] base WDG base pointer.
- * @param[in] window the value of the WDG window.
+ * @param[in] base    WDG base pointer.
+ * @param[in] window  Window threshold value.
  */
 static inline void WDG_SetWindowValue(WDG_Type *const base,
                                       uint32_t window)
@@ -152,11 +148,9 @@ static inline void WDG_SetWindowValue(WDG_Type *const base,
 }
 
 /*!
- * @brief Clears the Interrupt Flag.
+ * @brief Clear the watchdog interrupt flag.
  *
- * This function clears the Interrupt Flag (FLG).
- *
- * @param[in] base WDG base pointer.
+ * @param[in] base  WDG base pointer.
  */
 static inline void WDG_ClearIntFlag(WDG_Type *const base)
 {
@@ -167,15 +161,10 @@ static inline void WDG_ClearIntFlag(WDG_Type *const base)
 }
 
 /*!
- * @brief Verifies if the WDG updates are allowed.
+ * @brief Check whether watchdog configuration updates are allowed.
  *
- * This function verifies if software is allowed to reconfigure the WDG without
- * a reset.
- *
- * @param[in] base WDG base pointer.
- * @return the state of the WDG updates:
- *         - false: updates are not allowed
- *         - true: updates are allowed
+ * @param[in] base  WDG base pointer.
+ * @return `true` if updates are allowed, `false` otherwise.
  */
 static inline bool WDG_IsUpdateEnabled(const WDG_Type *base)
 {
@@ -183,12 +172,10 @@ static inline bool WDG_IsUpdateEnabled(const WDG_Type *base)
 }
 
 /*!
- * @brief Enables/Disables WDG in debug mode.
+ * @brief Enable or disable watchdog operation during debug halt.
  *
- * This function enables/disables the WDG in debug mode.
- *
- * @param[in] base WDG base pointer.
- * @param[in] enable enable/disable WDG in debug mode
+ * @param[in] base    WDG base pointer.
+ * @param[in] enable  `true` keeps the watchdog active in debug mode.
  */
 static inline void WDG_SetDebug(WDG_Type *const base,
                                 bool enable)
@@ -204,12 +191,10 @@ static inline void WDG_SetDebug(WDG_Type *const base,
 }
 
 /*!
- * @brief Enables/Disables WDG in wait mode.
+ * @brief Enable or disable watchdog operation in deep-sleep mode.
  *
- * This function enables/disables the WDG in wait mode.
- *
- * @param[in] base WDG base pointer.
- * @param[in] enable enable/disable WDG in wait mode.
+ * @param[in] base    WDG base pointer.
+ * @param[in] enable  `true` keeps the watchdog active in deep-sleep mode.
  */
 static inline void WDG_SetDeepSleep(WDG_Type *const base,
                                     bool enable)
@@ -225,13 +210,10 @@ static inline void WDG_SetDeepSleep(WDG_Type *const base,
 }
 
 /*!
- * @brief Checks if the WDG is unlocked.
+ * @brief Check whether the watchdog configuration registers are unlocked.
  *
- * This function checks if the WDG is unlocked. If the module is unlocked,
- * reconfiguration of the registers is allowed.
- *
- * @param[in] base WDG base pointer.
- * @return true if the module is unlocked, false if the module is locked.
+ * @param[in] base  WDG base pointer.
+ * @return `true` if the module is unlocked, `false` otherwise.
  */
 static inline bool WDG_IsUnlocked(const WDG_Type *base)
 {

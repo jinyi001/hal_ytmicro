@@ -22,15 +22,9 @@
 #include "dma_hw_access.h"
 #include "interrupt_manager.h"
 
-/*******************************************************************************
- * Code
- ******************************************************************************/
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_Init
- * Description   : Initializes DMA module to known state.
- *END**************************************************************************/
+/*!
+ * @brief Initializes DMA module to known state.
+ */
 void DMA_Init(DMA_Type *base)
 {
     uint8_t i;
@@ -49,11 +43,9 @@ void DMA_Init(DMA_Type *base)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_CancelTransfer
- * Description   : Cancels the remaining data transfer.
- *END**************************************************************************/
+/*!
+ * @brief Cancels the remaining data transfer.
+ */
 void DMA_CancelTransfer(DMA_Type *base)
 {
     uint32_t regValTemp;
@@ -65,11 +57,9 @@ void DMA_CancelTransfer(DMA_Type *base)
     {}
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_CancelTransferWithError
- * Description   : Cancels the remaining data transfer and treat it as error.
- *END**************************************************************************/
+/*!
+ * @brief Cancels the remaining data transfer and treat it as error.
+ */
 void DMA_CancelTransferWithError(DMA_Type *base)
 {
     uint32_t regValTemp;
@@ -81,11 +71,9 @@ void DMA_CancelTransferWithError(DMA_Type *base)
     {}
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_SetErrorIntCmd
- * Description   : Enable/Disable error interrupt for channels.
- *END**************************************************************************/
+/*!
+ * @brief Enable/Disable error interrupt for channels.
+ */
 void DMA_SetErrorIntCmd(DMA_Type *base, uint8_t channel, bool enable)
 {
     SDK_ENTER_CRITICAL();
@@ -99,11 +87,9 @@ void DMA_SetErrorIntCmd(DMA_Type *base, uint8_t channel, bool enable)
     SDK_EXIT_CRITICAL();
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_SetDmaRequestCmd
- * Description   : Enable/Disable dma request for channel or all channels.
- *END**************************************************************************/
+/*!
+ * @brief Enable/Disable dma request for channel or all channels.
+ */
 void DMA_SetDmaRequestCmd(DMA_Type *base, uint8_t channel, bool enable)
 {
 #if defined(DMA_REQSET_CH_MASK)
@@ -142,11 +128,9 @@ void DMA_SetDmaRequestCmd(DMA_Type *base, uint8_t channel, bool enable)
 #endif
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_CTSClearReg
- * Description   : Set registers to 0 for hardware CTS of DMA channel.
- *END**************************************************************************/
+/*!
+ * @brief Set registers to 0 for hardware CTS of DMA channel.
+ */
 void DMA_CTSClearReg(DMA_Type *base, uint8_t channel)
 {
     base->CTS[channel].BCNT.BCNT = 0U;
@@ -162,11 +146,9 @@ void DMA_CTSClearReg(DMA_Type *base, uint8_t channel)
     base->CTS[channel].TCNTRV = 0U;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_CTSSetAttribute
- * Description   : Configures the transfer attribute for DMA channel.
- *END**************************************************************************/
+/*!
+ * @brief Configures the transfer attribute for DMA channel.
+ */
 void DMA_CTSSetAttribute(
     DMA_Type *base, uint8_t channel,
     dma_modulo_t srcModulo, dma_modulo_t destModulo,
@@ -181,11 +163,9 @@ void DMA_CTSSetAttribute(
     base->CTS[channel].TCR = regValTemp;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_CTSSetNbytes
- * Description   : Configures the nbytes for DMA channel.
- *END**************************************************************************/
+/*!
+ * @brief Configures the nbytes for DMA channel.
+ */
 void DMA_CTSSetNbytes(DMA_Type *base, uint8_t channel, uint32_t nbytes)
 {
 #if defined (CUSTOM_DEVASSERT) || defined (DEV_ERROR_DETECT)
@@ -218,11 +198,9 @@ void DMA_CTSSetNbytes(DMA_Type *base, uint8_t channel, uint32_t nbytes)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_CTSSetTransferLoopOffset
- * Description   : Configures the transfer loop offset for the CTS.
- *END**************************************************************************/
+/*!
+ * @brief Configures the transfer loop offset for the CTS.
+ */
 void DMA_CTSSetTransferLoopOffset(DMA_Type *base, uint8_t channel, int32_t offset)
 {
 #if defined (CUSTOM_DEVASSERT) || defined (DEV_ERROR_DETECT)
@@ -251,12 +229,9 @@ void DMA_CTSSetTransferLoopOffset(DMA_Type *base, uint8_t channel, int32_t offse
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_CTSSetRamReloadLink
- * Description   : Configures the memory address of the next CTS, in Scatter/Gather mode.
- *
- *END**************************************************************************/
+/*!
+ * @brief Configures the memory address of the next CTS, in Scatter/Gather mode.
+ */
 void DMA_CTSSetRamReloadLink(DMA_Type *base, uint8_t channel, uint32_t nextCTSAddr)
 {
 #if defined (CUSTOM_DEVASSERT) || defined (DEV_ERROR_DETECT)
@@ -265,11 +240,9 @@ void DMA_CTSSetRamReloadLink(DMA_Type *base, uint8_t channel, uint32_t nextCTSAd
     base->CTS[channel].DTO_RLD.RLD = nextCTSAddr;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_CTSSetChannelLoopLink
- * Description   : Set Channel minor link for hardware CTS.
- *END**************************************************************************/
+/*!
+ * @brief Sets the channel transfer loop link for the CTS.
+ */
 void DMA_CTSSetChannelLoopLink(
     DMA_Type *base, uint8_t channel, uint32_t linkChannel, bool enable)
 {
@@ -302,12 +275,9 @@ void DMA_CTSSetChannelLoopLink(
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_CTS_CTSSetMajorCount
- * Description   : Sets the major iteration count according to transfer loop
- * channel link setting.
- *END**************************************************************************/
+/*!
+ * @brief Sets the trigger loop iteration count according to transfer loop channel link setting.
+ */
 void DMA_CTSSetTriggerCount(DMA_Type *base, uint8_t channel, uint32_t count)
 {
 #if defined (CUSTOM_DEVASSERT) || defined (DEV_ERROR_DETECT)
@@ -339,12 +309,9 @@ void DMA_CTSSetTriggerCount(DMA_Type *base, uint8_t channel, uint32_t count)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_CTSGetCurrentTriggerCount
- * Description   : Gets the current major iteration count according to minor
- * loop channel link setting.
- *END**************************************************************************/
+/*!
+ * @brief Gets the current trigger loop iteration count according to transfer loop channel link setting.
+ */
 uint32_t DMA_CTSGetCurrentTriggerCount(const DMA_Type *base, uint8_t channel)
 {
 #if defined (CUSTOM_DEVASSERT) || defined (DEV_ERROR_DETECT)
@@ -365,11 +332,9 @@ uint32_t DMA_CTSGetCurrentTriggerCount(const DMA_Type *base, uint8_t channel)
 
 #ifdef FEATURE_DMAMUX_AVAILABLE
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMAMUX_init
- * Description   : Initialize the dmamux module to the reset state.
- *END**************************************************************************/
+/*!
+ * @brief Initialize the dmamux module to the reset state.
+ */
 void DMAMUX_Init(DMA_Type *base)
 {
     uint8_t i;
@@ -381,7 +346,3 @@ void DMAMUX_Init(DMA_Type *base)
 }
 
 #endif
-
-/*******************************************************************************
- * EOF
- ******************************************************************************/

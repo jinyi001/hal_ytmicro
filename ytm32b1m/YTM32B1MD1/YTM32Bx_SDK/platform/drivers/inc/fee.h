@@ -8,13 +8,33 @@
 /*!
  * @file fee.h
  * @version 1.4.1
+ *
+ * @brief FEE Driver — public API for flash-backed EEPROM emulation.
+ *
+ * This header declares the asynchronous Flash EEPROM Emulation (FEE) services
+ * that store logical data blocks in flash memory through the FLS driver. The
+ * module tracks block headers, cluster-group layout, reserved space for
+ * immediate blocks, and background maintenance jobs such as cluster scan and
+ * swap.
+ *
+ * The public interface is organized into five categories:
+ *   - Module constants and configuration data types
+ *   - Initialization and runtime control
+ *   - Job status and version reporting
+ *   - Data transfer for logical blocks
+ *   - Block-maintenance and FLS callback hooks
+ *
+ * @note Configure the underlying FLS instance so its job callbacks invoke
+ *       Fee_JobEndNotification() and Fee_JobErrorNotification().
+ * @note Call Fee_MainFunction() periodically after Fee_Init() until
+ *       Fee_GetStatus() returns MEMIF_IDLE for the accepted job.
  */
 
 #ifndef FEE_H
 #define FEE_H
 
 #ifdef __cplusplus
-extern "C"{
+extern "C" {
 #endif
 /*=================================================================================================
  *                                        INCLUDE FILES
@@ -25,28 +45,41 @@ extern "C"{
 
 
 /*!
- * @addtogroup fee_driver
+ * @defgroup fee_driver FEE Driver
  * @ingroup fee
+ * @brief Public API for logical EEPROM-style storage on top of flash memory.
+ * @details The FEE driver exposes asynchronous read, write, invalidation, and
+ *          maintenance services for configured logical blocks. It uses cluster
+ *          rotation and block metadata in flash to emulate EEPROM semantics
+ *          while relying on the FLS layer for the physical flash operations.
  * @{
  */
 
 /*==================================================================================================
  *                                       DEFINES AND MACROS
 ==================================================================================================*/
-/** @brief The size in bytes to which logical blocks shall be aligned */
+/*!
+ * @name Module Constants
+ * @brief Fixed parameters used by the FEE runtime and metadata layout.
+ * @{
+ */
+
+/*! @brief Logical block alignment granularity in bytes. */
 #define FEE_VIRTUAL_PAGE_SIZE                    (8U)
 
-/** @brief Size of the data buffer in bytes */
+/*! @brief Size of the shared internal scratch buffer in bytes. */
 #define FEE_DATA_BUFFER_SIZE                     (96U)
 
-/** @brief The contents of an erased flash memory cell */
+/*! @brief Erased-state byte value returned by the flash array. */
 #define FEE_ERASED_VALUE                         (0xffU)
 
-/** @brief Value of the block and cluster validation flag */
+/*! @brief Marker programmed into block and cluster valid flags. */
 #define FEE_VALIDATED_VALUE                      (0x81U)
 
-/** @brief Value of the block and cluster invalidation flag */
+/*! @brief Marker programmed into block and cluster invalid flags. */
 #define FEE_INVALIDATED_VALUE                    (0x18U)
+
+/*! @} */
 /*==================================================================================================
  *                                         EXTERNAL CONSTANTS
 ==================================================================================================*/
@@ -56,204 +89,302 @@ extern "C"{
  *                                             ENUMS
 ==================================================================================================*/
 
-/**
-* @brief        Fee cluster group run-time Information
-*/
+/*!
+ * @brief Runtime capacity snapshot for one configured cluster group.
+ *
+ * This structure is used internally and by configuration tooling to report the
+ * currently usable space, metadata overhead, and swap count for a cluster
+ * group.
+ */
 typedef struct
 {
-    Fls_AddressType  ClusterTotalSpace;      /*!< Total space in the selected cluster group */
-    Fls_AddressType  ClusterFreeSpace;       /*!< Free space in the selected cluster group */
-    uint16_t           BlockHeaderOverhead;  /*!< Block Overhead (header valid and inval flag)*/
-    uint16_t           VirtualPageSize;      /*!< Fee Virtual Page Size */
-    uint32_t           NumberOfSwap;         /*!< Number of cluster swap performed in the
-                                                      selected cluster group */
+    Fls_AddressType ClusterTotalSpace;   /*!< Total flash space managed by the cluster group. */
+    Fls_AddressType ClusterFreeSpace;    /*!< Remaining writable space in the active cluster. */
+    uint16_t BlockHeaderOverhead;        /*!< Metadata bytes reserved per logical block header. */
+    uint16_t VirtualPageSize;            /*!< Effective alignment unit used by the FEE layout. */
+    uint32_t NumberOfSwap;               /*!< Number of cluster-swap operations completed. */
 } Fee_ClusterGroupRuntimeInfoType;
 
-/**
-* @brief Fee block assignment type
-*/
+/*!
+ * @brief Ownership classification for a configured logical block.
+ *
+ * | Value                   | Description                                      |
+ * |-------------------------|--------------------------------------------------|
+ * | FEE_PROJECT_SHARED      | Block content is shared across all projects.     |
+ * | FEE_PROJECT_APPLICATION | Block belongs to the application image.          |
+ * | FEE_PROJECT_BOOTLOADER  | Block belongs to the bootloader image.           |
+ * | FEE_PROJECT_RESERVED    | Reserved value that must not be used directly.   |
+ */
 typedef enum
 {
-    FEE_PROJECT_SHARED          = 0x01,     /*!< block is used for all the projects */
-    FEE_PROJECT_APPLICATION     = 0x02,     /*!< block is used for the application project */
-    FEE_PROJECT_BOOTLOADER      = 0x03,     /*!< block is used for the bootloader project */
-    FEE_PROJECT_RESERVED        = 0xFF      /*!< the value is reserved */
+    FEE_PROJECT_SHARED      = 0x01,  /*!< Block is shared across all software images. */
+    FEE_PROJECT_APPLICATION = 0x02,  /*!< Block is reserved for the application image. */
+    FEE_PROJECT_BOOTLOADER  = 0x03,  /*!< Block is reserved for the bootloader image. */
+    FEE_PROJECT_RESERVED    = 0xFF   /*!< Reserved encoding. */
 } Fee_BlockAssignmentType;
 
-/**
-* @brief        Fee block configuration structure
-* @implements   FeeBlockConfiguration_Object
-*/
+/*!
+ * @brief Logical block configuration entry.
+ *
+ * Each entry describes one user-visible logical block, including its block ID,
+ * payload size, owning cluster group, immediate-data behavior, and assignment
+ * to a software image.
+ */
 typedef struct
 {
-    uint16_t BlockNumber;                         /*!< Fee block number */
-    uint16_t BlockSize;                           /*!< Size of Fee block in bytes */
-    uint8_t ClrGrp;                               /*!< Index of cluster group the Fee block belongs to */
-    bool ImmediateData;                           /*!< true if immediate data block */
-    Fee_BlockAssignmentType BlockAssignment;      /*!< specifies which project uses this block */
+    uint16_t BlockNumber;                    /*!< Logical block identifier used by the public APIs. */
+    uint16_t BlockSize;                      /*!< Configured payload size of the logical block. */
+    uint8_t ClrGrp;                          /*!< Cluster-group index that stores the block. */
+    bool ImmediateData;                      /*!< Set to true for an immediate-data block. */
+    Fee_BlockAssignmentType BlockAssignment; /*!< Software image that owns the block content. */
 } Fee_BlockConfigType;
 
-/**
-* @brief Fee cluster configuration structure
-*/
+/*!
+ * @brief Flash range assigned to a single FEE cluster.
+ */
 typedef struct
 {
-    Fls_AddressType StartAddr;   /*!< Address of Fee cluster in flash */
-    Fls_LengthType Length;       /*!< Size of Fee cluster in bytes */
+    Fls_AddressType StartAddr;  /*!< Start address of the cluster in flash. */
+    Fls_LengthType Length;      /*!< Total cluster size in bytes. */
 } Fee_ClusterType;
 
-/**
-* @brief Fee cluster group configuration structure
-* @implements   Fee_ClusterGroupType_struct
-*/
+/*!
+ * @brief Cluster-group configuration entry.
+ *
+ * A cluster group contains one or more physical clusters and reserves optional
+ * space for immediate blocks that must remain writable during swap.
+ */
 typedef struct
 {
-    const Fee_ClusterType *const ClrPtr;    /*!< Pointer to array of Fee cluster configurations */
-    uint32_t ClrCount;                      /*!< Number of clusters in cluster group */
-    Fls_LengthType ReservedSize;            /*!< Size of reserved area in the given cluster group (memory occupied by immediate blocks) */
+    const Fee_ClusterType *const ClrPtr;  /*!< Pointer to the cluster array owned by the group. */
+    uint32_t ClrCount;                    /*!< Number of clusters in the group. */
+    Fls_LengthType ReservedSize;          /*!< Bytes reserved for immediate-block handling. */
 } Fee_ClusterGroupType;
 
-/**
-* @brief        Fee Configuration type is a stub type, not used, but required by ASR 4.2.2.
-*/
+/*!
+ * @brief AUTOSAR compatibility alias for the block-configuration type.
+ *
+ * This alias is kept for compatibility with integration code that expects the
+ * classic Fee_ConfigType name.
+ */
 typedef Fee_BlockConfigType Fee_ConfigType;
 
-/**
-* @brief        Fee block header configuration structure. This consists of block number and length of block and Type of Fee block
-*/
+/*!
+ * @brief Serialized block-header representation used inside flash metadata.
+ */
 typedef struct
 {
-    uint16_t  BlockNumber;     /*!< Number of block */
-    uint16_t  Length;          /*!< Length of block */
-    bool ImmediateBlock;    /*!< Type of Fee block. Set to true for immediate block */
+    uint16_t BlockNumber;    /*!< Logical block identifier stored in the header. */
+    uint16_t Length;         /*!< Payload length encoded in the header. */
+    bool ImmediateBlock;     /*!< Set to true when the block is immediate data. */
 } Fee_BlockType;
 
-/**
-* @brief        Fee cluster header configuration structure.
-*/
+/*!
+ * @brief Serialized cluster-header representation stored at cluster start.
+ */
 typedef struct
 {
-    uint32_t                        ClrID;            /*!< 32-bit cluster ID */
-    Fls_AddressType                 StartAddr;        /*!< Start address of Fee cluster in Fls address space */
-    Fls_LengthType                  Length;           /*!< Length of Fee cluster in bytes */
+    uint32_t ClrID;                /*!< Monotonic cluster identifier. */
+    Fls_AddressType StartAddr;     /*!< Cluster start address in the FLS address space. */
+    Fls_LengthType Length;         /*!< Cluster length in bytes. */
 } Fee_ClusterHeaderType;
 
-/**
-* @brief        Fee module configuration structure.
-*/
+/*!
+ * @brief Top-level FEE module configuration.
+ *
+ * Supply one initialized instance of this structure to Fee_Init() so the
+ * driver can discover the block table, cluster layout, and underlying flash
+ * driver configuration.
+ */
 typedef struct
 {
-	uint16_t blockCnt;                              /*!< Number of blocks configured */
-	uint8_t clusterCnt;                             /*!< Number of clusters configured */
-	Fee_ClusterGroupType const *clusterConfigPtr;   /*!< Pointer to array of Fee cluster group configurations */
-	Fee_BlockConfigType const *blockConfigPtr;      /*!< Pointer to array of Fee block configurations */
-	Fls_ConfigType const *flashConfigPtr;           /*!< Pointer to Fls configuration structure for Fee*/
-}Fee_ModuleUserConfig_t;
+    uint16_t blockCnt;                            /*!< Number of logical blocks in blockConfigPtr. */
+    uint8_t clusterCnt;                           /*!< Number of configured cluster groups. */
+    const Fee_ClusterGroupType *clusterConfigPtr; /*!< Pointer to the cluster-group configuration table. */
+    const Fee_BlockConfigType *blockConfigPtr;    /*!< Pointer to the logical block configuration table. */
+    const Fls_ConfigType *flashConfigPtr;         /*!< Pointer to the FLS configuration used by FEE. */
+} Fee_ModuleUserConfig_t;
 
 /*==================================================================================================
 *                                     FUNCTION PROTOTYPES
 ==================================================================================================*/
 
-
-/**
- * @brief            Service to erase a logical block.
- * @details          This function is not available in FEE_LIGHT_MODE mode.
- * @param[in]        BlockNumber Number of logical block, also denoting start address of that block in EEPROM.
- * @return           Std_ReturnType
+/*!
+ * @name Initialization & Runtime Control
+ * @brief Services for starting the driver, polling its state machine, and
+ *        canceling accepted jobs.
+ * @{
  */
-#if !defined(FEE_LIGHT_MODE) || (FEE_LIGHT_MODE == 0U)
-Std_ReturnType Fee_EraseImmediateBlock (uint16_t BlockNumber);
-#endif
 
-/**
- * @brief            Service to query the result of the last accepted job issued by the upper layer software.
- * @details          
- * @return           MemIf_JobResultType
+/*!
+ * @brief Initialize the FEE driver with the selected configuration.
+ *
+ * The driver stores @a ConfigPtr, initializes the underlying FLS driver, clears
+ * internal runtime state, and schedules the initial cluster scan.
+ *
+ * @param[in] ConfigPtr  Pointer to the module configuration structure.
+ *
+ * @pre ConfigPtr must not be NULL.
+ * @pre The driver must currently be in MEMIF_UNINIT state.
+ * @post The initial scan job is pending until Fee_MainFunction() completes it.
  */
-MemIf_JobResultType Fee_GetJobResult (void);
+void Fee_Init(const Fee_ModuleUserConfig_t *ConfigPtr);
 
-/**
- * @brief            Service to return the status.
- * @details          
- * @return           MemIf_StatusType
+/*!
+ * @brief Advance the FEE background state machine.
+ *
+ * This function services the outstanding FEE job and any required internal
+ * scan, swap, validation, or metadata updates. It also advances the FLS main
+ * function used by the flash backend.
+ *
+ * @pre Fee_Init() must have been called.
+ * @note Call this function periodically until Fee_GetStatus() returns
+ *       MEMIF_IDLE after a job is accepted.
  */
-MemIf_StatusType Fee_GetStatus (void);
+void Fee_MainFunction(void);
 
-#if defined(FEE_VERSION_INFO_API) && (FEE_VERSION_INFO_API == STD_ON)
-/**
- * @brief            Service to return the version information of the FEE module.
- * @details          
- * @param[out]       VersionInfoPtr Pointer to standard version information structure.
- * @return           void
- */
-void Fee_GetVersionInfo (Std_VersionInfoType * VersionInfoPtr);
-#endif /* FEE_VERSION_INFO_API == STD_ON */
-
-/**
- * @brief            Service to initialize the FEE module.
- * @details          
- * @param[in]        ConfigPtr Pointer to the selected configuration set.
- * @return           void
- */
-void Fee_Init (const Fee_ModuleUserConfig_t * ConfigPtr);
-
-/**
- * @brief            Service to invalidate a logical block.
- * @details          This function is not available in FEE_LIGHT_MODE mode.
- * @param[in]        BlockNumber Number of logical block, also denoting start address of that block in flash memory.
- * @return           Std_ReturnType
- */
-#if !defined(FEE_LIGHT_MODE) || (FEE_LIGHT_MODE == 0U)
-Std_ReturnType Fee_InvalidateBlock (uint16_t BlockNumber);
-#endif
-
-/**
- * @brief            Service to report to this module the successful end of an asynchronous operation.
- * @details          
- * @return           void
- */
-void Fee_JobEndNotification (void);
-
-/**
- * @brief            Service to report to this module the failure of an asynchronous operation.
- * @details          
- * @return           void
- */
-void Fee_JobErrorNotification (void);
-
-/**
- * @brief            Service to handle the requested read / write / erase jobs and the internal management operations.
- * @details          
- * @return           void
- */
-void Fee_MainFunction (void);
-
-/**
- * @brief            Service to initiate a read job.
- * @details          
- * @param[in]        BlockNumber Number of logical block, also denoting start address of that block in flash memory.
- * @param[in]        BlockOffset Read address offset inside the block
- * @param[out]       DataBufferPtr Pointer to data buffer
- * @param[in]        Length Number of bytes to read
- * @return           Std_ReturnType
- */
-Std_ReturnType Fee_Read (uint16_t BlockNumber, uint16_t BlockOffset, uint8_t * DataBufferPtr, uint16_t Length);
-
-/**
- * @brief            Service to initiate a write job.
- * @details          
- * @param[in]        BlockNumber Number of logical block, also denoting start address of that block in EEPROM.
- * @param[in]        DataBufferPtr Pointer to data buffer
- * @return           Std_ReturnType
- */
-Std_ReturnType Fee_Write (uint16_t BlockNumber, const uint8_t * DataBufferPtr);
-
-/**
- * @brief            Service to cancel the current job.
- * @details          
- * @return           Std_ReturnType
+/*!
+ * @brief Cancel the current FEE job when the driver is busy.
+ *
+ * @return E_OK if the request was accepted, or E_NOT_OK if the driver is still
+ *         uninitialized.
+ *
+ * @note Canceling a busy job propagates the cancel request to the underlying
+ *       FLS driver.
  */
 Std_ReturnType Fee_Cancel(void);
+
+/*! @} */
+
+/*!
+ * @name Job Status & Version Information
+ * @brief Services for observing runtime state and optional version metadata.
+ * @{
+ */
+
+/*!
+ * @brief Query the status of the most recently accepted FEE job.
+ *
+ * @return Result code reported by the FEE state machine.
+ */
+MemIf_JobResultType Fee_GetJobResult(void);
+
+/*!
+ * @brief Get the current module status.
+ *
+ * @return MEMIF_UNINIT before initialization, MEMIF_BUSY while a job is in
+ *         progress, or MEMIF_IDLE when the driver is ready to accept a new job.
+ */
+MemIf_StatusType Fee_GetStatus(void);
+
+#if defined(FEE_VERSION_INFO_API) && (FEE_VERSION_INFO_API == STD_ON)
+/*!
+ * @brief Return the compiled version information of the FEE module.
+ *
+ * @param[out] VersionInfoPtr  Pointer to the destination version-info structure.
+ */
+void Fee_GetVersionInfo(Std_VersionInfoType *VersionInfoPtr);
+#endif /* FEE_VERSION_INFO_API == STD_ON */
+
+/*! @} */
+
+/*!
+ * @name Data Transfer
+ * @brief Asynchronous services for reading and writing configured logical blocks.
+ * @{
+ */
+
+/*!
+ * @brief Start an asynchronous read from a logical block.
+ *
+ * @param[in] BlockNumber    Logical block identifier defined by the board
+ *                           configuration.
+ * @param[in] BlockOffset    Byte offset inside the logical block.
+ * @param[out] DataBufferPtr Pointer to the caller-provided receive buffer.
+ * @param[in] Length         Number of bytes to read.
+ * @return E_OK if the read job was accepted, otherwise E_NOT_OK.
+ *
+ * @pre Fee_GetStatus() must return MEMIF_IDLE before the request is issued.
+ * @note The requested offset and length must stay within the configured block
+ *       size.
+ */
+Std_ReturnType Fee_Read(uint16_t BlockNumber,
+                        uint16_t BlockOffset,
+                        uint8_t *DataBufferPtr,
+                        uint16_t Length);
+
+/*!
+ * @brief Start an asynchronous write to a logical block.
+ *
+ * @param[in] BlockNumber    Logical block identifier defined by the board
+ *                           configuration.
+ * @param[in] DataBufferPtr  Pointer to the source buffer that contains the
+ *                           complete block payload.
+ * @return E_OK if the write job was accepted, otherwise E_NOT_OK.
+ *
+ * @pre Fee_GetStatus() must return MEMIF_IDLE before the request is issued.
+ * @note The source buffer must provide at least the configured block size in
+ *       bytes for the selected block.
+ */
+Std_ReturnType Fee_Write(uint16_t BlockNumber, const uint8_t *DataBufferPtr);
+
+/*! @} */
+
+/*!
+ * @name Block Maintenance
+ * @brief Services for invalidating or pre-erasing logical blocks in standard mode.
+ * @{
+ */
+
+#if !defined(FEE_LIGHT_MODE) || (FEE_LIGHT_MODE == 0U)
+/*!
+ * @brief Invalidate the latest instance of a logical block.
+ *
+ * @param[in] BlockNumber  Logical block identifier to invalidate.
+ * @return E_OK if the invalidation job was accepted, otherwise E_NOT_OK.
+ *
+ * @note This API is not available when FEE_LIGHT_MODE is enabled.
+ */
+Std_ReturnType Fee_InvalidateBlock(uint16_t BlockNumber);
+#endif
+
+#if !defined(FEE_LIGHT_MODE) || (FEE_LIGHT_MODE == 0U)
+/*!
+ * @brief Erase and re-prepare an immediate block for the next update.
+ *
+ * @param[in] BlockNumber  Logical block identifier to erase.
+ * @return E_OK if the erase-immediate job was accepted, otherwise E_NOT_OK.
+ *
+ * @note This API is not available when FEE_LIGHT_MODE is enabled.
+ */
+Std_ReturnType Fee_EraseImmediateBlock(uint16_t BlockNumber);
+#endif
+
+/*! @} */
+
+/*!
+ * @name Flash Callback Hooks
+ * @brief Callbacks that must be wired into the FLS configuration used by FEE.
+ * @{
+ */
+
+/*!
+ * @brief Report successful completion of the current asynchronous FLS step.
+ *
+ * The configured FLS job-end callback must call this function so the FEE job
+ * scheduler can continue the next state transition.
+ */
+void Fee_JobEndNotification(void);
+
+/*!
+ * @brief Report failure of the current asynchronous FLS step.
+ *
+ * The configured FLS job-error callback must call this function so the FEE
+ * state machine can enter its error-handling path.
+ */
+void Fee_JobErrorNotification(void);
+
+/*! @} */
 
 #ifdef __cplusplus
 }

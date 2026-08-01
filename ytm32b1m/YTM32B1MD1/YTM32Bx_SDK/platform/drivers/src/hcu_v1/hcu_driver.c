@@ -8,6 +8,12 @@
 /*!
  * @file hcu_driver.c
  * @version 1.4.1
+ *
+ * @brief HCU V1 driver implementation.
+ *
+ * This file implements the public `HCU_DRV_*` APIs together with the internal
+ * helpers that configure the active engine, service FIFO transfers, coordinate
+ * DMA callbacks, and complete HCU operations through polling or interrupts.
  */
 
  /*
@@ -30,14 +36,14 @@
  * Variables
  ******************************************************************************/
 
-/* Pointer to runtime state structure.*/
+/* Runtime state pointer installed by HCU_DRV_Init(). */
 static hcu_state_t *s_hcuStatePtr = NULL;
 
 /*******************************************************************************
  * Private Functions
  ******************************************************************************/
 
-/* Waits on the synchronization object and updates the internal flags */
+/* Configure the engine, message lengths, and runtime pointers for one command. */
 static status_t HCU_ConfigAlgorithm(const uint32_t *dataIn,
                                     uint16_t msgLen,
                                     uint16_t exMsgLen,
@@ -48,13 +54,13 @@ static status_t HCU_ConfigAlgorithm(const uint32_t *dataIn,
 
 static status_t HCU_RunOneLoop(void);
 
-/* Callback for DMA complete */
+/* Handle ingress or egress DMA completion. */
 static void HCU_DRV_CompleteDMA(void *parameter, dma_chn_status_t status);
 
-/* DMA configuration */
+/* Configure the DMA channels used by the active command. */
 static status_t HCU_DRV_ConfigDMA(uint8_t ingressDMAChannel, uint8_t egressDMAChannel);
 
-/* When AES-CCM done in last block, call it */
+/* Finalize MAC handling after the last CMAC or CCM block. */
 static status_t HCU_DRV_DoneMAC(void);
 
 #if 0
@@ -65,27 +71,22 @@ static void HCU_DRV_WaitCommandCompletion(uint32_t timeout);
  * Code
  ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_Init
- * Description   : This function initializes the internal state of the driver
- * and enables the HCU interrupt.
- *
- * Implements    : HCU_DRV_Init_Activity
- * END**************************************************************************/
+/*!
+ * @brief Initialize the HCU V1 driver state.
+ */
 status_t HCU_DRV_Init(const hcu_user_config_t *userConfig, hcu_state_t *state)
 {
-    /* Check the driver is initialized */
+    /* Validate that the driver state pointer is available. */
     DEV_ASSERT(state != NULL);
     DEV_ASSERT(userConfig != NULL);
 
     status_t semaStatus;
     status_t retVal = STATUS_SUCCESS;
 
-    /* Save the driver state structure */
+    /* Store the caller-provided runtime state pointer. */
     s_hcuStatePtr = state;
 
-    /* Clear the contents of the state structure */
+    /* Clear the runtime state fields tracked by the driver. */
     s_hcuStatePtr->cmdInProgress = false;
     s_hcuStatePtr->blockingCmd = false;
     s_hcuStatePtr->isLastBlock = false;
@@ -100,14 +101,14 @@ status_t HCU_DRV_Init(const hcu_user_config_t *userConfig, hcu_state_t *state)
     s_hcuStatePtr->cmacConfig = NULL;
     s_hcuStatePtr->status = STATUS_SUCCESS;
 
-    /* New attribution for hcu state */
+    /* Copy the carry-mode selection and DMA channel assignments. */
     s_hcuStatePtr->carryType = userConfig->carryType;
     s_hcuStatePtr->ingressDMAChannel = userConfig->ingressDMAChannel;
     s_hcuStatePtr->egressDMAChannel = userConfig->egressDMAChannel;
 
     HCU_DRV_CfgSwapping(userConfig->swap);
 
-    /* Create the synchronization semaphore */
+    /* Create the semaphore used by the runtime state. */
     semaStatus = OSIF_SemaCreate(&s_hcuStatePtr->cmdComplete, 0U);
     if (semaStatus == STATUS_ERROR)
     {
@@ -117,18 +118,13 @@ status_t HCU_DRV_Init(const hcu_user_config_t *userConfig, hcu_state_t *state)
     return retVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_DeInit
- * Description   : This function clears the internal state of the driver and
- * disables the HCU interrupt.
- *
- * Implements    : HCU_DRV_DeInit_Activity
- * END**************************************************************************/
+/*!
+ * @brief De-initialize the HCU V1 driver state.
+ */
 status_t HCU_DRV_DeInit(hcu_state_t *state)
 {
     status_t errorCode = STATUS_SUCCESS;
-    /* Clear the contents of the state structure */
+    /* Clear the runtime state fields tracked by the driver. */
     s_hcuStatePtr->cmdInProgress = false;
     s_hcuStatePtr->blockingCmd = false;
     s_hcuStatePtr->isLastBlock = false;
@@ -142,29 +138,25 @@ status_t HCU_DRV_DeInit(hcu_state_t *state)
     s_hcuStatePtr->ccmConfig = NULL;
     s_hcuStatePtr->cmacConfig = NULL;
     s_hcuStatePtr->status = STATUS_SUCCESS;
-    /* Disable the interrupt */
+    /* Disable the shared HCU interrupt line. */
     INT_SYS_DisableIRQ(HCU_IRQn);
-    /* Clear the state pointer. */
+    /* Release the module-level runtime state pointer. */
     s_hcuStatePtr = NULL;
     HCU->CR = 0;
     HCU->INTE = 0;
 
-    /* Destroy the semaphore */
+    /* Destroy the semaphore owned by the caller state. */
     errorCode = OSIF_SemaDestroy(&(state->cmdComplete));
     DEV_ASSERT(errorCode == STATUS_SUCCESS);
     return errorCode;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_CfgSwapping
- * Description   : This function cfg data swapping.
- *
- * Implements    : HCU_DRV_CfgSwapping_Activity
- * END**************************************************************************/
+/*!
+ * @brief Program the HCU data-swapping mode.
+ */
 void HCU_DRV_CfgSwapping(hcu_swapping_t cfg)
 {
-    /* 2-bit cfg value check*/
+    /* The swap-mode field is encoded on two bits. */
     DEV_ASSERT(cfg < 4);
 
     uint32_t temp;
@@ -174,23 +166,21 @@ void HCU_DRV_CfgSwapping(hcu_swapping_t cfg)
     HCU->CR = temp;
 }
 
+/*!
+ * @brief Clear the operation-done status flag.
+ */
 void HCU_DRV_ClearODFlag(void)
 {
-    /* clear OD flag in W1C method */
+    /* Clear the operation-done flag through the W1C status register path. */
     HCU->SR = HCU_SR_OD_MASK;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_InstallCallback
- * Description   : This function installs a user callback for the command
- * complete event.
- *
- * Implements    : HCU_DRV_InstallCallback_Activity
- * END**************************************************************************/
+/*!
+ * @brief Install a completion callback for asynchronous command paths.
+ */
 security_callback_t HCU_DRV_InstallCallback(security_callback_t callbackFunction, void *callbackParam)
 {
-    /* Check the driver is initialized */
+    /* Validate that the driver state pointer is available. */
     DEV_ASSERT(s_hcuStatePtr != NULL);
 
     security_callback_t currentCallback = s_hcuStatePtr->callback;
@@ -200,18 +190,14 @@ security_callback_t HCU_DRV_InstallCallback(security_callback_t callbackFunction
     return currentCallback;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_LoadUserKey
- * Description   : This function loads the user key into the HCU.
- *
- * Implements    : HCU_DRV_LoadUserKey_Activity
- * END**************************************************************************/
+/*!
+ * @brief Load a software key into the HCU key registers.
+ */
 status_t HCU_DRV_LoadUserKey(const void *key, hcu_key_size_t keySize)
 {
-    /* Check the key addresses are 32 bit aligned */
+    /* The hardware expects 32-bit aligned key buffers. */
     DEV_ASSERT((((uint32_t)key) & HCU_BUFF_ADDR_CHECK_MASK) == 0U);
-    /* Check the driver is initialized */
+    /* Validate that the driver state pointer is available. */
     DEV_ASSERT(s_hcuStatePtr != NULL);
     uint8_t keySizeInWords;
     const uint32_t *keyPtr = (const uint32_t *)key; /* PRQA S 0316 */
@@ -234,18 +220,18 @@ status_t HCU_DRV_LoadUserKey(const void *key, hcu_key_size_t keySize)
     }
     if(retVal == STATUS_SUCCESS)
     {
-        /* Set key should always update when no command is in progress */
+        /* Refuse key updates while another command is active. */
         if (s_hcuStatePtr->cmdInProgress)
         {
             retVal = STATUS_HCU_LOAD_KEY_WHEN_BUSY;
         }else
         {
-            /* Write user key to HCU */
+            /* Stream the software key words into the HCU key registers. */
             for (keyLoopIndex = 0; keyLoopIndex < keySizeInWords; keyLoopIndex++)
             {
                 HCU_SetUserKey(keyPtr[keyLoopIndex], keyLoopIndex);
             }
-            /* Update Key Size */
+            /* Program the matching key-size field. */
             HCU_SetKeySize(keySize);
         }
     }
@@ -253,18 +239,14 @@ status_t HCU_DRV_LoadUserKey(const void *key, hcu_key_size_t keySize)
 }
 
 #if FEATURE_HCU_HMAC_ENGINE
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_LoadHMACKey
- * Description   : This function loads the user key into the HCU for HMAC.
- *
- * Implements    : HCU_DRV_LoadHMACKey_Activity
- * END**************************************************************************/
+/*!
+ * @brief Load an HMAC key into the optional HMAC engine.
+ */
 status_t HCU_DRV_LoadHMACKey(const void *key, hcu_hmac_key_size_t keySize)
 {
-    /* Check the key addresses are 32 bit aligned */
+    /* The hardware expects 32-bit aligned key buffers. */
     DEV_ASSERT((((uint32_t)key) & HCU_BUFF_ADDR_CHECK_MASK) == 0U);
-    /* Check the driver is initialized */
+    /* Validate that the driver state pointer is available. */
     DEV_ASSERT(s_hcuStatePtr != NULL);
     uint8_t keySizeInWords;
     uint32_t *keyPtr = (uint32_t *)key;
@@ -273,31 +255,27 @@ status_t HCU_DRV_LoadHMACKey(const void *key, hcu_hmac_key_size_t keySize)
     keySizeInWords = ((2 << keySize) >> 2);
     keySizeInWords = (keySizeInWords == 0) ? 1 : keySizeInWords;
 
-    /* Set key should always update when no command is in progress */
+    /* Refuse key updates while another command is active. */
     if (s_hcuStatePtr->cmdInProgress)
     {
         return STATUS_HCU_LOAD_KEY_WHEN_BUSY;
     }
-    /* Enable HMAC engine */
+    /* Enable the optional HMAC extension before loading its key. */
     HCU_EnableHMAC(true);
-    /* Write user key to HCU */
+    /* Stream the software key words into the HCU key registers. */
     for (keyLoopIndex = 0; keyLoopIndex < keySizeInWords; keyLoopIndex++)
     {
         HCU_SetUserKey(keyPtr[keyLoopIndex], keyLoopIndex);
     }
-    /* Update Key Size */
+    /* Program the matching key-size field. */
     HCU_SetHMACKeySize(keySize);
     return STATUS_SUCCESS;
 }
 #endif /* FEATURE_HCU_HMAC_ENGINE */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_ConfigAlgorithm
- * Description   : This function configures algorithm with given information
- *
- * Implements    : HCU_ConfigAlgorithm_Activity
- * END**************************************************************************/
+/*!
+ * @brief Configure the active engine context for one command.
+ */
 static status_t HCU_ConfigAlgorithm(const uint32_t *dataIn,
                                     uint16_t msgLen,
                                     uint16_t exMsgLen,
@@ -306,26 +284,26 @@ static status_t HCU_ConfigAlgorithm(const uint32_t *dataIn,
                                     hcu_alg_aes_mode_t alg,
                                     hcu_mode_sel_t mode)
 {
-    /* Check the buffer addresses are valid */
+    /* Validate that both payload buffers are present. */
     DEV_ASSERT(dataIn != NULL);
-    /* Check the buffers addresses are 32 bit aligned */
+    /* The HCU data path requires 32-bit aligned buffers. */
     DEV_ASSERT((((uint32_t)dataIn) & HCU_BUFF_ADDR_CHECK_MASK) == 0U);
     DEV_ASSERT((((uint32_t)dataOut) & HCU_BUFF_ADDR_CHECK_MASK) == 0U);
     status_t retVal = STATUS_SUCCESS;
 
-    /* Check there is no other command in execution */
+    /* Reject the request if the hardware or driver is already busy. */
     if (HCU_IsBusy() || s_hcuStatePtr->cmdInProgress)
     {
         retVal = STATUS_BUSY;
     }else
     {
-        /* Update the internal flags */
+        /* Update the runtime state for the new command. */
         s_hcuStatePtr->cmdInProgress = true;
-        /* Update engine and algorithm settings */
+        /* Program the engine, algorithm, and direction fields. */
         HCU_SetEngineAlgorithm(eng, alg, mode);
-        /* Update message length */
+        /* Program the message-length fields for this transfer. */
         HCU_SetMsgLength(msgLen, exMsgLen);
-        /* Save data information */
+        /* Save the FIFO source, destination, and byte counters. */
         s_hcuStatePtr->mode = mode;
         s_hcuStatePtr->msgLen = msgLen;
         s_hcuStatePtr->inputCount = msgLen;
@@ -334,7 +312,7 @@ static status_t HCU_ConfigAlgorithm(const uint32_t *dataIn,
         s_hcuStatePtr->dataOutputPtr = dataOut;
         s_hcuStatePtr->algorithm = (hcu_alg_mode_t)(((uint16_t)alg + 1u) << (((uint16_t)eng - 1u) << 2u)); /* PRQA S 4394 */
 #if FEATURE_HCU_SHA_ENGINE
-        /* SHA output count is fixed */
+        /* SHA commands always produce a fixed digest length. */
         if (ENG_SHA == eng)
         {
             if(alg == ALG_AES_CBC)
@@ -346,20 +324,16 @@ static status_t HCU_ConfigAlgorithm(const uint32_t *dataIn,
             }
         }
 #endif /* FEATURE_HCU_SHA_ENGINE */
-        /* Config input and output FIFOs */
+        /* Program the FIFO watermarks used by the runtime loop. */
         HCU_SetFIFOWatermark(FEATURE_HCU_ONE_LOOP_INPUT_WATERMARK, FEATURE_HCU_ONE_LOOP_DATA_SIZE);
     }
 
     return retVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_CompleteDMA
- * Description   : This function is called back for DMA done
- *
- * Implements    : HCU_DRV_CompleteDMA_Activity
- * END**************************************************************************/
+/*!
+ * @brief Handle ingress or egress DMA completion.
+ */
 static void HCU_DRV_CompleteDMA(void *parameter, dma_chn_status_t status)
 {
     DEV_ASSERT(s_hcuStatePtr != NULL);
@@ -367,7 +341,7 @@ static void HCU_DRV_CompleteDMA(void *parameter, dma_chn_status_t status)
     if (status == DMA_CHN_ERROR)
     {
         HCU_SetInputDMA(false);
-        HCU_SetInputDMA(false);
+        HCU_SetOutputDMA(false);
     }
     else
     {
@@ -388,7 +362,7 @@ static void HCU_DRV_CompleteDMA(void *parameter, dma_chn_status_t status)
             {
                 HCU_ClearStatusFlag(OPERATION_DONE_FLAG);
             }
-            /* AES-CCM should check status in decrypt and copy MAC in encrypt */
+            /* CCM completion may need to copy or verify the authentication tag. */
             if ((AES_CCM_MODE == s_hcuStatePtr->algorithm) && (s_hcuStatePtr->isLastBlock))
             {
                 (void)HCU_DRV_DoneMAC();
@@ -397,13 +371,9 @@ static void HCU_DRV_CompleteDMA(void *parameter, dma_chn_status_t status)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_ConfigDMA
- * Description   : This function config DMA for data carrying.
- *
- * Implements    : HCU_DRV_ConfigDMA_Activity
- * END**************************************************************************/
+/*!
+ * @brief Configure the DMA service path for the active command.
+ */
 static status_t HCU_DRV_ConfigDMA(uint8_t ingressDMAChannel, uint8_t egressDMAChannel)
 {
     DEV_ASSERT(s_hcuStatePtr != NULL);
@@ -413,7 +383,7 @@ static status_t HCU_DRV_ConfigDMA(uint8_t ingressDMAChannel, uint8_t egressDMACh
 
     if (s_hcuStatePtr->dataOutputPtr != NULL)
     {
-        /* DMA block size config by watermark, now is 4 words, 16 bytes */
+        /* Configure one DMA block per FIFO watermark service burst. */
         (void)DMA_DRV_ConfigMultiBlockTransfer(s_hcuStatePtr->egressDMAChannel,
                                                DMA_TRANSFER_PERIPH2MEM,
                                                (uint32_t)(&(HCU->OFDAT)),
@@ -423,7 +393,7 @@ static status_t HCU_DRV_ConfigDMA(uint8_t ingressDMAChannel, uint8_t egressDMACh
                                                (uint32_t)s_hcuStatePtr->outputCount / 16U,
                                                true);
 
-        /* Combine ingress to completed event */
+        /* Route DMA completion into the shared HCU DMA callback. */
         (void)DMA_DRV_InstallCallback(s_hcuStatePtr->egressDMAChannel,
                                       (HCU_DRV_CompleteDMA),
                                       (void *)(uint32_t)(s_hcuStatePtr->egressDMAChannel));/* PRQA S 0326 */
@@ -435,7 +405,7 @@ static status_t HCU_DRV_ConfigDMA(uint8_t ingressDMAChannel, uint8_t egressDMACh
     {
 #if FEATURE_HCU_HAS_FIXED_DMA
         {
-            /* DMA block size config by watermark, now is 4 words, 16 bytes */
+            /* Configure one DMA block per FIFO watermark service burst. */
             (void)DMA_DRV_ConfigMultiBlockTransfer(s_hcuStatePtr->ingressDMAChannel,
                                                    DMA_TRANSFER_MEM2PERIPH,
                                                    (uint32_t)s_hcuStatePtr->dataInputPtr,
@@ -447,7 +417,7 @@ static status_t HCU_DRV_ConfigDMA(uint8_t ingressDMAChannel, uint8_t egressDMACh
         }
 #else
         {
-            /* DMA block size config by watermark, now is 4 words, 16 bytes */
+            /* Configure one DMA block per FIFO watermark service burst. */
             (void)DMA_DRV_ConfigMultiBlockTransfer(s_hcuStatePtr->ingressDMAChannel,
                                                    DMA_TRANSFER_MEM2PERIPH,
                                                    (uint32_t)s_hcuStatePtr->dataInputPtr,
@@ -457,10 +427,10 @@ static status_t HCU_DRV_ConfigDMA(uint8_t ingressDMAChannel, uint8_t egressDMACh
                                                    (uint32_t)s_hcuStatePtr->inputCount / 16U,
                                                    false);
         }
-        /* Control address for out of range */
+        /* Clamp the source address adjustment on devices without fixed DMA. */
         DMA_DRV_SetSrcLastAddrAdjustment(s_hcuStatePtr->ingressDMAChannel, -s_hcuStatePtr->msgLen); /* PRQA S 3101, 4446 */
 #endif
-        /* Combine ingress to completed event */
+        /* Route DMA completion into the shared HCU DMA callback. */
         (void)DMA_DRV_InstallCallback(s_hcuStatePtr->ingressDMAChannel,
                                       (HCU_DRV_CompleteDMA),
                                       (void *)(uint32_t)(s_hcuStatePtr->ingressDMAChannel));/* PRQA S 0326 */
@@ -471,13 +441,9 @@ static status_t HCU_DRV_ConfigDMA(uint8_t ingressDMAChannel, uint8_t egressDMACh
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_DoneMAC
- * Description   : This function is called back when need MAC at last block.
- *
- * Implements    : HCU_DRV_DoneMAC_Activity
- * END**************************************************************************/
+/*!
+ * @brief Finalize CMAC or CCM tag handling for the active command.
+ */
 static status_t HCU_DRV_DoneMAC(void)
 {
     DEV_ASSERT(s_hcuStatePtr != NULL);
@@ -501,7 +467,7 @@ static status_t HCU_DRV_DoneMAC(void)
                 s_hcuStatePtr->cmacConfig->macPtr[i] = macPtr[i];
             }
         }else {
-            /* Not Enter this statement */
+            /* No additional work is required for other carry modes. */
         }
     }
     else
@@ -519,24 +485,19 @@ static status_t HCU_DRV_DoneMAC(void)
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_EncryptECB
- * Description   : This function performs the AES-128 encryption in ECB mode of
- * the input plain text buffer.
- *
- * Implements    : HCU_DRV_EncryptECB_Activity
- * END**************************************************************************/
+/*!
+ * @brief Encrypt a payload with AES in ECB mode.
+ */
 status_t HCU_DRV_EncryptECB(const void *plainText, uint16_t length, void *cipherText)
 {
     status_t status;
-    /* Configure the algorithm */
+    /* Prepare the command-specific engine and runtime context. */
     status = HCU_ConfigAlgorithm((const uint32_t *)plainText, length, 0, cipherText, ENG_AES, ALG_AES_ECB, MODE_ENC); /* PRQA S 0316, 0317 */
     if (STATUS_SUCCESS == status)
     {
         if (HCU_USING_INTERRUPT == s_hcuStatePtr->carryType)
         {
-            /* Enable input fifo watermark, output fifo watermark and operate done */
+            /* Enable the FIFO watermark and operation-done interrupts used by cipher flows. */
             HCU_SetDefaultInterrupt(true);
             INT_SYS_EnableIRQ(HCU_IRQ_NUMBER);
         }
@@ -544,12 +505,12 @@ status_t HCU_DRV_EncryptECB(const void *plainText, uint16_t length, void *cipher
         {
             (void)HCU_DRV_ConfigDMA(s_hcuStatePtr->ingressDMAChannel, s_hcuStatePtr->egressDMAChannel);
         }else {
-            /* Not Enter this statement */
+            /* No additional work is required for other carry modes. */
         }
     
-        /* Start the command */
+        /* Launch the configured HCU command. */
         HCU_StartEngine();
-        /* Polling is blocking */
+        /* Polling mode stays in the API until the command finishes. */
         if (HCU_USING_POLLING == s_hcuStatePtr->carryType)
         {
             do
@@ -563,24 +524,19 @@ status_t HCU_DRV_EncryptECB(const void *plainText, uint16_t length, void *cipher
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_DecryptECB
- * Description   : This function performs the AES-128 decryption in ECB mode of
- * the input cipher text buffer.
- *
- * Implements    : HCU_DRV_DecryptECB_Activity
- * END**************************************************************************/
+/*!
+ * @brief Decrypt a payload with AES in ECB mode.
+ */
 status_t HCU_DRV_DecryptECB(const void *cipherText, uint16_t length, void *plainText)
 {
     status_t status;
-    /* Configure the algorithm */
+    /* Prepare the command-specific engine and runtime context. */
     status = HCU_ConfigAlgorithm((const uint32_t *)cipherText, length, 0, plainText, ENG_AES, ALG_AES_ECB, MODE_DEC);/* PRQA S 0316, 0317 */
     if (STATUS_SUCCESS == status)
     {
         if (HCU_USING_INTERRUPT == s_hcuStatePtr->carryType)
         {
-            /* Enable input fifo watermark, output fifo watermark and operate done */
+            /* Enable the FIFO watermark and operation-done interrupts used by cipher flows. */
             HCU_SetDefaultInterrupt(true);
             INT_SYS_EnableIRQ(HCU_IRQ_NUMBER);
         }
@@ -588,12 +544,12 @@ status_t HCU_DRV_DecryptECB(const void *cipherText, uint16_t length, void *plain
         {
             (void)HCU_DRV_ConfigDMA(s_hcuStatePtr->ingressDMAChannel, s_hcuStatePtr->egressDMAChannel);
         }else {
-            /* Not Enter this statement */
+            /* No additional work is required for other carry modes. */
         }
     
-        /* Start the command */
+        /* Launch the configured HCU command. */
         HCU_StartEngine();
-        /* Polling is blocking */
+        /* Polling mode stays in the API until the command finishes. */
         if (HCU_USING_POLLING == s_hcuStatePtr->carryType)
         {
             do
@@ -608,31 +564,26 @@ status_t HCU_DRV_DecryptECB(const void *cipherText, uint16_t length, void *plain
 }
 
 #if FEATURE_HCU_AES_CTR_ENGINE
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_EncryptCTR
- * Description   : This function performs the AES-128 encryption in CTR mode of
- * the input cipher text buffer.
- *
- * Implements    : HCU_DRV_EncryptCTR_Activity
- * END**************************************************************************/
+/*!
+ * @brief Encrypt a payload with AES in CTR mode.
+ */
 status_t HCU_DRV_EncryptCTR(const void *plainText, uint16_t length, const void *cv, void *cipherText)
 {
     status_t status;
-    /* Configure the algorithm */
+    /* Prepare the command-specific engine and runtime context. */
     status = HCU_ConfigAlgorithm((const uint32_t *)plainText, length, 0, cipherText, ENG_AES, ALG_AES_CTR, MODE_ENC);/* PRQA S 0316, 0317 */
     if (STATUS_SUCCESS == status)
     {
-        /* Configure the CV */
+        /* Update the counter-value registers when the caller supplies them. */
         if (NULL != cv)
         {
-            /* Only update when the CV is not NULL */
+            /* Preserve the current counter value when no replacement is provided. */
             HCU_SetCV((const uint32_t *)cv);/* PRQA S 0316 */
         }
     
         if (HCU_USING_INTERRUPT == s_hcuStatePtr->carryType)
         {
-            /* Enable input fifo watermark, output fifo watermark and operate done */
+            /* Enable the FIFO watermark and operation-done interrupts used by cipher flows. */
             HCU_SetDefaultInterrupt(true);
             INT_SYS_EnableIRQ(HCU_IRQ_NUMBER);
         }
@@ -640,12 +591,12 @@ status_t HCU_DRV_EncryptCTR(const void *plainText, uint16_t length, const void *
         {
             (void)HCU_DRV_ConfigDMA(s_hcuStatePtr->ingressDMAChannel, s_hcuStatePtr->egressDMAChannel);
         }else {
-            /* Not Enter this statement */
+            /* No additional work is required for other carry modes. */
         }
     
-        /* Start the command */
+        /* Launch the configured HCU command. */
         HCU_StartEngine();
-        /* Polling is blocking */
+        /* Polling mode stays in the API until the command finishes. */
         if (HCU_USING_POLLING == s_hcuStatePtr->carryType)
         {
             do
@@ -659,31 +610,26 @@ status_t HCU_DRV_EncryptCTR(const void *plainText, uint16_t length, const void *
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_DecryptCTR
- * Description   : This function performs the AES-128 decryption in CTR mode of
- * the input cipher text buffer.
- *
- * Implements    : HCU_DRV_DecryptCTR_Activity
- * END**************************************************************************/
+/*!
+ * @brief Decrypt a payload with AES in CTR mode.
+ */
 status_t HCU_DRV_DecryptCTR(const void *cipherText, uint16_t length, const void *cv, void *plainText)
 {
     status_t status;
-    /* Configure the algorithm */
+    /* Prepare the command-specific engine and runtime context. */
     status = HCU_ConfigAlgorithm((const uint32_t *)cipherText, length, 0, plainText, ENG_AES, ALG_AES_CTR, MODE_DEC);/* PRQA S 0316, 0317 */
     if (STATUS_SUCCESS == status)
     {
-        /* Configure the CV */
+        /* Update the counter-value registers when the caller supplies them. */
         if (NULL != cv)
         {
-            /* Only update when the CV is not NULL */
+            /* Preserve the current counter value when no replacement is provided. */
             HCU_SetCV((const uint32_t *)cv);/* PRQA S 0316 */
         }
     
         if (HCU_USING_INTERRUPT == s_hcuStatePtr->carryType)
         {
-            /* Enable input fifo watermark, output fifo watermark and operate done */
+            /* Enable the FIFO watermark and operation-done interrupts used by cipher flows. */
             HCU_SetDefaultInterrupt(true);
             INT_SYS_EnableIRQ(HCU_IRQ_NUMBER);
         }
@@ -691,12 +637,12 @@ status_t HCU_DRV_DecryptCTR(const void *cipherText, uint16_t length, const void 
         {
             (void)HCU_DRV_ConfigDMA(s_hcuStatePtr->ingressDMAChannel, s_hcuStatePtr->egressDMAChannel);
         }else {
-            /* Not Enter this statement */
+            /* No additional work is required for other carry modes. */
         }
     
-        /* Start the command */
+        /* Launch the configured HCU command. */
         HCU_StartEngine();
-        /* Polling is blocking */
+        /* Polling mode stays in the API until the command finishes. */
         if (HCU_USING_POLLING == s_hcuStatePtr->carryType)
         {
             do
@@ -712,27 +658,22 @@ status_t HCU_DRV_DecryptCTR(const void *cipherText, uint16_t length, const void 
 #endif /* FEATURE_HCU_AES_CTR_ENGINE */
 
 #if FEATURE_HCU_SM4_ENGINE
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_EncryptSM4ECB
- * Description   : This function performs the SM4-128 encryption in ECB mode of
- * the input plain text buffer.
- *
- * Implements    : HCU_DRV_EncryptSM4ECB_Activity
- * END**************************************************************************/
+/*!
+ * @brief Encrypt a payload with SM4 in ECB mode.
+ */
 status_t HCU_DRV_EncryptSM4ECB(const void *plainText, uint16_t length, void *cipherText)
 {
-    /* Check the driver is initialized */
+    /* Validate that the driver state pointer is available. */
     DEV_ASSERT(s_hcuStatePtr != NULL);
 
     status_t status;
-    /* Configure the algorithm */
+    /* Prepare the command-specific engine and runtime context. */
     status = HCU_ConfigAlgorithm((const uint32_t *)plainText, length, 0, cipherText, ENG_SM4, ALG_AES_ECB, MODE_ENC);/* PRQA S 0316, 0317 */
     if (STATUS_SUCCESS == status)
     {
         if (HCU_USING_INTERRUPT == s_hcuStatePtr->carryType)
         {
-            /* Enable input fifo watermark, output fifo watermark and operate done */
+            /* Enable the FIFO watermark and operation-done interrupts used by cipher flows. */
             HCU_SetDefaultInterrupt(true);
             INT_SYS_EnableIRQ(HCU_IRQ_NUMBER);
         }
@@ -740,12 +681,12 @@ status_t HCU_DRV_EncryptSM4ECB(const void *plainText, uint16_t length, void *cip
         {
             (void)HCU_DRV_ConfigDMA(s_hcuStatePtr->ingressDMAChannel, s_hcuStatePtr->egressDMAChannel);
         }else {
-            /* Not Enter this statement */
+            /* No additional work is required for other carry modes. */
         }
 
-        /* Start the command */
+        /* Launch the configured HCU command. */
         HCU_StartEngine();
-        /* Polling is blocking */
+        /* Polling mode stays in the API until the command finishes. */
         if (HCU_USING_POLLING == s_hcuStatePtr->carryType)
         {
             do
@@ -759,24 +700,19 @@ status_t HCU_DRV_EncryptSM4ECB(const void *plainText, uint16_t length, void *cip
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_DecryptSM4ECB
- * Description   : This function performs the SM4-128 decryption in ECB mode of
- * the input cipher text buffer.
- *
- * Implements    : HCU_DRV_DecryptSM4ECB_Activity
- * END**************************************************************************/
+/*!
+ * @brief Decrypt a payload with SM4 in ECB mode.
+ */
 status_t HCU_DRV_DecryptSM4ECB(const void *cipherText, uint16_t length, void *plainText)
 {
     status_t status;
-    /* Configure the algorithm */
+    /* Prepare the command-specific engine and runtime context. */
     status = HCU_ConfigAlgorithm((const uint32_t *)cipherText, length, 0, plainText, ENG_SM4, ALG_AES_ECB, MODE_DEC);/* PRQA S 0316, 0317 */
     if (STATUS_SUCCESS == status)
     {
         if (HCU_USING_INTERRUPT == s_hcuStatePtr->carryType)
         {
-            /* Enable input fifo watermark, output fifo watermark and operate done */
+            /* Enable the FIFO watermark and operation-done interrupts used by cipher flows. */
             HCU_SetDefaultInterrupt(true);
             INT_SYS_EnableIRQ(HCU_IRQ_NUMBER);
         }
@@ -784,11 +720,11 @@ status_t HCU_DRV_DecryptSM4ECB(const void *cipherText, uint16_t length, void *pl
         {
             (void)HCU_DRV_ConfigDMA(s_hcuStatePtr->ingressDMAChannel, s_hcuStatePtr->egressDMAChannel);
         }else {
-            /* Not Enter this statement */
+            /* No additional work is required for other carry modes. */
         }
-        /* Start the command */
+        /* Launch the configured HCU command. */
         HCU_StartEngine();
-        /* Polling is blocking */
+        /* Polling mode stays in the API until the command finishes. */
         if (HCU_USING_POLLING == s_hcuStatePtr->carryType)
         {
             do
@@ -802,32 +738,27 @@ status_t HCU_DRV_DecryptSM4ECB(const void *cipherText, uint16_t length, void *pl
 }
 #endif /* FEATURE_HCU_SM4_ENGINE */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_EncryptCBC
- * Description   : This function performs the AES-128 encryption in CBC mode of
- * the input plain text buffer.
- *
- * Implements    : HCU_DRV_EncryptCBC_Activity
- * END**************************************************************************/
+/*!
+ * @brief Encrypt a payload with AES in CBC mode.
+ */
 status_t HCU_DRV_EncryptCBC(const void *plainText, uint16_t length, const void *iv, void *cipherText)
 {
     status_t status;
 
-    /* Configure the algorithm */
+    /* Prepare the command-specific engine and runtime context. */
     status = HCU_ConfigAlgorithm((const uint32_t *)plainText, length, 0, cipherText, ENG_AES, ALG_AES_CBC, MODE_ENC);/* PRQA S 0316, 0317 */
     if (STATUS_SUCCESS == status)
     {
-        /* Configure the IV */
+        /* Update the IV registers when the caller supplies them. */
         if (NULL != iv)
         {
-            /* Only update when the IV is not NULL */
+            /* Preserve the current IV when no replacement is provided. */
             HCU_SetIV((const uint32_t *)iv);/* PRQA S 0316 */
         }
     
         if (HCU_USING_INTERRUPT == s_hcuStatePtr->carryType)
         {
-            /* Enable input fifo watermark, output fifo watermark and operate done */
+            /* Enable the FIFO watermark and operation-done interrupts used by cipher flows. */
             HCU_SetDefaultInterrupt(true);
             INT_SYS_EnableIRQ(HCU_IRQ_NUMBER);
         }
@@ -835,12 +766,12 @@ status_t HCU_DRV_EncryptCBC(const void *plainText, uint16_t length, const void *
         {
             (void)HCU_DRV_ConfigDMA(s_hcuStatePtr->ingressDMAChannel, s_hcuStatePtr->egressDMAChannel);
         }else{
-            /* Not Enter this statement */
+            /* No additional work is required for other carry modes. */
         }
     
-        /* Start the command */
+        /* Launch the configured HCU command. */
         HCU_StartEngine();
-        /* Polling is blocking */
+        /* Polling mode stays in the API until the command finishes. */
         if (HCU_USING_POLLING == s_hcuStatePtr->carryType)
         {
             do
@@ -854,32 +785,27 @@ status_t HCU_DRV_EncryptCBC(const void *plainText, uint16_t length, const void *
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_DecryptCBC
- * Description   : This function performs the AES-128 decryption in CBC mode of
- * the input cipher text buffer.
- *
- * Implements    : HCU_DRV_DecryptCBC_Activity
- * END**************************************************************************/
+/*!
+ * @brief Decrypt a payload with AES in CBC mode.
+ */
 status_t HCU_DRV_DecryptCBC(const void *cipherText, uint16_t length, const void *iv, void *plainText)
 {
     status_t status;
 
-    /* Configure the algorithm */
+    /* Prepare the command-specific engine and runtime context. */
     status = HCU_ConfigAlgorithm((const uint32_t *)cipherText, length, 0, plainText, ENG_AES, ALG_AES_CBC, MODE_DEC);/* PRQA S 0316, 0317 */
     if (STATUS_SUCCESS == status)
     {
-        /* Configure the IV */
+        /* Update the IV registers when the caller supplies them. */
         if (NULL != iv)
         {
-            /* Only update when the IV is not NULL */
+            /* Preserve the current IV when no replacement is provided. */
             HCU_SetIV((const uint32_t *)iv);/* PRQA S 0316 */
         }
     
         if (HCU_USING_INTERRUPT == s_hcuStatePtr->carryType)
         {
-            /* Enable input fifo watermark, output fifo watermark and operate done */
+            /* Enable the FIFO watermark and operation-done interrupts used by cipher flows. */
             HCU_SetDefaultInterrupt(true);
             INT_SYS_EnableIRQ(HCU_IRQ_NUMBER);
         }
@@ -887,12 +813,12 @@ status_t HCU_DRV_DecryptCBC(const void *cipherText, uint16_t length, const void 
         {
             (void)HCU_DRV_ConfigDMA(s_hcuStatePtr->ingressDMAChannel, s_hcuStatePtr->egressDMAChannel);
         }else {
-            /* Not Enter this statement */
+            /* No additional work is required for other carry modes. */
         }
     
-        /* Start the command */
+        /* Launch the configured HCU command. */
         HCU_StartEngine();
-        /* Polling is blocking */
+        /* Polling mode stays in the API until the command finishes. */
         if (HCU_USING_POLLING == s_hcuStatePtr->carryType)
         {
             do
@@ -906,29 +832,24 @@ status_t HCU_DRV_DecryptCBC(const void *cipherText, uint16_t length, const void 
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_GenerateMAC
- * Description   : This function calculates the MAC of a given message using CMAC
- * with AES-128.
- *
- * Implements    : HCU_DRV_GenerateMAC_Activity
- * END**************************************************************************/
+/*!
+ * @brief Generate a CMAC value with the AES engine.
+ */
 status_t HCU_DRV_GenerateMAC(const void *msg, uint16_t msgLen, hcu_msg_type_t msgType, hcu_cmac_config_t *cmacConfig)
 {
     status_t status;
     uint8_t macPtr[16];
     uint8_t i;
-    /* Configure the algorithm */
+    /* Prepare the command-specific engine and runtime context. */
     status = HCU_ConfigAlgorithm((const uint32_t *)msg, msgLen, 0, NULL, ENG_AES, ALG_AES_CMAC, MODE_ENC);/* PRQA S 0316 */
     if (STATUS_SUCCESS == status)
     {
-        /* Copy mac pointer and length */
+        /* Keep the CMAC buffer description in the runtime state. */
         if (NULL != cmacConfig->macPtr)
         {
             s_hcuStatePtr->cmacConfig = cmacConfig;
         }
-        /* Set isLastBlock at the end block */
+        /* Track whether this segment finishes the authenticated stream. */
         if((msgType == MSG_END) || (msgType == MSG_ALL))
         {
             s_hcuStatePtr->isLastBlock = true;
@@ -938,42 +859,42 @@ status_t HCU_DRV_GenerateMAC(const void *msg, uint16_t msgLen, hcu_msg_type_t ms
             s_hcuStatePtr->isLastBlock = false;
         }
     
-        /* Configure the MAC length */
+        /* Program the MAC length field before starting the operation. */
         HCU_SetMacLength(cmacConfig->macLen);
-        /* Configure the message type */
+        /* Program the message-fragment type for this call. */
         HCU_SetMsgType(msgType);
         if (HCU_USING_INTERRUPT == s_hcuStatePtr->carryType)
         {
-            /* Enable input fifo watermark and operate done */
+            /* Enable the input-watermark and operation-done interrupts. */
             HCU_SetDoneInterrupt(true);
             HCU_SetInputInterrupt(true);
             INT_SYS_EnableIRQ(HCU_IRQ_NUMBER);
         }
         else if (HCU_USING_DMA == s_hcuStatePtr->carryType)
         {
-            /* Enable operate done */
+            /* Keep the operation-done interrupt enabled for command completion. */
             HCU_SetDoneInterrupt(true);
             INT_SYS_EnableIRQ(HCU_IRQ_NUMBER);
             (void)HCU_DRV_ConfigDMA(s_hcuStatePtr->ingressDMAChannel, s_hcuStatePtr->egressDMAChannel);
         }else {
-            /* Not Enter this statement */
+            /* No additional work is required for other carry modes. */
         }
-        /* Start the command */
+        /* Launch the configured HCU command. */
         HCU_StartEngine();
-        /* Polling is blocking */
+        /* Polling mode stays in the API until the command finishes. */
         if (HCU_USING_POLLING == s_hcuStatePtr->carryType)
         {
             do
             {
                 status = HCU_RunOneLoop();
             } while (STATUS_BUSY == status);
-            /* Copy CMAC result to output buffer */
+            /* Read the generated CMAC bytes back into the caller buffer. */
             HCU_ReadMac(macPtr);
             for (i = 0; (NULL != cmacConfig->macPtr) && (i < cmacConfig->macLen); ++i)
             {
                 cmacConfig->macPtr[i] = macPtr[i];
             }
-            /* Copy CMAC result at the end */
+            /* Finalize CMAC processing on the last segment. */
             if((msgType == MSG_END) || (msgType == MSG_ALL))
             {
                 status = HCU_DRV_DoneMAC();
@@ -985,30 +906,25 @@ status_t HCU_DRV_GenerateMAC(const void *msg, uint16_t msgLen, hcu_msg_type_t ms
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_AuthorizeMAC
- * Description   : This function authorize the MAC of a given message using CMAC
- * with AES-128.
- *
- * Implements    : HCU_DRV_AuthorizeMAC_Activity
- * END**************************************************************************/
+/*!
+ * @brief Authorize a CMAC value with the AES engine.
+ */
 status_t HCU_DRV_AuthorizeMAC(const void *msg, uint16_t msgLen, hcu_msg_type_t msgType, hcu_cmac_config_t *cmacConfig)
 {
     status_t status;
 
-    /* Configure the algorithm */
+    /* Prepare the command-specific engine and runtime context. */
     status = HCU_ConfigAlgorithm((const uint32_t *)msg, msgLen, 0, NULL, ENG_AES, ALG_AES_CMAC, MODE_DEC);/* PRQA S 0316 */
     if (STATUS_SUCCESS == status)
     {
         if (NULL != cmacConfig->macPtr)
         {
-            /* Copy mac pointer and length */
+            /* Keep the CMAC buffer description in the runtime state. */
             s_hcuStatePtr->cmacConfig = cmacConfig;
             /* Set MAC value */
             HCU_SetMac(cmacConfig->macPtr, cmacConfig->macLen);
         }
-        /* Set isLastBlock at the end block */
+        /* Track whether this segment finishes the authenticated stream. */
         if((msgType == MSG_END) || (msgType == MSG_ALL))
         {
             s_hcuStatePtr->isLastBlock = true;
@@ -1017,36 +933,36 @@ status_t HCU_DRV_AuthorizeMAC(const void *msg, uint16_t msgLen, hcu_msg_type_t m
         {
             s_hcuStatePtr->isLastBlock = false;
         }
-        /* Configure the MAC length */
+        /* Program the MAC length field before starting the operation. */
         HCU_SetMacLength(cmacConfig->macLen);
-        /* Configure the message type */
+        /* Program the message-fragment type for this call. */
         HCU_SetMsgType(msgType);
         if (HCU_USING_INTERRUPT == s_hcuStatePtr->carryType)
         {
-            /* Enable input fifo watermark and operate done */
+            /* Enable the input-watermark and operation-done interrupts. */
             HCU_SetDoneInterrupt(true);
             HCU_SetInputInterrupt(true);
             INT_SYS_EnableIRQ(HCU_IRQ_NUMBER);
         }
         else if (HCU_USING_DMA == s_hcuStatePtr->carryType)
         {
-            /* Enable operate done */
+            /* Keep the operation-done interrupt enabled for command completion. */
             HCU_SetDoneInterrupt(true);
             INT_SYS_EnableIRQ(HCU_IRQ_NUMBER);
             (void)HCU_DRV_ConfigDMA(s_hcuStatePtr->ingressDMAChannel, s_hcuStatePtr->egressDMAChannel);
         }else {
-            /* Not Enter this statement */
+            /* No additional work is required for other carry modes. */
         }
-        /* Start the command */
+        /* Launch the configured HCU command. */
         HCU_StartEngine();
-        /* Polling is blocking */
+        /* Polling mode stays in the API until the command finishes. */
         if (HCU_USING_POLLING == s_hcuStatePtr->carryType)
         {
             do
             {
                 status = HCU_RunOneLoop();
             } while (STATUS_BUSY == status);
-            /* Check CMAC result at the end */
+            /* Finalize CMAC authorization on the last segment. */
             if((msgType == MSG_END) || (msgType == MSG_ALL))
             {
                 status = HCU_DRV_DoneMAC();
@@ -1058,13 +974,9 @@ status_t HCU_DRV_AuthorizeMAC(const void *msg, uint16_t msgLen, hcu_msg_type_t m
     return status;
 }
 #if FEATURE_HCU_SHA_ENGINE
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_GenerateSHA
- * Description   : This function calculates the MAC of a given message using SHA
- *
- * Implements    : HCU_DRV_GenerateSHA_Activity
- * END**************************************************************************/
+/*!
+ * @brief Generate a SHA digest.
+ */
 status_t HCU_DRV_GenerateSHA(const void *msg,
                              uint16_t msgLen,
                              uint32_t totalLen,
@@ -1075,7 +987,7 @@ status_t HCU_DRV_GenerateSHA(const void *msg,
     status_t status = STATUS_SUCCESS;
     if ((msgType == MSG_START) || (msgType == MSG_MIDDLE))
     {
-        /* If divide in several blocks, each block must at least 64 bytes */
+        /* Segmented SHA-256 blocks must be non-zero multiples of 64 bytes. */
         if (HCU_SHA_256 == shaType)
         {
             if (((msgLen % HCU_SHA_256_BLOCK_SIZE) != 0u) || (msgLen == 0u))
@@ -1083,7 +995,7 @@ status_t HCU_DRV_GenerateSHA(const void *msg,
                 status = STATUS_ERROR;
             }
         }
-        /* If divide in several blocks, each block must at least 128 bytes */
+        /* Segmented SHA-384 blocks must be non-zero multiples of 128 bytes. */
         if (HCU_SHA_384 == shaType)
         {
             if (((msgLen % HCU_SHA_384_BLOCK_SIZE) != 0u) || (msgLen == 0u))
@@ -1094,22 +1006,22 @@ status_t HCU_DRV_GenerateSHA(const void *msg,
     }
     if(STATUS_SUCCESS == status)
     {
-        /* Configure the algorithm */
+        /* Prepare the command-specific engine and runtime context. */
         status = HCU_ConfigAlgorithm((const uint32_t *)msg, msgLen, msgLen, result, ENG_SHA, (hcu_alg_aes_mode_t)(uint8_t)shaType, MODE_ENC);/* PRQA S 0316, 0317 */
     }
     if (STATUS_SUCCESS == status)
     {
-        /* Configure the message type */
+        /* Program the message-fragment type for this call. */
         HCU_SetMsgType(msgType);
-        /* Configure the total length of message at the beginning and disable sha-verify*/
+        /* Program the total message length and clear SHA verification at the start. */
         if ((msgType == MSG_START) || (msgType == MSG_ALL))
         {
             HCU_SetSHAVerification(false);
             HCU_SetMsgTotalLength(totalLen);
-            /* When change sha-verify, OD will immediately set */
+            /* Updating SHA verification can assert the operation-done flag immediately. */
             HCU_ClearStatusFlag(OPERATION_DONE_FLAG);
         }
-        /* Set if last block */
+        /* Track whether this SHA segment closes the full message. */
         if ((msgType == MSG_END) || (msgType == MSG_ALL))
         {
             s_hcuStatePtr->isLastBlock = true;
@@ -1118,7 +1030,7 @@ status_t HCU_DRV_GenerateSHA(const void *msg,
         }
         if (HCU_USING_INTERRUPT == s_hcuStatePtr->carryType)
         {
-            /* Enable input fifo watermark and operate done */
+            /* Enable the input-watermark and operation-done interrupts. */
             HCU_SetInputInterrupt(true);
             HCU_SetDoneInterrupt(true);
             if (NULL != result)
@@ -1130,18 +1042,18 @@ status_t HCU_DRV_GenerateSHA(const void *msg,
     #if FEATURE_HCU_HAS_FIXED_DMA
         else if (HCU_USING_DMA == s_hcuStatePtr->carryType)
         {
-            /* Check by operate done flag */
+            /* Use the operation-done interrupt to complete the DMA-backed SHA flow. */
             HCU_SetDoneInterrupt(true);
             INT_SYS_EnableIRQ(HCU_IRQ_NUMBER);
             (void)HCU_DRV_ConfigDMA(s_hcuStatePtr->ingressDMAChannel, s_hcuStatePtr->egressDMAChannel);
         }
         else {
-            /* Not Enter this statement */
+            /* No additional work is required for other carry modes. */
         }
     #endif
-        /* Start the command */
+        /* Launch the configured HCU command. */
         HCU_StartEngine();
-        /* Polling is blocking */
+        /* Polling mode stays in the API until the command finishes. */
         if (HCU_USING_POLLING == s_hcuStatePtr->carryType)
         {
             do
@@ -1154,13 +1066,9 @@ status_t HCU_DRV_GenerateSHA(const void *msg,
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_AuthorizeSHA
- * Description   : This function verify the MAC of a given message using SHA
- *
- * Implements    : HCU_DRV_AuthorizeSHA_Activity
- * END**************************************************************************/
+/*!
+ * @brief Authorize a SHA digest.
+ */
 #if FEATURE_HCU_HAS_SHA_AUTHORIZE
 status_t HCU_DRV_AuthorizeSHA(const void *msg,
                               uint16_t msgLen,
@@ -1173,7 +1081,7 @@ status_t HCU_DRV_AuthorizeSHA(const void *msg,
     status_t status = STATUS_SUCCESS;
     if ((msgType == MSG_START) || (msgType == MSG_MIDDLE))
     {
-        /* If divide in several blocks, each block must at least 64 bytes */
+        /* Segmented SHA-256 blocks must be non-zero multiples of 64 bytes. */
         if (HCU_SHA_256 == shaType)
         {
             if (((msgLen % HCU_SHA_256_BLOCK_SIZE) != 0u) || (msgLen == 0u))
@@ -1181,7 +1089,7 @@ status_t HCU_DRV_AuthorizeSHA(const void *msg,
                 status = STATUS_ERROR;
             }
         }
-        /* If divide in several blocks, each block must at least 128 bytes */
+        /* Segmented SHA-384 blocks must be non-zero multiples of 128 bytes. */
         if (HCU_SHA_384 == shaType)
         {
             if (((msgLen % HCU_SHA_384_BLOCK_SIZE) != 0u) || (msgLen == 0u))
@@ -1190,10 +1098,10 @@ status_t HCU_DRV_AuthorizeSHA(const void *msg,
             }
         }
     }
-    /* SHA authorize need reset HCU at first */
+    /* The authorize flow reloads the digest context before the first segment. */
     if((msgType == MSG_START) || (msgType == MSG_ALL))
     {
-        /* Write hash value to SHAICV, load at first */
+        /* Load the expected digest into the authorize context registers. */
         if (HCU_SHA_256 == shaType)
         {
             HCU_SetICV((const uint32_t *)result, HCU_SHA_256_LENGTH >> 2); /* PRQA S 0316 */
@@ -1205,41 +1113,41 @@ status_t HCU_DRV_AuthorizeSHA(const void *msg,
     }
     if (STATUS_SUCCESS == status)
     {
-        /* Configure the algorithm */
+        /* Prepare the command-specific engine and runtime context. */
         status = HCU_ConfigAlgorithm((const uint32_t *)msg, msgLen, 0u, trueResult, ENG_SHA, (hcu_alg_aes_mode_t)(uint8_t)shaType, MODE_ENC);/* PRQA S 0316, 0317 */
         s_hcuStatePtr->mode = MODE_DEC;
     }
     if (STATUS_SUCCESS == status)
     {
-        /* Configure the message type */
+        /* Program the message-fragment type for this call. */
         HCU_SetMsgType(msgType);
         if(msgType == MSG_START)
         {
-            /* Configure the total length of message at the beginning*/    
+            /* Program the total message length on the first authorize segment. */
             HCU_SetMsgTotalLength(totalLen);
-            /* Set if last block */
+            /* Track whether this SHA segment closes the full message. */
             s_hcuStatePtr->isLastBlock = false;
         }else if(msgType == MSG_END)
         {
-            /* Start SHA at ending block */
+            /* Enable SHA verification when the final segment is reached. */
             HCU_SetSHAVerification(true);
-            /* Set if last block */
+            /* Track whether this SHA segment closes the full message. */
             s_hcuStatePtr->isLastBlock = true;
         }else if(msgType == MSG_ALL)
         {
-            /* Configure the total length of message at the beginning*/    
+            /* Program the total message length on the first authorize segment. */
             HCU_SetMsgTotalLength(totalLen);
-            /* Start SHA at ending block */
+            /* Enable SHA verification when the final segment is reached. */
             HCU_SetSHAVerification(true);
-            /* Set if last block */
+            /* Track whether this SHA segment closes the full message. */
             s_hcuStatePtr->isLastBlock = true;
         }else{
-            /* Set if last block */
+            /* Track whether this SHA segment closes the full message. */
             s_hcuStatePtr->isLastBlock = false;
         }
         if (HCU_USING_INTERRUPT == s_hcuStatePtr->carryType)
         {
-            /* Enable input fifo watermark and operate done */
+            /* Enable the input-watermark and operation-done interrupts. */
             HCU_SetInputInterrupt(true);
             HCU_SetDoneInterrupt(true);
             if (NULL != trueResult)
@@ -1251,18 +1159,18 @@ status_t HCU_DRV_AuthorizeSHA(const void *msg,
     #if FEATURE_HCU_HAS_FIXED_DMA
         else if (HCU_USING_DMA == s_hcuStatePtr->carryType)
         {
-            /* Check by operate done flag */
+            /* Use the operation-done interrupt to complete the DMA-backed SHA flow. */
             HCU_SetDoneInterrupt(true);
             INT_SYS_EnableIRQ(HCU_IRQ_NUMBER);
             (void)HCU_DRV_ConfigDMA(s_hcuStatePtr->ingressDMAChannel, s_hcuStatePtr->egressDMAChannel);
         }
         else{
-            /* Not Enter this statement */
+            /* No additional work is required for other carry modes. */
         }
     #endif
-        /* Start the command */
+        /* Launch the configured HCU command. */
         HCU_StartEngine();
-        /* Polling is blocking */
+        /* Polling mode stays in the API until the command finishes. */
         if (HCU_USING_POLLING == s_hcuStatePtr->carryType)
         {
             do
@@ -1287,13 +1195,9 @@ status_t HCU_DRV_AuthorizeSHA(const void *msg,
 #endif /* FEATURE_HCU_SHA_ENGINE */
 
 #if FEATURE_HCU_HMAC_ENGINE
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_GenerateHMAC
- * Description   : This function calculates the MAC of a given message using HMAC
- *
- * Implements    : HCU_DRV_GenerateHMAC_Activity
- * END**************************************************************************/
+/*!
+ * @brief Generate an HMAC digest.
+ */
 status_t HCU_DRV_GenerateHMAC(const void *msg,
                               uint16_t msgLen,
                               uint32_t totalLen,
@@ -1305,13 +1209,9 @@ status_t HCU_DRV_GenerateHMAC(const void *msg,
 }
 
 #if FEATURE_HCU_HAS_SHA_AUTHORIZE
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_AuthorizeHMAC
- * Description   : This function verify the MAC of a given message using HMAC
- *
- * Implements    : HCU_DRV_AuthorizeHMAC_Activity
- * END**************************************************************************/
+/*!
+ * @brief Authorize an HMAC digest.
+ */
 status_t HCU_DRV_AuthorizeHMAC(const void *msg,
                                uint16_t msgLen,
                                uint32_t totalLen,
@@ -1326,6 +1226,9 @@ status_t HCU_DRV_AuthorizeHMAC(const void *msg,
 #endif /* FEATURE_HCU_HMAC_ENGINE */
 
 #if FEATURE_HCU_AES_CCM_ENGINE
+/*!
+ * @brief Compute the CCM length-field width from the payload and nonce sizes.
+ */
 static uint8_t HCU_AESGetL(uint64_t PlainLen, uint8_t NonceLen)
 {
     uint8_t L = 0;
@@ -1337,12 +1240,15 @@ static uint8_t HCU_AESGetL(uint64_t PlainLen, uint8_t NonceLen)
         ++L;
     }
     L = (L < 2u) ? 2u : L;
-    /* Increase L to match the nonce len */
+    /* Increase L as needed so the CCM nonce length and Q field remain valid. */
     nLen = (nLen > 13u) ? 13u : nLen;
     L = ((15u - nLen) > L) ? (15u - nLen) : L;
     return L;
 }
 
+/*!
+ * @brief Format and push the CCM additional-authenticated-data header blocks.
+ */
 static status_t HCU_PushAdditionData(const uint8_t *Nonce,
                                      uint8_t NonceLen,
                                      const uint8_t *AddData,
@@ -1360,12 +1266,12 @@ static status_t HCU_PushAdditionData(const uint8_t *Nonce,
     uint16_t BLen;
     uint8_t x;
     uint64_t PlainLenTmp = PlainLen;
-    /* initialize B */
+    /* Clear the temporary CCM formatting block. */
     for (i = 0; i < 4u; i++)
     {
         BWords[i] = 0;
     }
-    /* Calculate Add data length */
+    /* Compute the number of bytes consumed by the encoded AAD payload. */
     BLen = (((uint16_t)NonceLen / 16u) + 1u) * 16u;
     if (AddDataLen > 0u)
     {
@@ -1393,37 +1299,37 @@ static status_t HCU_PushAdditionData(const uint8_t *Nonce,
         }
     }
     HCU_SetMsgType(MSG_START);
-    /* Set the MAC length */
+    /* Program the CCM tag length. */
     HCU_SetMacLength(MacLen);
-    /* Set message length */
+    /* Program the formatted CCM header length. */
     HCU_SetMsgLength(BLen, BLen);
-    /*B0*/
+    /* Build the CCM B0 block. */
     L = HCU_AESGetL(PlainLen, NonceLen);
     if ((L + NonceLen) != 15u)
     {
         status = STATUS_HCU_CCM_NONCE_DATA_SIZE_ERROR;
     }else 
     {
-        /* Update Data size configuration */
-        /* Count value start at 1 */
+        /* Update the B0 size-encoding fields. */
+        /* The first CCM counter block starts from one. */
         BBytesPtr[0] = L - 1u;
-        /*B1-B15: Nonce & Q*/
+        /* Fill the nonce bytes and length field inside B0. */
         for (i = 0; i < NonceLen; i++)
         {
             BBytesPtr[i + 1u] = Nonce[i];
         }
-        /* Update Nonce */
+        /* Push the initial CCM nonce block into the counter-value registers. */
         HCU_SetCV(BWords);
-        /* Start engine */
+        /* Start the hardware so the formatted header can be absorbed. */
         HCU_StartEngine();
-        /* Update additional data flag */
+        /* Reflect whether additional authenticated data is present. */
         if(AddDataLen != 0u)
         {
             BBytesPtr[0] = 0x40u;
         }else {
             BBytesPtr[0] = 0x00u;
         }
-        /* Update Mac length */
+        /* Encode the requested CCM tag size in the header flags. */
         if (MacLen == 0u)
         {
             BBytesPtr[0] |= (L - 1u);
@@ -1432,23 +1338,23 @@ static status_t HCU_PushAdditionData(const uint8_t *Nonce,
         {
             BBytesPtr[0] |= (uint8_t)(((MacLen - 2u) / 2u) << 3u) | (L - 1u);
         }
-        /* L = (L > 4) ? 4 : L */
+        /* Emit the Q field using the computed CCM length width. */
         for (i = 0; i < L; i++)
         {
             BBytesPtr[15u - i] = (uint8_t)(PlainLenTmp & 0xffu);
             PlainLenTmp >>= 8u;
         }
-        /* Push data to FIFO */
+        /* Write the prepared words into the HCU input FIFO. */
         HCU_WriteInputFifo(BWords, 4);
-        /* reinitialize B */
+        /* Clear the temporary block before filling the next segment. */
         for (i = 0; i < 4u; i++)
         {
             BWords[i] = 0;
         }
-        /*aad length and data*/
+        /* Emit the encoded AAD length field followed by the AAD payload. */
         if (AddDataLen > 0u)
         {
-            /* store length */
+            /* Encode the AAD length prefix. */
             if (AddDataLen < ((1UL << 16) - (1UL << 8)))
             {
                 BBytesPtr[0] = (uint8_t)(AddDataLen >> 8);
@@ -1465,79 +1371,74 @@ static status_t HCU_PushAdditionData(const uint8_t *Nonce,
                 BBytesPtr[5] = (uint8_t)(AddDataLen & 0xFFu);
                 x = 6;
             }
-            /* x bytes length of addData_ori */
+            /* Append the raw AAD bytes after the encoded length field. */
             for (i = x; i < (AddDataLen + x); i++)
             {
                 BBytesPtr[i & 0xFu] = AddData[j];
                 j++;
-                /* Check if reaches one block */
+                /* Flush the block once one full 16-byte chunk has been assembled. */
                 if ((i & 0xFu) == 0xFu)
                 {
-                    /* Push data to FIFO */
+                    /* Write the prepared words into the HCU input FIFO. */
                     while (false == HCU_IsInputFifoEmpty())
                     {
-                        /* Wait for input fifo */
+                        /* Wait until the input FIFO can accept the next formatted block. */
                     }
-                    /* Push data to FIFO */
+                    /* Write the prepared words into the HCU input FIFO. */
                     HCU_WriteInputFifo(BWords, 4);
-                    /* reinitialize B */
+                    /* Clear the temporary block before filling the next segment. */
                     BWords[0] = 0;
                     BWords[1] = 0;
                     BWords[2] = 0;
                     BWords[3] = 0;
                 }
             }
-            /* Check if we need to push the last block */
+            /* Flush the final partial AAD block when bytes remain pending. */
             if ((i & 0xFu) != 0u)
             {
-                /* Push data to FIFO */
+                /* Write the prepared words into the HCU input FIFO. */
                 while (false == HCU_IsInputFifoEmpty())
                 {
-                    /* Wait for input fifo */
+                    /* Wait until the input FIFO can accept the next formatted block. */
                 }
-                /* Push data to FIFO */
+                /* Write the prepared words into the HCU input FIFO. */
                 HCU_WriteInputFifo((uint32_t *)BWords, 4);
             }
         }
-        /* Wait for engine to finish */
+        /* Wait until the hardware finishes absorbing the formatted CCM header. */
         while (HCU_IsBusy())
         {
-            /* Wait for engine to finish */
+            /* Wait until the hardware finishes absorbing the formatted CCM header. */
         }
         HCU_ClearStatusFlag(OPERATION_DONE_FLAG);
     }
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_CCMConfig
- * Description   : This function prepares the AES-128 CCM configuration.
- * with AES-128.
- *
- * Implements    : HCU_DRV_CCMConfig_Activity
- * END**************************************************************************/
+/*!
+ * @brief Configure the CCM authenticated-data context.
+ */
 status_t HCU_DRV_CCMConfig(hcu_ccm_config_t *ccm, hcu_mode_sel_t mode)
 {
     status_t status = STATUS_SUCCESS;
 
-    /* Check the input parameters */
+    /* Validate the CCM tag-size constraints before programming the context. */
     if ((ccm->tagSize > 16u) || ((ccm->tagSize & 1u) == 1u))
     {
         status = STATUS_HCU_CCM_TAG_SIZE_ERROR;
     }else 
     {    
-        /* Update the internal flags */
+        /* Update the runtime state for the new command. */
         s_hcuStatePtr->cmdInProgress = true;
-        /* Update engine and algorithm settings */
+        /* Program the engine, algorithm, and direction fields. */
         HCU_SetEngineAlgorithm(ENG_AES, ALG_AES_CCM, mode);
-        /* Set total message length */
+        /* Program the total CCM payload length. */
         HCU_SetMsgTotalLength((uint32_t)ccm->msgLen);
-        /* Reset fifo before set watermark */
+        /* Reset the FIFOs before applying the runtime watermarks. */
         HCU_ResetFifo();
-        /* Config input and output FIFOs */
+        /* Program the FIFO watermarks used by the runtime loop. */
         HCU_SetFIFOWatermark(FEATURE_HCU_ONE_LOOP_INPUT_WATERMARK, FEATURE_HCU_ONE_LOOP_DATA_SIZE);
-        /* Update tag information if mode is decrypt */
+        /* Load the expected authentication tag when preparing decrypt mode. */
         if (MODE_DEC == mode)
         {
             HCU_SetMac(ccm->tag, ccm->tagSize);
@@ -1545,34 +1446,29 @@ status_t HCU_DRV_CCMConfig(hcu_ccm_config_t *ccm, hcu_mode_sel_t mode)
         status = HCU_PushAdditionData(ccm->nonce, ccm->nonceSize, ccm->addData, ccm->addDataSize, ccm->msgLen, ccm->tagSize);
         if (STATUS_SUCCESS == status)
         {
-            /* Update ccm configuration */
+            /* Keep the CCM configuration pointer for the payload stage. */
             s_hcuStatePtr->ccmConfig = ccm;
         }
     }
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_EncryptCCM
- * Description   : This function performs the AES-128 encryption in CCM mode of
- * the input cipher text buffer.
- *
- * Implements    : HCU_DRV_EncryptCCM_Activity
- * END**************************************************************************/
+/*!
+ * @brief Encrypt a CCM payload segment.
+ */
 status_t HCU_DRV_EncryptCCM(const void *plainText, uint16_t length, void *cipherText, bool isLast)
 {
     status_t status = STATUS_SUCCESS;
-    /* Check the buffer addresses are valid */
+    /* Validate that both payload buffers are present. */
     DEV_ASSERT(plainText != NULL);
     DEV_ASSERT(cipherText != NULL);
-    /* Check the buffers addresses are 32 bit aligned */
+    /* The HCU data path requires 32-bit aligned buffers. */
     DEV_ASSERT((((uint32_t)plainText) & HCU_BUFF_ADDR_CHECK_MASK) == 0U);
     DEV_ASSERT((((uint32_t)cipherText) & HCU_BUFF_ADDR_CHECK_MASK) == 0U);
-    /* Check the buffer length is multiple of 16 bytes */
+    /* CCM payload segments must be multiples of 16 bytes. */
     DEV_ASSERT((length & HCU_BUFF_LEN_CHECK_MASK) == 0U);
 
-    /* Check there is no other command in execution */
+    /* Reject the request if the hardware or driver is already busy. */
     if (HCU_IsBusy())
     {
         status = STATUS_BUSY;
@@ -1581,11 +1477,11 @@ status_t HCU_DRV_EncryptCCM(const void *plainText, uint16_t length, void *cipher
     {
         status =  STATUS_HCU_CCM_NOT_CONFIGURED_ERROR;
     }else{
-        /* Update the internal flags */
+        /* Update the runtime state for the new command. */
         s_hcuStatePtr->cmdInProgress = true;
-        /* Update message length */
+        /* Program the message-length fields for this transfer. */
         HCU_SetMsgLength(length, 0);
-        /* Save data information */
+        /* Save the FIFO source, destination, and byte counters. */
         s_hcuStatePtr->mode = MODE_ENC;
         s_hcuStatePtr->msgLen = length;
         s_hcuStatePtr->inputCount = length;
@@ -1593,11 +1489,11 @@ status_t HCU_DRV_EncryptCCM(const void *plainText, uint16_t length, void *cipher
         s_hcuStatePtr->dataInputPtr = (const uint32_t *)plainText;/* PRQA S 0316 */
         s_hcuStatePtr->dataOutputPtr = (uint32_t *)cipherText;/* PRQA S 0316 */
         s_hcuStatePtr->algorithm = AES_CCM_MODE;
-        /* Reset fifo before set watermark */
+        /* Reset the FIFOs before applying the runtime watermarks. */
         HCU_ResetFifo();
-        /* Config input and output FIFOs */
+        /* Program the FIFO watermarks used by the runtime loop. */
         HCU_SetFIFOWatermark(FEATURE_HCU_ONE_LOOP_INPUT_WATERMARK, FEATURE_HCU_ONE_LOOP_DATA_SIZE);
-        /* Configure the message type */
+        /* Program the message-fragment type for this call. */
         if (isLast)
         {
             HCU_SetMsgType(MSG_END);
@@ -1609,10 +1505,10 @@ status_t HCU_DRV_EncryptCCM(const void *plainText, uint16_t length, void *cipher
             s_hcuStatePtr->isLastBlock = false;
         }
     
-        /* Check carry type */
+        /* Enable the runtime service path selected by the caller. */
         if (HCU_USING_INTERRUPT == s_hcuStatePtr->carryType)
         {
-            /* Enable input fifo watermark, output fifo watermark and operate done */
+            /* Enable the FIFO watermark and operation-done interrupts used by cipher flows. */
             HCU_SetDefaultInterrupt(true);
             INT_SYS_EnableIRQ(HCU_IRQ_NUMBER);
         }
@@ -1620,20 +1516,20 @@ status_t HCU_DRV_EncryptCCM(const void *plainText, uint16_t length, void *cipher
         {
             (void)HCU_DRV_ConfigDMA(s_hcuStatePtr->ingressDMAChannel, s_hcuStatePtr->egressDMAChannel);
         }else {
-            /* Not Enter this statement */
+            /* No additional work is required for other carry modes. */
         }
     
-        /* Start the engine */
+        /* Start the configured CCM payload operation. */
         HCU_StartEngine();
-        /* Polling is blocking */
+        /* Polling mode stays in the API until the command finishes. */
         if (HCU_USING_POLLING == s_hcuStatePtr->carryType)
         {
-            /* Start to run loops */
+            /* Keep servicing the FIFOs until the CCM payload segment completes. */
             do
             {
                 status = HCU_RunOneLoop();
             } while (STATUS_BUSY == status);
-            /* Update the internal flags */
+            /* Update the runtime state for the new command. */
             s_hcuStatePtr->cmdInProgress = false;
             if (s_hcuStatePtr->isLastBlock)
             {
@@ -1645,27 +1541,22 @@ status_t HCU_DRV_EncryptCCM(const void *plainText, uint16_t length, void *cipher
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_DecryptCCM
- * Description   : This function performs the AES-128 decryption in CCM mode of
- * the input cipher text buffer.
- *
- * Implements    : HCU_DRV_DecryptCCM_Activity
- * END**************************************************************************/
+/*!
+ * @brief Decrypt a CCM payload segment.
+ */
 status_t HCU_DRV_DecryptCCM(const void *cipherText, uint16_t length, void *plainText, bool isLast)
 {
     status_t status = STATUS_SUCCESS;
-    /* Check the buffer addresses are valid */
+    /* Validate that both payload buffers are present. */
     DEV_ASSERT(plainText != NULL);
     DEV_ASSERT(cipherText != NULL);
-    /* Check the buffers addresses are 32 bit aligned */
+    /* The HCU data path requires 32-bit aligned buffers. */
     DEV_ASSERT((((uint32_t)plainText) & HCU_BUFF_ADDR_CHECK_MASK) == 0U);
     DEV_ASSERT((((uint32_t)cipherText) & HCU_BUFF_ADDR_CHECK_MASK) == 0U);
-    /* Check the buffer length is multiple of 16 bytes */
+    /* CCM payload segments must be multiples of 16 bytes. */
     DEV_ASSERT((length & HCU_BUFF_LEN_CHECK_MASK) == 0U);
 
-    /* Check there is no other command in execution */
+    /* Reject the request if the hardware or driver is already busy. */
     if (HCU_IsBusy())
     {
         status = STATUS_BUSY;
@@ -1674,11 +1565,11 @@ status_t HCU_DRV_DecryptCCM(const void *cipherText, uint16_t length, void *plain
     {
         status = STATUS_HCU_CCM_NOT_CONFIGURED_ERROR;
     }else{        
-        /* Update the internal flags */
+        /* Update the runtime state for the new command. */
         s_hcuStatePtr->cmdInProgress = true;
-        /* Update message length */
+        /* Program the message-length fields for this transfer. */
         HCU_SetMsgLength(length, 0);
-        /* Save data information */
+        /* Save the FIFO source, destination, and byte counters. */
         s_hcuStatePtr->mode = MODE_DEC;
         s_hcuStatePtr->msgLen = length;
         s_hcuStatePtr->inputCount = length;
@@ -1686,11 +1577,11 @@ status_t HCU_DRV_DecryptCCM(const void *cipherText, uint16_t length, void *plain
         s_hcuStatePtr->dataInputPtr = (const uint32_t *)cipherText;/* PRQA S 0316 */
         s_hcuStatePtr->dataOutputPtr = (uint32_t *)plainText;/* PRQA S 0316 */
         s_hcuStatePtr->algorithm = AES_CCM_MODE;
-        /* Reset fifo before set watermark */
+        /* Reset the FIFOs before applying the runtime watermarks. */
         HCU_ResetFifo();
-        /* Config input and output FIFOs */
+        /* Program the FIFO watermarks used by the runtime loop. */
         HCU_SetFIFOWatermark(FEATURE_HCU_ONE_LOOP_INPUT_WATERMARK, FEATURE_HCU_ONE_LOOP_DATA_SIZE);
-        /* Configure the message type */
+        /* Program the message-fragment type for this call. */
         if (isLast)
         {
             HCU_SetMsgType(MSG_END);
@@ -1702,10 +1593,10 @@ status_t HCU_DRV_DecryptCCM(const void *cipherText, uint16_t length, void *plain
             s_hcuStatePtr->isLastBlock = false;
         }
     
-        /* Check carry type */
+        /* Enable the runtime service path selected by the caller. */
         if (HCU_USING_INTERRUPT == s_hcuStatePtr->carryType)
         {
-            /* Enable input fifo watermark, output fifo watermark and operate done */
+            /* Enable the FIFO watermark and operation-done interrupts used by cipher flows. */
             HCU_SetDefaultInterrupt(true);
             INT_SYS_EnableIRQ(HCU_IRQ_NUMBER);
         }
@@ -1713,20 +1604,20 @@ status_t HCU_DRV_DecryptCCM(const void *cipherText, uint16_t length, void *plain
         {
             (void)HCU_DRV_ConfigDMA(s_hcuStatePtr->ingressDMAChannel, s_hcuStatePtr->egressDMAChannel);
         }else{
-            /* Not Enter this statement */
+            /* No additional work is required for other carry modes. */
         }
     
-        /* Start the engine */
+        /* Start the configured CCM payload operation. */
         HCU_StartEngine();
-        /* Polling is blocking */
+        /* Polling mode stays in the API until the command finishes. */
         if (HCU_USING_POLLING == s_hcuStatePtr->carryType)
         {
-            /* Start to run loops */
+            /* Keep servicing the FIFOs until the CCM payload segment completes. */
             do
             {
                 status = HCU_RunOneLoop();
             } while (STATUS_BUSY == status);
-            /* Update the internal flags */
+            /* Update the runtime state for the new command. */
             s_hcuStatePtr->cmdInProgress = false;
             if (s_hcuStatePtr->isLastBlock)
             {
@@ -1739,17 +1630,20 @@ status_t HCU_DRV_DecryptCCM(const void *cipherText, uint16_t length, void *plain
 }
 #endif /* FEATURE_HCU_AES_CCM_ENGINE */
 
+/*!
+ * @brief Service one polling iteration for the active HCU command.
+ */
 static status_t HCU_RunOneLoop(void)
 {
     status_t status = STATUS_BUSY;
-    /* Check if hcu need to read data */
+    /* Drain available output FIFO data before checking completion. */
     while (HCU_IsOutputFifoFull() && (NULL != s_hcuStatePtr->dataOutputPtr))
     {
         HCU_ReadOutputFifo(s_hcuStatePtr->dataOutputPtr, FEATURE_HCU_ONE_LOOP_DATA_SIZE);
         s_hcuStatePtr->dataOutputPtr = (uint32_t *)((uint32_t)s_hcuStatePtr->dataOutputPtr + (FEATURE_HCU_ONE_LOOP_DATA_SIZE << 2));
         s_hcuStatePtr->outputCount -= FEATURE_HCU_ONE_LOOP_DATA_SIZE << 2;
     }
-    /* Check if Operation is already done */
+    /* Stop looping once the operation-done flag is asserted. */
     if (HCU_IsDone())
     {
         while (HCU_IsOutputFifoFull() && (NULL != s_hcuStatePtr->dataOutputPtr))
@@ -1759,33 +1653,29 @@ static status_t HCU_RunOneLoop(void)
             s_hcuStatePtr->outputCount -= FEATURE_HCU_ONE_LOOP_DATA_SIZE << 2;
         }
         HCU_ClearStatusFlag(OPERATION_DONE_FLAG);
-        /* No more data to process */
+        /* Report that the software loop finished the active command. */
         status = STATUS_SUCCESS;
     }else{
-        /* Check if hcu need to write data */
+        /* Push more input data whenever the input watermark requests it. */
         if (HCU_IsInputFifoEmpty() && (s_hcuStatePtr->inputCount != 0U))
         {
             HCU_WriteInputFifo(s_hcuStatePtr->dataInputPtr, FEATURE_HCU_ONE_LOOP_DATA_SIZE);
             s_hcuStatePtr->dataInputPtr = (uint32_t *)((uint32_t)s_hcuStatePtr->dataInputPtr + (FEATURE_HCU_ONE_LOOP_DATA_SIZE << 2));
-            /* Convert the message length to be processed */
+            /* Decrement the remaining byte counter by one FIFO burst. */
             s_hcuStatePtr->inputCount -= FEATURE_HCU_ONE_LOOP_DATA_SIZE << 2;
         }
     }
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : HCU_DRV_IRQHandler
- * Description   : Implementation of the HCU interrupt handler. Handles completed
- * command events.
- *
- * END**************************************************************************/
+/*!
+ * @brief Service HCU interrupt sources for asynchronous commands.
+ */
 void HCU_DRV_IRQHandler(void)
 {
     bool statusFlag = false;
     bool intMode = false;
-    /* Input fifo watermark handler */
+    /* Service the input FIFO watermark interrupt source. */
     statusFlag = HCU_GetStatusFlag(INPUT_FIFO_WATERMARK_FLAG);
     intMode = HCU_GetIntMode(INPUT_FIFO_WATERMARK_FLAG);
     if (statusFlag && intMode)
@@ -1794,21 +1684,21 @@ void HCU_DRV_IRQHandler(void)
         {
             HCU_WriteInputFifo(s_hcuStatePtr->dataInputPtr, FEATURE_HCU_ONE_LOOP_DATA_SIZE);
             s_hcuStatePtr->dataInputPtr = (uint32_t *)((uint32_t)s_hcuStatePtr->dataInputPtr + (FEATURE_HCU_ONE_LOOP_DATA_SIZE << 2));
-            /* Convert the message length to be processed */
+            /* Decrement the remaining byte counter by one FIFO burst. */
             s_hcuStatePtr->inputCount -= FEATURE_HCU_ONE_LOOP_DATA_SIZE << 2;
         }
         if (s_hcuStatePtr->inputCount == 0U)
         {
-            /* When HCU busy, INTE can not be changed */
+            /* Disable the watermark source only after the hardware accepts the update. */
             HCU_SetIntMode(INPUT_FIFO_WATERMARK_FLAG, false);
 #if (FEATURE_HCU_HAS_FIXED_DMA < 1)
-            /* Write empty data to avoid reentry interrupt */
+            /* Push padding words so the interrupt does not retrigger immediately. */
             HCU_WriteInputFifoPatch(FEATURE_HCU_ONE_LOOP_DATA_SIZE);
 #endif
         }
     }
 
-    /* Output fifo watermark handler */
+    /* Service the output FIFO watermark interrupt source. */
     statusFlag = HCU_GetStatusFlag(OUTPUT_FIFO_WATERMARK_FLAG);
     intMode = HCU_GetIntMode(OUTPUT_FIFO_WATERMARK_FLAG);
     if (statusFlag && intMode)
@@ -1817,7 +1707,7 @@ void HCU_DRV_IRQHandler(void)
         {
             HCU_ReadOutputFifo(s_hcuStatePtr->dataOutputPtr, FEATURE_HCU_ONE_LOOP_DATA_SIZE);
             s_hcuStatePtr->dataOutputPtr = (uint32_t *)((uint32_t)s_hcuStatePtr->dataOutputPtr + (FEATURE_HCU_ONE_LOOP_DATA_SIZE << 2));
-            /* Convert the message length to be processed */
+            /* Decrement the remaining byte counter by one FIFO burst. */
             s_hcuStatePtr->outputCount -= FEATURE_HCU_ONE_LOOP_DATA_SIZE << 2;
         }
         if (s_hcuStatePtr->outputCount == 0U)
@@ -1831,17 +1721,17 @@ void HCU_DRV_IRQHandler(void)
         }
     }
 
-    /* Operate done handler */
+    /* Service the operation-done interrupt source. */
     statusFlag = HCU_GetStatusFlag(OPERATION_DONE_FLAG);
     intMode = HCU_GetIntMode(OPERATION_DONE_FLAG);
     if (statusFlag && intMode)
     {
-        /* Clear operate done flag */
+        /* Clear the operation-done flag before leaving the handler. */
         HCU_ClearStatusFlag(OPERATION_DONE_FLAG);
         HCU_SetIntMode(OPERATION_DONE_FLAG, false);
-        /* Disable input watermark interrupt */
+        /* Stop further input-watermark interrupts for this command. */
         HCU_SetIntMode(INPUT_FIFO_WATERMARK_FLAG, false);
-        /* CMAC has no output to indicate ending */
+        /* CMAC completion is tracked through the done interrupt rather than output data. */
         if (AES_CMAC_MODE == s_hcuStatePtr->algorithm)
         {
             HCU_SetInputDMA(false);
@@ -1855,7 +1745,7 @@ void HCU_DRV_IRQHandler(void)
             }
             s_hcuStatePtr->cmdInProgress = false;
         }
-        /* AES-CCM should check status in decrypt and copy MAC in encrypt */
+        /* CCM completion may need to copy or verify the authentication tag. */
         else if (AES_CCM_MODE == s_hcuStatePtr->algorithm)
         {
             if (s_hcuStatePtr->isLastBlock)
@@ -1863,13 +1753,13 @@ void HCU_DRV_IRQHandler(void)
                 (void)HCU_DRV_DoneMAC();
             }
         }
-        /* SHA may have no output to indicate ending */
+        /* SHA completion can occur even when no output FIFO transfer is pending. */
         else if ((SHA_256_MODE == s_hcuStatePtr->algorithm) || (SHA_384_MODE == s_hcuStatePtr->algorithm))
         {
             HCU_SetInputDMA(false);
             if (s_hcuStatePtr->isLastBlock)
             {
-                /* When in authorize mode, check hash-valid */
+                /* In authorize mode, inspect the hash-valid status before reporting success. */
                 if (MODE_DEC == s_hcuStatePtr->mode)
                 {
                     if (true == HCU_GetStatusFlag(SHA_HASH_INVALID_FLAG))
@@ -1886,13 +1776,13 @@ void HCU_DRV_IRQHandler(void)
                     s_hcuStatePtr->callback((uint32_t)s_hcuStatePtr->status, s_hcuStatePtr->callbackParam);
                 }
             }
-            /* Only output enable, wait until data carry done */
+            /* When no output transfer is pending, the done interrupt can close the command. */
             if (NULL == s_hcuStatePtr->dataOutputPtr)
             {
                 s_hcuStatePtr->cmdInProgress = false;
             }
         }else{
-            /* Not Enter this statement */
+            /* No additional work is required for other carry modes. */
         }
     }
 }

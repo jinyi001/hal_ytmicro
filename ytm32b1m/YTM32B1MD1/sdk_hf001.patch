@@ -1,0 +1,1977 @@
+{
+    "version": "1_4_1",
+    "ossPath": "YTM32B1MD1/sdk",
+    "component": [
+        {
+            "type": "clock",
+            "path": "sdk_cfg/clock/YTM32B1MD1"
+        },
+        {
+            "type": "pins",
+            "path": "sdk_cfg/pins"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/device"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/yt_link"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/interrupt"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/dma"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/spi"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/linflexd_uart"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/linflexd_lin"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/can"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/i2c"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/sent"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/rtc"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/tmu"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/tmr"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/ptmr"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/lptmr"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/etmr"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/ptu"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/adc"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/power"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/crc"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/acmp"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/wkup"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/ewdg"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/wdg"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/hcu_v1"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/trng"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/emu/YTM32B1MD1"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/flash"
+        },
+        {
+            "type": "driver",
+            "path": "sdk_cfg/fee"
+        }
+    ],
+    "example": "YTM32Bx_SDK/YCT_Demos",
+    "toolVer": "2.4.0",
+    "srcs": [
+        "YTM32Bx_SDK",
+        "sdk_cfg"
+    ],
+    "meta": {
+        "supportGHS": true,
+        "RCU_RSSR_ADDR": "0x4007F000",
+        "RCU_RSSR_POR_MASK": "0x1",
+        "arch": "armv8-m.main",
+        "ytlink": true,
+        "supportEclipse": true,
+        "can_num": 3,
+        "can_mb": [
+            64,
+            32,
+            32
+        ],
+        "dma_list": [
+            "DMA_REQ_DISABLED",
+            "DMA_REQ_LINFlexD0_RX",
+            "DMA_REQ_LINFlexD0_TX",
+            "DMA_REQ_LINFlexD1_RX",
+            "DMA_REQ_LINFlexD1_TX",
+            "DMA_REQ_LINFlexD2_RX",
+            "DMA_REQ_LINFlexD2_TX",
+            "DMA_REQ_I2C1_RX",
+            "DMA_REQ_I2C1_TX",
+            "DMA_REQ_SPI0_RX",
+            "DMA_REQ_SPI0_TX",
+            "DMA_REQ_SPI1_RX",
+            "DMA_REQ_SPI1_TX",
+            "DMA_REQ_SPI2_RX",
+            "DMA_REQ_SPI2_TX",
+            "DMA_REQ_eTMR1_CH0",
+            "DMA_REQ_eTMR1_CH1",
+            "DMA_REQ_eTMR1_CH2",
+            "DMA_REQ_eTMR1_CH3",
+            "DMA_REQ_eTMR1_CH4",
+            "DMA_REQ_eTMR1_CH5",
+            "DMA_REQ_eTMR1_CH6",
+            "DMA_REQ_eTMR1_CH7",
+            "DMA_REQ_eTMR2_CH0",
+            "DMA_REQ_eTMR2_CH1",
+            "DMA_REQ_eTMR2_CH2",
+            "DMA_REQ_eTMR2_CH3",
+            "DMA_REQ_eTMR2_CH4",
+            "DMA_REQ_eTMR2_CH5",
+            "DMA_REQ_eTMR2_CH6",
+            "DMA_REQ_eTMR2_CH7",
+            "DMA_REQ_eTMR0",
+            "DMA_REQ_eTMR3",
+            "DMA_REQ_SENT0_FAST",
+            "DMA_REQ_SENT0_SLOW",
+            "DMA_REQ_HCU_IN",
+            "DMA_REQ_HCU_OUT",
+            "DMA_REQ_ADC0",
+            "DMA_REQ_I2C0_RX",
+            "DMA_REQ_I2C0_TX",
+            "DMA_REQ_PTU0",
+            "DMA_REQ_ACMP0",
+            "DMA_REQ_GPIOA",
+            "DMA_REQ_GPIOB",
+            "DMA_REQ_GPIOC",
+            "DMA_REQ_GPIOD",
+            "DMA_REQ_GPIOE",
+            "DMA_REQ_FLEXCAN0",
+            "DMA_REQ_FLEXCAN1",
+            "DMA_REQ_FLEXCAN2",
+            "DMA_REQ_lpTMR0",
+            "DMA_REQ_SPI3_RX",
+            "DMA_REQ_SPI3_TX",
+            "DMA_REQ_Always_On0",
+            "DMA_REQ_Always_On1"
+        ],
+        "dma_num": 16,
+        "tmu_trigList": [
+            "TMU_TRIG_SOURCE_DISABLED",
+            "TMU_TRIG_SOURCE_VDD",
+            "TMU_TRIG_SOURCE_TMU_IN0",
+            "TMU_TRIG_SOURCE_TMU_IN1",
+            "TMU_TRIG_SOURCE_TMU_IN2",
+            "TMU_TRIG_SOURCE_TMU_IN3",
+            "TMU_TRIG_SOURCE_TMU_IN4",
+            "TMU_TRIG_SOURCE_TMU_IN5",
+            "TMU_TRIG_SOURCE_TMU_IN6",
+            "TMU_TRIG_SOURCE_TMU_IN7",
+            "TMU_TRIG_SOURCE_TMU_IN8",
+            "TMU_TRIG_SOURCE_TMU_IN9",
+            "TMU_TRIG_SOURCE_TMU_IN10",
+            "TMU_TRIG_SOURCE_TMU_IN11",
+            "TMU_TRIG_SOURCE_ACMP0_OUT",
+            "TMU_TRIG_SOURCE_pTMR_CH0",
+            "TMU_TRIG_SOURCE_pTMR_CH1",
+            "TMU_TRIG_SOURCE_pTMR_CH2",
+            "TMU_TRIG_SOURCE_pTMR_CH3",
+            "TMU_TRIG_SOURCE_lpTMR0",
+            "TMU_TRIG_SOURCE_eTMR0_INIT_TRIG",
+            "TMU_TRIG_SOURCE_eTMR0_EXT_TRIG",
+            "TMU_TRIG_SOURCE_eTMR1_INIT_TRIG",
+            "TMU_TRIG_SOURCE_eTMR1_EXT_TRIG",
+            "TMU_TRIG_SOURCE_eTMR2_INIT_TRIG",
+            "TMU_TRIG_SOURCE_eTMR2_EXT_TRIG",
+            "TMU_TRIG_SOURCE_eTMR3_INIT_TRIG",
+            "TMU_TRIG_SOURCE_eTMR3_EXT_TRIG",
+            "TMU_TRIG_SOURCE_ADC0_EOC",
+            "TMU_TRIG_SOURCE_ADC0_AWD",
+            "TMU_TRIG_SOURCE_PTU0_ADCH0_TRIG",
+            "TMU_TRIG_SOURCE_PTU0_PULSE_OUT0",
+            "TMU_TRIG_SOURCE_PTU1_ADCH0_TRIG",
+            "TMU_TRIG_SOURCE_PTU1_PULSE_OUT1",
+            "TMU_TRIG_SOURCE_RTC_ALARM",
+            "TMU_TRIG_SOURCE_RTC_SECOND",
+            "TMU_TRIG_SOURCE_SPI2_FRAME",
+            "TMU_TRIG_SOURCE_SPI2_RX_DATA",
+            "TMU_TRIG_SOURCE_SPI3_FRAME",
+            "TMU_TRIG_SOURCE_SPI3_RX_DATA",
+            "TMU_TRIG_SOURCE_I2C0_MASTER_TRIG",
+            "TMU_TRIG_SOURCE_I2C0_SLAVE_TRIG",
+            "TMU_TRIG_SOURCE_I2C1_MASTER_TRIG",
+            "TMU_TRIG_SOURCE_SPI0_FRAME",
+            "TMU_TRIG_SOURCE_SPI0_RX_DATA",
+            "TMU_TRIG_SOURCE_SPI1_FRAME",
+            "TMU_TRIG_SOURCE_SPI1_RX_DATA",
+            "TMU_TRIG_SOURCE_SIM_SW_TRIG"
+        ],
+        "tmu_targetList": [
+            "TMU_TARGET_MODULE_TMU_OUT0",
+            "TMU_TARGET_MODULE_TMU_OUT1",
+            "TMU_TARGET_MODULE_TMU_OUT2",
+            "TMU_TARGET_MODULE_TMU_OUT3",
+            "TMU_TARGET_MODULE_TMU_OUT4",
+            "TMU_TARGET_MODULE_TMU_OUT5",
+            "TMU_TARGET_MODULE_TMU_OUT6",
+            "TMU_TARGET_MODULE_TMU_OUT7",
+            "TMU_TARGET_MODULE_ADC0_EXT_TRIG",
+            "TMU_TARGET_MODULE_lpTMR0_ALT0",
+            "TMU_TARGET_MODULE_ACMP0_SAMPLE_INPUT",
+            "TMU_TARGET_MODULE_LINFlexD0_TRIG",
+            "TMU_TARGET_MODULE_LINFlexD1_TRIG",
+            "TMU_TARGET_MODULE_LINFlexD2_TRIG",
+            "TMU_TARGET_MODULE_SPI0_TRIG",
+            "TMU_TARGET_MODULE_SPI1_TRIG",
+            "TMU_TARGET_MODULE_SPI2_TRIG",
+            "TMU_TARGET_MODULE_SPI3_TRIG",
+            "TMU_TARGET_MODULE_eTMR0_HWTRIG0",
+            "TMU_TARGET_MODULE_eTMR0_FAULT0",
+            "TMU_TARGET_MODULE_eTMR0_FAULT1",
+            "TMU_TARGET_MODULE_eTMR0_FAULT2",
+            "TMU_TARGET_MODULE_eTMR1_HWTRIG0",
+            "TMU_TARGET_MODULE_eTMR1_FAULT0",
+            "TMU_TARGET_MODULE_eTMR1_FAULT1",
+            "TMU_TARGET_MODULE_eTMR1_FAULT2",
+            "TMU_TARGET_MODULE_eTMR2_HWTRIG0",
+            "TMU_TARGET_MODULE_eTMR2_FAULT0",
+            "TMU_TARGET_MODULE_eTMR2_FAULT1",
+            "TMU_TARGET_MODULE_eTMR2_FAULT2",
+            "TMU_TARGET_MODULE_eTMR3_HWTRIG0",
+            "TMU_TARGET_MODULE_eTMR3_FAULT0",
+            "TMU_TARGET_MODULE_eTMR3_FAULT1",
+            "TMU_TARGET_MODULE_eTMR3_FAULT2",
+            "TMU_TARGET_MODULE_PTU0_TRIG_IN0",
+            "TMU_TARGET_MODULE_I2C1_TRIG",
+            "TMU_TARGET_MODULE_I2C2_TRIG",
+            "TMU_TARGET_MODULE_PTU1_TRIG_IN0"
+        ],
+        "FEATURE_LPTMR_CLKSRC_SELECT_ENABLE": true,
+        "lptmr_clockSource": [
+            {
+                "key": "ipc",
+                "label": "IPC"
+            },
+            {
+                "key": "sirc",
+                "label": "SIRC"
+            }
+        ],
+        "perClkList": [
+            "firc",
+            "sirc",
+            "fxosc",
+            "pll"
+        ],
+        "FEATURE_eTMR_HAS_DOUBLE_SWITCH": true,
+        "FEATURE_eTMR_DEADTIME_CONFIG_EACH_CHANNEL": true,
+        "FEATURE_eTMR_HAS_CHANNEL_VALUE_MATCH_INTERRUPT_IN_PWM_MODE": false,
+        "FEATURE_eTMR_HAS_CNT_INIT_SRC": true,
+        "FEATURE_eTMR_HAS_INIT_REG": true,
+        "FEATURE_eTMR_HAS_QUAD_DECODER_MOD": true,
+        "FEATURE_eTMR_HAS_MID": true,
+        "FEATURE_eTMR_HAS_OUTPUT_TRIGGER_WIDTH": true,
+        "FEATURE_eTMR_HAS_IPC_CLOCK_SOURCE": false,
+        "FEATURE_eTMR_HAS_CAPTURE_HOLD": false,
+        "FEATURE_eTMR_HAS_COMBINATION_CAPTURE": false,
+        "FEATURE_eTMR_HAS_HARDWARE_CAPTURE": true,
+        "FEATURE_pTMR_HAS_IPC_CLOCK_SOURCE": false,
+        "adc_num": 1,
+        "adc_wdg_inst": 1,
+        "adc_func_clk": [
+            4,
+            32
+        ],
+        "adc_chList": {
+            "YTM32B1MD14G0MLLT": [
+                [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8,
+                    9,
+                    10,
+                    11,
+                    12,
+                    13,
+                    14,
+                    15,
+                    16,
+                    17,
+                    18,
+                    19,
+                    20,
+                    21,
+                    22,
+                    23,
+                    24,
+                    25,
+                    26,
+                    27,
+                    28,
+                    29,
+                    30,
+                    31
+                ]
+            ],
+            "YTM32B1MD14G0MLHT": [
+                [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8,
+                    9,
+                    10,
+                    11,
+                    12,
+                    13,
+                    14,
+                    15,
+                    16,
+                    17,
+                    18,
+                    19,
+                    20,
+                    21,
+                    22,
+                    23,
+                    24,
+                    26,
+                    27
+                ]
+            ]
+        },
+        "adc_ext": [
+            [
+                {
+                    "label": "TEMP_SENSOR",
+                    "ch": 32
+                },
+                {
+                    "label": "PMC_VREF",
+                    "ch": 33
+                },
+                {
+                    "label": "VREFH",
+                    "ch": 34
+                },
+                {
+                    "label": "VREFL",
+                    "ch": 35
+                },
+                {
+                    "label": "VSS",
+                    "ch": 37
+                }
+            ]
+        ],
+        "FEATURE_ACMP_HAS_AUTODIS": true,
+        "FEATURE_ACMP_HAS_OFFSET_CONTROL": true,
+        "FEATURE_ACMP_HAS_CLK_SRC_SEL": true,
+        "FEATURE_ACMP_HAS_DAC_VOLTAGE_REF_SRC": false,
+        "FEATURE_ACMP_HAS_DAC_OUTPUT": false,
+        "FEATURE_ACMP_HAS_TRIG_MODE_GATE": false,
+        "FEATURE_ACMP_SUPPORT_LEVEL_DETECTION": false,
+        "FEATURE_ACMP_SUPPORT_SXOSC_CLK": false,
+        "FEATURE_ACMP_HAS_CONTINUOUS_MODE_IN_CTRL_MODE": false,
+        "FEATURE_ACMP_HAS_FILTER_BYPASS": false,
+        "FEATURE_WKU_FILTER_CLK_SRC": false,
+        "interrupt": [
+            {
+                "name": "NMI_IRQn",
+                "num": -14,
+                "enable": false,
+                "priority": 0,
+                "callback": "NMI_Handler"
+            },
+            {
+                "name": "HardFault_IRQn",
+                "num": -13,
+                "enable": false,
+                "priority": 0,
+                "callback": "HardFault_Handler"
+            },
+            {
+                "name": "MemManage_IRQn",
+                "num": -12,
+                "enable": false,
+                "priority": 0,
+                "callback": "MemManage_Handler"
+            },
+            {
+                "name": "BusFault_IRQn",
+                "num": -11,
+                "enable": false,
+                "priority": 0,
+                "callback": "BusFault_Handler"
+            },
+            {
+                "name": "UsageFault_IRQn",
+                "num": -10,
+                "enable": false,
+                "priority": 0,
+                "callback": "UsageFault_Handler"
+            },
+            {
+                "name": "SVC_IRQn",
+                "num": -5,
+                "enable": false,
+                "priority": 0,
+                "callback": "SVC_Handler"
+            },
+            {
+                "name": "DebugMon_IRQn",
+                "num": -4,
+                "enable": false,
+                "priority": 0,
+                "callback": "DebugMon_Handler"
+            },
+            {
+                "name": "PendSV_IRQn",
+                "num": -2,
+                "enable": false,
+                "priority": 0,
+                "callback": "PendSV_Handler"
+            },
+            {
+                "name": "SysTick_IRQn",
+                "num": -1,
+                "enable": false,
+                "priority": 0,
+                "callback": "SysTick_Handler"
+            },
+            {
+                "name": "DMA0_IRQn",
+                "num": 0,
+                "enable": false,
+                "priority": 0,
+                "callback": "DMA0_IRQHandler"
+            },
+            {
+                "name": "DMA1_IRQn",
+                "num": 1,
+                "enable": false,
+                "priority": 0,
+                "callback": "DMA1_IRQHandler"
+            },
+            {
+                "name": "DMA2_IRQn",
+                "num": 2,
+                "enable": false,
+                "priority": 0,
+                "callback": "DMA2_IRQHandler"
+            },
+            {
+                "name": "DMA3_IRQn",
+                "num": 3,
+                "enable": false,
+                "priority": 0,
+                "callback": "DMA3_IRQHandler"
+            },
+            {
+                "name": "DMA4_IRQn",
+                "num": 4,
+                "enable": false,
+                "priority": 0,
+                "callback": "DMA4_IRQHandler"
+            },
+            {
+                "name": "DMA5_IRQn",
+                "num": 5,
+                "enable": false,
+                "priority": 0,
+                "callback": "DMA5_IRQHandler"
+            },
+            {
+                "name": "DMA6_IRQn",
+                "num": 6,
+                "enable": false,
+                "priority": 0,
+                "callback": "DMA6_IRQHandler"
+            },
+            {
+                "name": "DMA7_IRQn",
+                "num": 7,
+                "enable": false,
+                "priority": 0,
+                "callback": "DMA7_IRQHandler"
+            },
+            {
+                "name": "DMA8_IRQn",
+                "num": 8,
+                "enable": false,
+                "priority": 0,
+                "callback": "DMA8_IRQHandler"
+            },
+            {
+                "name": "DMA9_IRQn",
+                "num": 9,
+                "enable": false,
+                "priority": 0,
+                "callback": "DMA9_IRQHandler"
+            },
+            {
+                "name": "DMA10_IRQn",
+                "num": 10,
+                "enable": false,
+                "priority": 0,
+                "callback": "DMA10_IRQHandler"
+            },
+            {
+                "name": "DMA11_IRQn",
+                "num": 11,
+                "enable": false,
+                "priority": 0,
+                "callback": "DMA11_IRQHandler"
+            },
+            {
+                "name": "DMA12_IRQn",
+                "num": 12,
+                "enable": false,
+                "priority": 0,
+                "callback": "DMA12_IRQHandler"
+            },
+            {
+                "name": "DMA13_IRQn",
+                "num": 13,
+                "enable": false,
+                "priority": 0,
+                "callback": "DMA13_IRQHandler"
+            },
+            {
+                "name": "DMA14_IRQn",
+                "num": 14,
+                "enable": false,
+                "priority": 0,
+                "callback": "DMA14_IRQHandler"
+            },
+            {
+                "name": "DMA15_IRQn",
+                "num": 15,
+                "enable": false,
+                "priority": 0,
+                "callback": "DMA15_IRQHandler"
+            },
+            {
+                "name": "DMA_Error_IRQn",
+                "num": 16,
+                "enable": false,
+                "priority": 0,
+                "callback": "DMA_Error_IRQHandler"
+            },
+            {
+                "name": "FPU_IRQn",
+                "num": 17,
+                "enable": false,
+                "priority": 0,
+                "callback": "FPU_IRQHandler"
+            },
+            {
+                "name": "EFM_IRQn",
+                "num": 18,
+                "enable": false,
+                "priority": 0,
+                "callback": "EFM_IRQHandler"
+            },
+            {
+                "name": "EFM_Error_IRQn",
+                "num": 19,
+                "enable": false,
+                "priority": 0,
+                "callback": "EFM_Error_IRQHandler"
+            },
+            {
+                "name": "PCU_IRQn",
+                "num": 20,
+                "enable": false,
+                "priority": 0,
+                "callback": "PCU_IRQHandler"
+            },
+            {
+                "name": "EFM_Ecc_IRQn",
+                "num": 21,
+                "enable": false,
+                "priority": 0,
+                "callback": "EFM_Ecc_IRQHandler"
+            },
+            {
+                "name": "WDG0_IRQn",
+                "num": 22,
+                "enable": false,
+                "priority": 0,
+                "callback": "WDG0_IRQHandler"
+            },
+            {
+                "name": "Reserved5_IRQn",
+                "num": 23,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved5_IRQHandler"
+            },
+            {
+                "name": "I2C0_Master_IRQn",
+                "num": 24,
+                "enable": false,
+                "priority": 0,
+                "callback": "I2C0_Master_IRQHandler"
+            },
+            {
+                "name": "I2C0_Slave_IRQn",
+                "num": 25,
+                "enable": false,
+                "priority": 0,
+                "callback": "I2C0_Slave_IRQHandler"
+            },
+            {
+                "name": "SPI0_IRQn",
+                "num": 26,
+                "enable": false,
+                "priority": 0,
+                "callback": "SPI0_IRQHandler"
+            },
+            {
+                "name": "SPI1_IRQn",
+                "num": 27,
+                "enable": false,
+                "priority": 0,
+                "callback": "SPI1_IRQHandler"
+            },
+            {
+                "name": "SPI2_IRQn",
+                "num": 28,
+                "enable": false,
+                "priority": 0,
+                "callback": "SPI2_IRQHandler"
+            },
+            {
+                "name": "I2C1_Master_IRQn",
+                "num": 29,
+                "enable": false,
+                "priority": 0,
+                "callback": "I2C1_Master_IRQHandler"
+            },
+            {
+                "name": "Reserved6_IRQn",
+                "num": 30,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved6_IRQHandler"
+            },
+            {
+                "name": "LINFlexD0_IRQn",
+                "num": 31,
+                "enable": false,
+                "priority": 0,
+                "callback": "LINFlexD0_IRQHandler"
+            },
+            {
+                "name": "Reserved7_IRQn",
+                "num": 32,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved7_IRQHandler"
+            },
+            {
+                "name": "LINFlexD1_IRQn",
+                "num": 33,
+                "enable": false,
+                "priority": 0,
+                "callback": "LINFlexD1_IRQHandler"
+            },
+            {
+                "name": "Reserved8_IRQn",
+                "num": 34,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved8_IRQHandler"
+            },
+            {
+                "name": "LINFlexD2_IRQn",
+                "num": 35,
+                "enable": false,
+                "priority": 0,
+                "callback": "LINFlexD2_IRQHandler"
+            },
+            {
+                "name": "Reserved9_IRQn",
+                "num": 36,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved9_IRQHandler"
+            },
+            {
+                "name": "Reserved10_IRQn",
+                "num": 37,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved10_IRQHandler"
+            },
+            {
+                "name": "Reserved11_IRQn",
+                "num": 38,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved11_IRQHandler"
+            },
+            {
+                "name": "ADC0_IRQn",
+                "num": 39,
+                "enable": false,
+                "priority": 0,
+                "callback": "ADC0_IRQHandler"
+            },
+            {
+                "name": "Reserved12_IRQn",
+                "num": 40,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved12_IRQHandler"
+            },
+            {
+                "name": "ACMP0_IRQn",
+                "num": 41,
+                "enable": false,
+                "priority": 0,
+                "callback": "ACMP0_IRQHandler"
+            },
+            {
+                "name": "Reserved13_IRQn",
+                "num": 42,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved13_IRQHandler"
+            },
+            {
+                "name": "Reserved14_IRQn",
+                "num": 43,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved14_IRQHandler"
+            },
+            {
+                "name": "EMU0_SB_IRQn",
+                "num": 44,
+                "enable": false,
+                "priority": 0,
+                "callback": "EMU0_SB_IRQHandler"
+            },
+            {
+                "name": "EMU0_DB_IRQn",
+                "num": 45,
+                "enable": false,
+                "priority": 0,
+                "callback": "EMU0_DB_IRQHandler"
+            },
+            {
+                "name": "RTC_IRQn",
+                "num": 46,
+                "enable": false,
+                "priority": 0,
+                "callback": "RTC_IRQHandler"
+            },
+            {
+                "name": "RTC_Seconds_IRQn",
+                "num": 47,
+                "enable": false,
+                "priority": 0,
+                "callback": "RTC_Seconds_IRQHandler"
+            },
+            {
+                "name": "pTMR0_Ch0_IRQn",
+                "num": 48,
+                "enable": false,
+                "priority": 0,
+                "callback": "pTMR0_Ch0_IRQHandler"
+            },
+            {
+                "name": "pTMR0_Ch1_IRQn",
+                "num": 49,
+                "enable": false,
+                "priority": 0,
+                "callback": "pTMR0_Ch1_IRQHandler"
+            },
+            {
+                "name": "pTMR0_Ch2_IRQn",
+                "num": 50,
+                "enable": false,
+                "priority": 0,
+                "callback": "pTMR0_Ch2_IRQHandler"
+            },
+            {
+                "name": "pTMR0_Ch3_IRQn",
+                "num": 51,
+                "enable": false,
+                "priority": 0,
+                "callback": "pTMR0_Ch3_IRQHandler"
+            },
+            {
+                "name": "PTU0_IRQn",
+                "num": 52,
+                "enable": false,
+                "priority": 0,
+                "callback": "PTU0_IRQHandler"
+            },
+            {
+                "name": "Reserved15_IRQn",
+                "num": 53,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved15_IRQHandler"
+            },
+            {
+                "name": "Reserved16_IRQn",
+                "num": 54,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved16_IRQHandler"
+            },
+            {
+                "name": "Reserved17_IRQn",
+                "num": 55,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved17_IRQHandler"
+            },
+            {
+                "name": "Reserved18_IRQn",
+                "num": 56,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved18_IRQHandler"
+            },
+            {
+                "name": "SCU_IRQn",
+                "num": 57,
+                "enable": false,
+                "priority": 0,
+                "callback": "SCU_IRQHandler"
+            },
+            {
+                "name": "lpTMR0_IRQn",
+                "num": 58,
+                "enable": false,
+                "priority": 0,
+                "callback": "lpTMR0_IRQHandler"
+            },
+            {
+                "name": "GPIOA_IRQn",
+                "num": 59,
+                "enable": false,
+                "priority": 0,
+                "callback": "GPIOA_IRQHandler"
+            },
+            {
+                "name": "GPIOB_IRQn",
+                "num": 60,
+                "enable": false,
+                "priority": 0,
+                "callback": "GPIOB_IRQHandler"
+            },
+            {
+                "name": "GPIOC_IRQn",
+                "num": 61,
+                "enable": false,
+                "priority": 0,
+                "callback": "GPIOC_IRQHandler"
+            },
+            {
+                "name": "GPIOD_IRQn",
+                "num": 62,
+                "enable": false,
+                "priority": 0,
+                "callback": "GPIOD_IRQHandler"
+            },
+            {
+                "name": "GPIOE_IRQn",
+                "num": 63,
+                "enable": false,
+                "priority": 0,
+                "callback": "GPIOE_IRQHandler"
+            },
+            {
+                "name": "Reserved19_IRQn",
+                "num": 64,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved19_IRQHandler"
+            },
+            {
+                "name": "Reserved20_IRQn",
+                "num": 65,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved20_IRQHandler"
+            },
+            {
+                "name": "Reserved21_IRQn",
+                "num": 66,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved21_IRQHandler"
+            },
+            {
+                "name": "Reserved22_IRQn",
+                "num": 67,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved22_IRQHandler"
+            },
+            {
+                "name": "Reserved23_IRQn",
+                "num": 68,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved23_IRQHandler"
+            },
+            {
+                "name": "Reserved24_IRQn",
+                "num": 69,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved24_IRQHandler"
+            },
+            {
+                "name": "Reserved25_IRQn",
+                "num": 70,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved25_IRQHandler"
+            },
+            {
+                "name": "Reserved26_IRQn",
+                "num": 71,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved26_IRQHandler"
+            },
+            {
+                "name": "Reserved27_IRQn",
+                "num": 72,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved27_IRQHandler"
+            },
+            {
+                "name": "Reserved28_IRQn",
+                "num": 73,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved28_IRQHandler"
+            },
+            {
+                "name": "Reserved29_IRQn",
+                "num": 74,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved29_IRQHandler"
+            },
+            {
+                "name": "Reserved30_IRQn",
+                "num": 75,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved30_IRQHandler"
+            },
+            {
+                "name": "Reserved31_IRQn",
+                "num": 76,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved31_IRQHandler"
+            },
+            {
+                "name": "Reserved32_IRQn",
+                "num": 77,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved32_IRQHandler"
+            },
+            {
+                "name": "CAN0_ORed_IRQn",
+                "num": 78,
+                "enable": false,
+                "priority": 0,
+                "callback": "CAN0_ORed_IRQHandler"
+            },
+            {
+                "name": "CAN0_Error_IRQn",
+                "num": 79,
+                "enable": false,
+                "priority": 0,
+                "callback": "CAN0_Error_IRQHandler"
+            },
+            {
+                "name": "CAN0_Wake_Up_IRQn",
+                "num": 80,
+                "enable": false,
+                "priority": 0,
+                "callback": "CAN0_Wake_Up_IRQHandler"
+            },
+            {
+                "name": "CAN0_ORed_0_15_MB_IRQn",
+                "num": 81,
+                "enable": false,
+                "priority": 0,
+                "callback": "CAN0_ORed_0_15_MB_IRQHandler"
+            },
+            {
+                "name": "CAN0_ORed_16_31_MB_IRQn",
+                "num": 82,
+                "enable": false,
+                "priority": 0,
+                "callback": "CAN0_ORed_16_31_MB_IRQHandler"
+            },
+            {
+                "name": "CAN0_ORed_32_47_MB_IRQn",
+                "num": 83,
+                "enable": false,
+                "priority": 0,
+                "callback": "CAN0_ORed_32_47_MB_IRQHandler"
+            },
+            {
+                "name": "CAN0_ORed_48_63_MB_IRQn",
+                "num": 84,
+                "enable": false,
+                "priority": 0,
+                "callback": "CAN0_ORed_48_63_MB_IRQHandler"
+            },
+            {
+                "name": "CAN1_ORed_IRQn",
+                "num": 85,
+                "enable": false,
+                "priority": 0,
+                "callback": "CAN1_ORed_IRQHandler"
+            },
+            {
+                "name": "CAN1_Error_IRQn",
+                "num": 86,
+                "enable": false,
+                "priority": 0,
+                "callback": "CAN1_Error_IRQHandler"
+            },
+            {
+                "name": "CAN1_Wake_Up_IRQn",
+                "num": 87,
+                "enable": false,
+                "priority": 0,
+                "callback": "CAN1_Wake_Up_IRQHandler"
+            },
+            {
+                "name": "CAN1_ORed_0_15_MB_IRQn",
+                "num": 88,
+                "enable": false,
+                "priority": 0,
+                "callback": "CAN1_ORed_0_15_MB_IRQHandler"
+            },
+            {
+                "name": "CAN1_ORed_16_31_MB_IRQn",
+                "num": 89,
+                "enable": false,
+                "priority": 0,
+                "callback": "CAN1_ORed_16_31_MB_IRQHandler"
+            },
+            {
+                "name": "Reserved33_IRQn",
+                "num": 90,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved33_IRQHandler"
+            },
+            {
+                "name": "Reserved34_IRQn",
+                "num": 91,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved34_IRQHandler"
+            },
+            {
+                "name": "CAN2_ORed_IRQn",
+                "num": 92,
+                "enable": false,
+                "priority": 0,
+                "callback": "CAN2_ORed_IRQHandler"
+            },
+            {
+                "name": "CAN2_Error_IRQn",
+                "num": 93,
+                "enable": false,
+                "priority": 0,
+                "callback": "CAN2_Error_IRQHandler"
+            },
+            {
+                "name": "CAN2_Wake_Up_IRQn",
+                "num": 94,
+                "enable": false,
+                "priority": 0,
+                "callback": "CAN2_Wake_Up_IRQHandler"
+            },
+            {
+                "name": "CAN2_ORed_0_15_MB_IRQn",
+                "num": 95,
+                "enable": false,
+                "priority": 0,
+                "callback": "CAN2_ORed_0_15_MB_IRQHandler"
+            },
+            {
+                "name": "CAN2_ORed_16_31_MB_IRQn",
+                "num": 96,
+                "enable": false,
+                "priority": 0,
+                "callback": "CAN2_ORed_16_31_MB_IRQHandler"
+            },
+            {
+                "name": "Reserved35_IRQn",
+                "num": 97,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved35_IRQHandler"
+            },
+            {
+                "name": "Reserved36_IRQn",
+                "num": 98,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved36_IRQHandler"
+            },
+            {
+                "name": "eTMR0_Ch0_Ch1_IRQn",
+                "num": 99,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR0_Ch0_Ch1_IRQHandler"
+            },
+            {
+                "name": "eTMR0_Ch2_Ch3_IRQn",
+                "num": 100,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR0_Ch2_Ch3_IRQHandler"
+            },
+            {
+                "name": "eTMR0_Ch4_Ch5_IRQn",
+                "num": 101,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR0_Ch4_Ch5_IRQHandler"
+            },
+            {
+                "name": "eTMR0_Ch6_Ch7_IRQn",
+                "num": 102,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR0_Ch6_Ch7_IRQHandler"
+            },
+            {
+                "name": "eTMR0_Fault_IRQn",
+                "num": 103,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR0_Fault_IRQHandler"
+            },
+            {
+                "name": "eTMR0_Ovf_IRQn",
+                "num": 104,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR0_Ovf_IRQHandler"
+            },
+            {
+                "name": "eTMR1_Ch0_Ch1_IRQn",
+                "num": 105,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR1_Ch0_Ch1_IRQHandler"
+            },
+            {
+                "name": "eTMR1_Ch2_Ch3_IRQn",
+                "num": 106,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR1_Ch2_Ch3_IRQHandler"
+            },
+            {
+                "name": "eTMR1_Ch4_Ch5_IRQn",
+                "num": 107,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR1_Ch4_Ch5_IRQHandler"
+            },
+            {
+                "name": "eTMR1_Ch6_Ch7_IRQn",
+                "num": 108,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR1_Ch6_Ch7_IRQHandler"
+            },
+            {
+                "name": "eTMR1_Fault_IRQn",
+                "num": 109,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR1_Fault_IRQHandler"
+            },
+            {
+                "name": "eTMR1_Ovf_IRQn",
+                "num": 110,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR1_Ovf_IRQHandler"
+            },
+            {
+                "name": "eTMR2_Ch0_Ch1_IRQn",
+                "num": 111,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR2_Ch0_Ch1_IRQHandler"
+            },
+            {
+                "name": "eTMR2_Ch2_Ch3_IRQn",
+                "num": 112,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR2_Ch2_Ch3_IRQHandler"
+            },
+            {
+                "name": "eTMR2_Ch4_Ch5_IRQn",
+                "num": 113,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR2_Ch4_Ch5_IRQHandler"
+            },
+            {
+                "name": "eTMR2_Ch6_Ch7_IRQn",
+                "num": 114,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR2_Ch6_Ch7_IRQHandler"
+            },
+            {
+                "name": "eTMR2_Fault_IRQn",
+                "num": 115,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR2_Fault_IRQHandler"
+            },
+            {
+                "name": "eTMR2_Ovf_IRQn",
+                "num": 116,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR2_Ovf_IRQHandler"
+            },
+            {
+                "name": "eTMR3_Ch0_Ch1_IRQn",
+                "num": 117,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR3_Ch0_Ch1_IRQHandler"
+            },
+            {
+                "name": "eTMR3_Ch2_Ch3_IRQn",
+                "num": 118,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR3_Ch2_Ch3_IRQHandler"
+            },
+            {
+                "name": "eTMR3_Ch4_Ch5_IRQn",
+                "num": 119,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR3_Ch4_Ch5_IRQHandler"
+            },
+            {
+                "name": "eTMR3_Ch6_Ch7_IRQn",
+                "num": 120,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR3_Ch6_Ch7_IRQHandler"
+            },
+            {
+                "name": "eTMR3_Fault_IRQn",
+                "num": 121,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR3_Fault_IRQHandler"
+            },
+            {
+                "name": "eTMR3_Ovf_IRQn",
+                "num": 122,
+                "enable": false,
+                "priority": 0,
+                "callback": "eTMR3_Ovf_IRQHandler"
+            },
+            {
+                "name": "Reserved37_IRQn",
+                "num": 123,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved37_IRQHandler"
+            },
+            {
+                "name": "Reserved38_IRQn",
+                "num": 124,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved38_IRQHandler"
+            },
+            {
+                "name": "Reserved39_IRQn",
+                "num": 125,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved39_IRQHandler"
+            },
+            {
+                "name": "Reserved40_IRQn",
+                "num": 126,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved40_IRQHandler"
+            },
+            {
+                "name": "Reserved41_IRQn",
+                "num": 127,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved41_IRQHandler"
+            },
+            {
+                "name": "Reserved42_IRQn",
+                "num": 128,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved42_IRQHandler"
+            },
+            {
+                "name": "Reserved43_IRQn",
+                "num": 129,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved43_IRQHandler"
+            },
+            {
+                "name": "Reserved44_IRQn",
+                "num": 130,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved44_IRQHandler"
+            },
+            {
+                "name": "Reserved45_IRQn",
+                "num": 131,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved45_IRQHandler"
+            },
+            {
+                "name": "Reserved46_IRQn",
+                "num": 132,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved46_IRQHandler"
+            },
+            {
+                "name": "Reserved47_IRQn",
+                "num": 133,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved47_IRQHandler"
+            },
+            {
+                "name": "Reserved48_IRQn",
+                "num": 134,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved48_IRQHandler"
+            },
+            {
+                "name": "Reserved49_IRQn",
+                "num": 135,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved49_IRQHandler"
+            },
+            {
+                "name": "Reserved50_IRQn",
+                "num": 136,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved50_IRQHandler"
+            },
+            {
+                "name": "Reserved51_IRQn",
+                "num": 137,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved51_IRQHandler"
+            },
+            {
+                "name": "Reserved52_IRQn",
+                "num": 138,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved52_IRQHandler"
+            },
+            {
+                "name": "Reserved53_IRQn",
+                "num": 139,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved53_IRQHandler"
+            },
+            {
+                "name": "Reserved54_IRQn",
+                "num": 140,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved54_IRQHandler"
+            },
+            {
+                "name": "Reserved55_IRQn",
+                "num": 141,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved55_IRQHandler"
+            },
+            {
+                "name": "Reserved56_IRQn",
+                "num": 142,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved56_IRQHandler"
+            },
+            {
+                "name": "Reserved57_IRQn",
+                "num": 143,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved57_IRQHandler"
+            },
+            {
+                "name": "Reserved58_IRQn",
+                "num": 144,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved58_IRQHandler"
+            },
+            {
+                "name": "Reserved59_IRQn",
+                "num": 145,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved59_IRQHandler"
+            },
+            {
+                "name": "Reserved60_IRQn",
+                "num": 146,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved60_IRQHandler"
+            },
+            {
+                "name": "Reserved61_IRQn",
+                "num": 147,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved61_IRQHandler"
+            },
+            {
+                "name": "Reserved62_IRQn",
+                "num": 148,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved62_IRQHandler"
+            },
+            {
+                "name": "Reserved63_IRQn",
+                "num": 149,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved63_IRQHandler"
+            },
+            {
+                "name": "Reserved64_IRQn",
+                "num": 150,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved64_IRQHandler"
+            },
+            {
+                "name": "Reserved65_IRQn",
+                "num": 151,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved65_IRQHandler"
+            },
+            {
+                "name": "Reserved66_IRQn",
+                "num": 152,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved66_IRQHandler"
+            },
+            {
+                "name": "Reserved67_IRQn",
+                "num": 153,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved67_IRQHandler"
+            },
+            {
+                "name": "Reserved68_IRQn",
+                "num": 154,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved68_IRQHandler"
+            },
+            {
+                "name": "Reserved69_IRQn",
+                "num": 155,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved69_IRQHandler"
+            },
+            {
+                "name": "TRNG_IRQn",
+                "num": 156,
+                "enable": false,
+                "priority": 0,
+                "callback": "TRNG_IRQHandler"
+            },
+            {
+                "name": "HCU_IRQn",
+                "num": 157,
+                "enable": false,
+                "priority": 0,
+                "callback": "HCU_IRQHandler"
+            },
+            {
+                "name": "Reserved70_IRQn",
+                "num": 158,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved70_IRQHandler"
+            },
+            {
+                "name": "TMR0_Ch0_IRQn",
+                "num": 159,
+                "enable": false,
+                "priority": 0,
+                "callback": "TMR0_Ch0_IRQHandler"
+            },
+            {
+                "name": "TMR0_Ch1_IRQn",
+                "num": 160,
+                "enable": false,
+                "priority": 0,
+                "callback": "TMR0_Ch1_IRQHandler"
+            },
+            {
+                "name": "TMR0_Ch2_IRQn",
+                "num": 161,
+                "enable": false,
+                "priority": 0,
+                "callback": "TMR0_Ch2_IRQHandler"
+            },
+            {
+                "name": "TMR0_Ch3_IRQn",
+                "num": 162,
+                "enable": false,
+                "priority": 0,
+                "callback": "TMR0_Ch3_IRQHandler"
+            },
+            {
+                "name": "Reserved71_IRQn",
+                "num": 163,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved71_IRQHandler"
+            },
+            {
+                "name": "Reserved72_IRQn",
+                "num": 164,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved72_IRQHandler"
+            },
+            {
+                "name": "Reserved73_IRQn",
+                "num": 165,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved73_IRQHandler"
+            },
+            {
+                "name": "Reserved74_IRQn",
+                "num": 166,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved74_IRQHandler"
+            },
+            {
+                "name": "Reserved75_IRQn",
+                "num": 167,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved75_IRQHandler"
+            },
+            {
+                "name": "SPI3_IRQn",
+                "num": 168,
+                "enable": false,
+                "priority": 0,
+                "callback": "SPI3_IRQHandler"
+            },
+            {
+                "name": "Reserved76_IRQn",
+                "num": 169,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved76_IRQHandler"
+            },
+            {
+                "name": "Reserved77_IRQn",
+                "num": 170,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved77_IRQHandler"
+            },
+            {
+                "name": "Reserved78_IRQn",
+                "num": 171,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved78_IRQHandler"
+            },
+            {
+                "name": "Reserved79_IRQn",
+                "num": 172,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved79_IRQHandler"
+            },
+            {
+                "name": "Reserved80_IRQn",
+                "num": 173,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved80_IRQHandler"
+            },
+            {
+                "name": "Reserved81_IRQn",
+                "num": 174,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved81_IRQHandler"
+            },
+            {
+                "name": "Reserved82_IRQn",
+                "num": 175,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved82_IRQHandler"
+            },
+            {
+                "name": "Reserved83_IRQn",
+                "num": 176,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved83_IRQHandler"
+            },
+            {
+                "name": "Reserved84_IRQn",
+                "num": 177,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved84_IRQHandler"
+            },
+            {
+                "name": "Reserved85_IRQn",
+                "num": 178,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved85_IRQHandler"
+            },
+            {
+                "name": "Reserved86_IRQn",
+                "num": 179,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved86_IRQHandler"
+            },
+            {
+                "name": "SENT0_IRQn",
+                "num": 180,
+                "enable": false,
+                "priority": 0,
+                "callback": "SENT0_IRQHandler"
+            },
+            {
+                "name": "Reserved87_IRQn",
+                "num": 181,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved87_IRQHandler"
+            },
+            {
+                "name": "Reserved88_IRQn",
+                "num": 182,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved88_IRQHandler"
+            },
+            {
+                "name": "Reserved89_IRQn",
+                "num": 183,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved89_IRQHandler"
+            },
+            {
+                "name": "Reserved90_IRQn",
+                "num": 184,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved90_IRQHandler"
+            },
+            {
+                "name": "Reserved91_IRQn",
+                "num": 185,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved91_IRQHandler"
+            },
+            {
+                "name": "Reserved92_IRQn",
+                "num": 186,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved92_IRQHandler"
+            },
+            {
+                "name": "Reserved93_IRQn",
+                "num": 187,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved93_IRQHandler"
+            },
+            {
+                "name": "Reserved94_IRQn",
+                "num": 188,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved94_IRQHandler"
+            },
+            {
+                "name": "Reserved95_IRQn",
+                "num": 189,
+                "enable": false,
+                "priority": 0,
+                "callback": "Reserved95_IRQHandler"
+            },
+            {
+                "name": "WKU_IRQn",
+                "num": 190,
+                "enable": false,
+                "priority": 0,
+                "callback": "WKU_IRQHandler"
+            },
+            {
+                "name": "ALIGN_0_IRQn",
+                "num": 191,
+                "enable": false,
+                "priority": 0,
+                "callback": "ALIGN_0_IRQHandler"
+            }
+        ],
+        "crc_width": [
+            "CRC_BITS_4",
+            "CRC_BITS_16",
+            "CRC_BITS_32"
+        ],
+        "wdg_clk": [
+            "WDG_IPC_CLOCK",
+            "WDG_BUS_CLOCK"
+        ],
+        "ewdg_clk": [
+            "EWDG_SIRC_CLOCK"
+        ],
+        "ewdg_clk_sel_en": false,
+        "ewdg_max_cmph": 255,
+        "FEATURE_CAN_HAS_ENHANCE_FIFO": true,
+        "flash": [
+            {
+                "name": "PFlash0",
+                "start": "0x00000000",
+                "end": "0x0003FFFF",
+                "programUnit": 8,
+                "sectorSize": 1024
+            },
+            {
+                "name": "PFlash1",
+                "start": "0x00040000",
+                "end": "0x0007FFFF",
+                "programUnit": 8,
+                "sectorSize": 1024
+            },
+            {
+                "name": "OTP_NVR",
+                "start": "0x10000100",
+                "end": "0x100001FF",
+                "programUnit": 8,
+                "sectorSize": 256
+            },
+            {
+                "name": "HCU_NVR",
+                "start": "0x10000200",
+                "end": "0x100003FF",
+                "programUnit": 8,
+                "sectorSize": 512
+            },
+            {
+                "name": "CUS_NVR",
+                "start": "0x10000400",
+                "end": "0x100005FF",
+                "programUnit": 8,
+                "sectorSize": 512
+            }
+        ],
+        "fee": {
+            "default_hw_block": "PFlash1",
+            "hw_block_list": [
+                "PFlash0",
+                "PFlash1"
+            ]
+        },
+        "power": {
+            "FEATURE_SOC_SUPPORT_STANDBY_MODE": true,
+            "FEATURE_SOC_SUPPORT_POWERDOWN_MODE": true,
+            "FEATURE_SOC_SUPPORT_DEEPPOWERDOWN_MODE": false
+        },
+        "secure_boot_support": true,
+        "sent_features": {
+            "sent_ch_num": 2,
+            "sent_tick_min": 1,
+            "sent_tick_max": 90,
+            "nibble_max": 6
+        },
+        "rtc_clock_src": [
+            "RTC_CLK_SRC_BUS",
+            "RTC_CLK_SRC_RTC_PIN",
+            "RTC_CLK_SRC_SIRC",
+            "RTC_CLK_SRC_IPC"
+        ],
+        "wkuppins": [
+            "PTE_11",
+            "PTE_4",
+            "PTE_3",
+            "PTE_0",
+            "PTE_8",
+            "PTC_2",
+            "PTC_1",
+            "PTC_15",
+            "PTB_1",
+            "PTA_7",
+            "PTB_12",
+            "PTD_3",
+            "PTA_2",
+            "PTC_6",
+            "PTE_6",
+            "PTA_12"
+        ],
+        "tmr_has_channel_int": false,
+        "spi_pcs_list": [
+            "SPI_PCS0",
+            "SPI_PCS1",
+            "SPI_PCS2",
+            "SPI_PCS3"
+        ],
+        "can_bitrate_rules": {
+            "propSeg": [
+                256,
+                256,
+                31
+            ],
+            "phaseSeg1": [
+                256,
+                256,
+                32
+            ],
+            "phaseSeg2": [
+                128,
+                128,
+                16
+            ],
+            "preDivider": [
+                1024,
+                1024,
+                1024
+            ],
+            "rJumpwidth": [
+                128,
+                128,
+                16
+            ]
+        },
+        "LINFlexD_DMA_Errata": true
+    }
+}

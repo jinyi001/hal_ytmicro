@@ -8,6 +8,19 @@
 /*!
  * @file fee.c
  * @version 1.4.1
+ *
+ * @brief FEE driver implementation and internal flash job scheduler.
+ *
+ * This file implements the public Fee_* services together with the helper
+ * routines that serialize metadata, scan configured clusters, migrate valid
+ * blocks during cluster swap, and coordinate asynchronous flash operations
+ * through the FLS backend.
+ *
+ * The implementation is organized into four main areas:
+ *   - metadata serialization and lookup helpers
+ *   - cluster scan and swap state-machine jobs
+ *   - flash read, write, erase, and validation adapters
+ *   - public API entry points and FLS callback handlers
  */
 
 /*!
@@ -33,135 +46,141 @@ extern "C" {
 /*==================================================================================================
  *                                       LOCAL MACROS
 ==================================================================================================*/
-/** @brief Management overhead per logical block in bytes */
+/*! @brief Metadata overhead reserved for each logical block. */
 #if defined(FEE_LIGHT_MODE) && (FEE_LIGHT_MODE == 1U)
 #define FEE_BLOCK_OVERHEAD                       (16U)
 #else
 #define FEE_BLOCK_OVERHEAD                       (32U)
 #endif
 
-/** @brief Management overhead per logical cluster in bytes */
+/*! @brief Metadata overhead reserved for each physical cluster. */
 #if defined(FEE_LIGHT_MODE) && (FEE_LIGHT_MODE == 1U)
 #define FEE_CLUSTER_OVERHEAD                     (16U)
 #else
 #define FEE_CLUSTER_OVERHEAD                     (32U)
 #endif
 
-/* The Offset of flag status part in the cluster header */
+/* Offset of the validation-state area within a serialized cluster header. */
 #if defined(FEE_LIGHT_MODE) && (FEE_LIGHT_MODE == 1U)
 #define FEE_CLUSTER_HEADER_STATUS_OFFSET     (FEE_CLUSTER_OVERHEAD - FEE_VIRTUAL_PAGE_SIZE)
 #else
 #define FEE_CLUSTER_HEADER_STATUS_OFFSET     (FEE_CLUSTER_OVERHEAD - (2U * FEE_VIRTUAL_PAGE_SIZE))
 #endif
 
-/* The Offset of flag status part in the block header */
+/* Offset of the validation-state area within a serialized block header. */
 #if defined(FEE_LIGHT_MODE) && (FEE_LIGHT_MODE == 1U)
 #define FEE_BLOCK_HEADER_STATUS_OFFSET      (FEE_BLOCK_OVERHEAD - FEE_VIRTUAL_PAGE_SIZE)
 #else
 #define FEE_BLOCK_HEADER_STATUS_OFFSET      (FEE_BLOCK_OVERHEAD - (2U * FEE_VIRTUAL_PAGE_SIZE))
 #endif
 
-/* The size of ValidFlag area (Light mode: 1 page, Standard mode: 2 pages for Valid+Invalid flags) */
+/* Size of the block validation area in light mode or standard mode. */
 #if defined(FEE_LIGHT_MODE) && (FEE_LIGHT_MODE == 1U)
 #define FEE_BLOCK_VALID_FLAG_AREA_SIZE      (FEE_VIRTUAL_PAGE_SIZE)
 #else
 #define FEE_BLOCK_VALID_FLAG_AREA_SIZE      (2U * FEE_VIRTUAL_PAGE_SIZE)
 #endif
 
+#ifndef FEE_ENTER_CRITICAL_SECTION
+#define FEE_ENTER_CRITICAL_SECTION()        Fee_EnterCriticalSection()
+#endif
+
+#ifndef FEE_EXIT_CRITICAL_SECTION
+#define FEE_EXIT_CRITICAL_SECTION(state)    Fee_ExitCriticalSection((state))
+#endif
+
 /*==================================================================================================
  *                          LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
-/**
-* @brief        Status of Fee block header
-*/
+/*!
+ * @brief Decoded state of a logical block header stored in flash.
+ */
 typedef enum
 {
-    FEE_BLOCK_VALID = 0,         /**< @brief Fee block is valid */
-    FEE_BLOCK_INVALID,           /**< @brief Fee block is invalid (has been invalidated) */
-    FEE_BLOCK_INCONSISTENT,      /**< @brief Fee block is inconsistent (contains bogus data) */
-    FEE_BLOCK_HEADER_INVALID,    /**< @brief Fee block header is garbled */
-    FEE_BLOCK_INVALIDATED,       /**< @brief Fee block header is invalidated by Fee_InvalidateBlock(BlockNumber)(not used when
-                                      FEE_BLOCK_ALWAYS_AVAILABLE == STD_OFF) */
-    FEE_BLOCK_HEADER_BLANK,      /**< @brief Fee block header is blank, it is used to mark the end of Fee block header list
-                                      when parsing the memory at initialization*/
-    FEE_BLOCK_INCONSISTENT_COPY, /**< @brief FEE data read error during swap (ie data area was allocated) */
-    FEE_BLOCK_NEVER_WRITTEN      /**< @brief FEE block was never written in data flash */
+    FEE_BLOCK_VALID = 0,         /**< Block contains the newest valid payload. */
+    FEE_BLOCK_INVALID,           /**< Block was superseded or explicitly invalidated. */
+    FEE_BLOCK_INCONSISTENT,      /**< Block metadata exists but the payload is unusable. */
+    FEE_BLOCK_HEADER_INVALID,    /**< Block header cannot be parsed correctly. */
+    FEE_BLOCK_INVALIDATED,       /**< Block carries the explicit invalidation marker. */
+    FEE_BLOCK_HEADER_BLANK,      /**< Block-header slot is blank and marks the parse boundary. */
+    FEE_BLOCK_INCONSISTENT_COPY, /**< Block copy failed while a swap operation was active. */
+    FEE_BLOCK_NEVER_WRITTEN      /**< No valid payload has ever been written for the block. */
 } Fee_BlockStatusType;
 
-/**
-* @brief        Status of Fee cluster header
-*/
+/*!
+ * @brief Decoded state of a cluster header stored in flash.
+ */
 typedef enum
 {
-    FEE_CLUSTER_VALID = 0,       /**< @brief Fee cluster is valid */
-    FEE_CLUSTER_INVALID,         /**< @brief Fee cluster is invalid */
-    FEE_CLUSTER_INCONSISTENT,    /**< @brief Fee cluster is inconsistent (contains bogus data) */
-    FEE_CLUSTER_HEADER_INVALID   /**< @brief Fee cluster header is garbled */
+    FEE_CLUSTER_VALID = 0,       /**< Cluster is formatted and currently valid. */
+    FEE_CLUSTER_INVALID,         /**< Cluster is marked invalid and cannot accept data. */
+    FEE_CLUSTER_INCONSISTENT,    /**< Cluster header or status is partially programmed. */
+    FEE_CLUSTER_HEADER_INVALID   /**< Cluster header cannot be parsed correctly. */
 } Fee_ClusterStatusType;
 
-/**
-* @brief        Type of job currently executed by Fee_MainFunction
-*/
+/*!
+ * @brief Internal job identifiers processed by the FEE state machine.
+ */
 typedef enum
 {
-    /* Fee_Read() related jobs */
-    FEE_JOB_READ = 0,                /**< @brief Read Fee block */
+    /* Jobs entered from Fee_Read(). */
+    FEE_JOB_READ = 0,                /**< Read a logical block payload. */
 
-    /* Fee_Write() related jobs */
-    FEE_JOB_WRITE,                   /**< @brief Write Fee block to flash */
-    FEE_JOB_WRITE_DATA,              /**< @brief Write Fee block data to flash */
-    FEE_JOB_WRITE_UNALIGNED_DATA,    /**< @brief Write unaligned rest of Fee block data to flash */
-    FEE_JOB_WRITE_VALIDATE,          /**< @brief Validate Fee block by writing validation flag to flash */
-    FEE_JOB_WRITE_DONE,              /**< @brief Finalize validation of Fee block */
+    /* Jobs entered from Fee_Write(). */
+    FEE_JOB_WRITE,                   /**< Prepare the block-write sequence. */
+    FEE_JOB_WRITE_DATA,              /**< Program aligned block payload data. */
+    FEE_JOB_WRITE_UNALIGNED_DATA,    /**< Program any trailing unaligned payload bytes. */
+    FEE_JOB_WRITE_VALIDATE,          /**< Commit the block validation marker. */
+    FEE_JOB_WRITE_DONE,              /**< Finalize a completed block write. */
 
-    /* Fee_InvalidateBlock() related jobs */
-    FEE_JOB_INVAL_BLOCK,             /**< @brief Invalidate Fee block by writing the invalidation flag to flash */
-    FEE_JOB_INVAL_BLOCK_DONE,        /**< @brief Finalize invalidation of Fee block */
+    /* Jobs entered from Fee_InvalidateBlock(). */
+    FEE_JOB_INVAL_BLOCK,             /**< Program the block invalidation marker. */
+    FEE_JOB_INVAL_BLOCK_DONE,        /**< Finalize logical block invalidation. */
 
-    /* Fee_EraseImmediateBlock() related jobs */
-    FEE_JOB_ERASE_IMMEDIATE,         /**< @brief Erase (pre-allocate) immediate Fee block */
+    /* Jobs entered from Fee_EraseImmediateBlock(). */
+    FEE_JOB_ERASE_IMMEDIATE,         /**< Re-prepare the target immediate block area. */
 
-    /* Fee_Init() realted jobs */
-    FEE_JOB_INT_SCAN,                /**< @brief Initialize the cluster scan job */
-    FEE_JOB_INT_SCAN_CLR,            /**< @brief Scan active cluster of current cluster group */
-    FEE_JOB_INT_SCAN_CLR_HDR_PARSE,  /**< @brief Parse Fee cluster header */
-    FEE_JOB_INT_SCAN_CLR_FMT,        /**< @brief Format first Fee cluster */
-    FEE_JOB_INT_SCAN_CLR_FMT_DONE,   /**< @brief Finalize format of first Fee cluster */
-    FEE_JOB_INT_SCAN_BLOCK_HDR_PARSE,/**< @brief Parse Fee block header */
+    /* Jobs entered from Fee_Init(). */
+    FEE_JOB_INT_SCAN,                /**< Start the initialization scan pipeline. */
+    FEE_JOB_INT_SCAN_CLR,            /**< Scan the active cluster in the current group. */
+    FEE_JOB_INT_SCAN_CLR_HDR_PARSE,  /**< Parse the serialized cluster header. */
+    FEE_JOB_INT_SCAN_CLR_FMT,        /**< Format the first cluster in the group. */
+    FEE_JOB_INT_SCAN_CLR_FMT_DONE,   /**< Finalize cluster formatting. */
+    FEE_JOB_INT_SCAN_BLOCK_HDR_PARSE,/**< Parse serialized block headers. */
 
-    /* Internal swap jobs */
-    FEE_JOB_INT_SWAP_CLR_FMT,        /**< @brief Format current Fee cluster in current Fee cluster group */
-    FEE_JOB_INT_SWAP_BLOCK,          /**< @brief Copy next block from source to target cluster */
-    FEE_JOB_INT_SWAP_DATA_READ,      /**< @brief Read data from source cluster to internal Fee buffer */
-    FEE_JOB_INT_SWAP_DATA_WRITE,     /**< @brief Write data from internal Fee buffer to target cluster */
-    FEE_JOB_INT_SWAP_CLR_VLD_DONE,   /**< @brief Finalize cluster validation */
+    /* Internal cluster-swap jobs. */
+    FEE_JOB_INT_SWAP_CLR_FMT,        /**< Format the target cluster before swap. */
+    FEE_JOB_INT_SWAP_BLOCK,          /**< Select the next block that must be migrated. */
+    FEE_JOB_INT_SWAP_DATA_READ,      /**< Read source block data into the shared buffer. */
+    FEE_JOB_INT_SWAP_DATA_WRITE,     /**< Write buffered block data into the target cluster. */
+    FEE_JOB_INT_SWAP_CLR_VLD_DONE,   /**< Finalize validation of the target cluster. */
 
-    /* Fee system jobs */
-    FEE_JOB_DONE,                    /**< @brief No more subsequent jobs to schedule */
+    /* Terminal scheduler states. */
+    FEE_JOB_DONE,                    /**< No further job step remains to be scheduled. */
 
-    /* Fee_Setmode() related job */
-    FEE_JOB_SETMODE                  /**< @brief Setmode to fls */
+    /* Reserved bridge to the flash backend. */
+    FEE_JOB_SETMODE                  /**< Propagate the requested mode to FLS. */
 } Fee_JobType;
 
-/**
-* @brief        Fee cluster group run-time status
-*/
+/*!
+ * @brief Runtime cursor values for one cluster group.
+ */
 typedef struct
 {
-    Fls_AddressType DataAddrIt;        /**< @brief Address of current Fee data block in flash */
-    Fls_AddressType HdrAddrIt;         /**< @brief Address of current Fee block header in flash */
-    uint32_t ActClrID;                   /**< @brief ID of active cluster */
-    uint8_t ActClr;                      /**< @brief Index of active cluster */
+    Fls_AddressType DataAddrIt;  /**< Current data-write cursor inside the cluster group. */
+    Fls_AddressType HdrAddrIt;   /**< Current header-write cursor inside the cluster group. */
+    uint32_t ActClrID;           /**< Identifier of the active cluster. */
+    uint8_t ActClr;              /**< Index of the active cluster. */
 } Fee_ClusterGroupInfoType;
 
-/**
-* @brief        Fee block run-time status
-*/
+/*!
+ * @brief Runtime state tracked for each configured logical block.
+ */
 typedef struct
 {
-    Fls_AddressType DataAddr;          /**< @brief Address of Fee block data in flash */
-    Fls_AddressType InvalidAddr;       /**< @brief Address of Fee block invalidation field in flash */
-    Fee_BlockStatusType BlockStatus;   /**< @brief Current status of Fee block */
+    Fls_AddressType DataAddr;        /**< Flash address of the newest block payload. */
+    Fls_AddressType InvalidAddr;     /**< Flash address of the invalidation marker. */
+    Fee_BlockStatusType BlockStatus; /**< Current decoded block state. */
 } Fee_BlockInfoType;
 
 /*==================================================================================================
@@ -180,105 +199,73 @@ static Fee_ModuleUserConfig_t const * Fee_ConfigPtr = NULL_PTR;
  *                                      LOCAL VARIABLES
 ==================================================================================================*/
 
+/*! @brief Indicates whether the current request must trigger a cluster swap. */
 static bool bSwapToBePerformed;
 
-/**
-* @brief        Pointer to user data buffer. Used by the read Fee jobs
-*/
+/*! @brief Destination buffer supplied by the active read request. */
 static uint8_t *Fee_pJobReadDataDestPtr = (uint8_t *)NULL_PTR;
 
-/**
-* @brief        Pointer to user data buffer. Used by the write Fee jobs
-*/
+/*! @brief Source buffer supplied by the active write request. */
 static const uint8_t *Fee_pJobWriteDataDestPtr = (uint8_t *)NULL_PTR;
 
-/**
-* @brief        Data buffer used by all jobs to store immediate data
-*/
+/*! @brief Shared internal data buffer used by read, write, scan, and swap jobs. */
 static uint8_t Fee_aDataBuffer[FEE_DATA_BUFFER_SIZE] = {0};
-/**
-* @brief        Internal cluster group iterator. Used by the scan and swap jobs
-*               Warning: do not use it outside scan and swap functions
-*                        (because it will be Out of Range)
-*/
+/*!
+ * @brief Internal cluster-group iterator used by scan and swap jobs.
+ *
+ * This cursor is valid only while the internal scan or swap state machine is
+ * active.
+ */
 static uint8_t Fee_uJobIntClrGrpIt;
 
-/**
-* @brief        Internal cluster iterator. Used by the scan and swap jobs
-*/
+/*! @brief Internal cluster iterator used by scan and swap jobs. */
 static uint8_t Fee_uJobIntClrIt;
 
 
-/**
-* @brief        Fee block index. Used by all Fee jobs
-*/
+/*! @brief Logical block index associated with the active public request. */
 static uint16_t Fee_uJobBlockIndex;
-/**
-* @brief        Internal block iterator. Used by the swap job
-*/
+/*! @brief Internal block iterator used while migrating blocks during swap. */
 static uint16_t Fee_uJobIntBlockIt;
 
-/**
-* @brief        Run-time information about blocks touching the Reserved Area
-* @implements   Fee_aReservedAreaTouched_Object
-*/
+/*!
+ * @brief Bitset that tracks which logical blocks currently touch reserved areas.
+ */
 static uint32_t Fee_aReservedAreaTouched[(FEE_CRT_CFG_NR_OF_BLOCKS + ((sizeof(uint32_t) * 8U)-1U)) / (sizeof(uint32_t) * 8U)];
 
-/**
-* @brief        Currently executed job (including internal one)
-*/
+/*! @brief Currently executing internal or public job identifier. */
 static Fee_JobType Fee_eJob = FEE_JOB_DONE;
 
-/**
-* @brief        Fee job which started internal management job(s) such as swap...
-*/
+/*! @brief Public job that triggered the active internal maintenance pipeline. */
 static Fee_JobType Fee_eJobIntOriginalJob = FEE_JOB_DONE;
 
-/**
-* @brief        Internal state of Fee module
-*/
+/*! @brief Current MEMIF runtime state reported by the module. */
 static MemIf_StatusType Fee_eModuleStatus = MEMIF_UNINIT;
 
-/**
-* @brief        Result of last Fee module job
-*/
+/*! @brief Result of the most recently completed or active FEE job. */
 static MemIf_JobResultType Fee_eJobResult = MEMIF_JOB_OK;
-/**
-* @brief        Fee block Offset. Used by the read Fee job
-*/
+/*! @brief Requested offset inside the active read block. */
 static Fls_LengthType Fee_uJobBlockOffset;
 
-/**
-* @brief        Number of bytes to read. Used by the read Fee job
-*/
+/*! @brief Requested length of the active read job. */
 static Fls_LengthType Fee_uJobBlockLength;
 
-/**
-* @brief        Internal flash helper address iterator. Used by the scan and
-*               swap jobs
-*/
+/*!
+ * @brief Internal flash-address iterator shared by scan and swap helpers.
+ */
 static Fls_AddressType Fee_uJobIntAddrIt;
 
-/**
-* @brief        Internal address of current block header. Used by the swap job
-*/
+/*! @brief Flash address of the current block header handled during swap. */
 static Fls_AddressType Fee_uJobIntHdrAddr;
 
-/**
-* @brief        Internal address of current data block. Used by the swap job.
-*/
+/*! @brief Flash address of the current block payload handled during swap. */
 static Fls_AddressType Fee_uJobIntDataAddr;
 
-/**
-* @brief        Run-time information of all configured Fee blocks. Contains
-*               status, and data information. Used by all jobs
-* @implements   Fee_aBlockInfo_Object
-*/
+/*!
+ * @brief Runtime state table for all configured logical blocks.
+ */
 static Fee_BlockInfoType Fee_aBlockInfo[FEE_CRT_CFG_NR_OF_BLOCKS];
 
-/**
-* @brief        Run-time information of all configured cluster groups
-*/
+/*! @brief Runtime cursor table for all configured cluster groups. */
 static Fee_ClusterGroupInfoType Fee_aClrGrpInfo[FEE_NUMBER_OF_CLUSTER_GROUPS];
 
 /*==================================================================================================
@@ -289,6 +276,10 @@ static void Fee_SerializeBlockHdr(const Fee_BlockType *BlockHder,
                                   const Fls_AddressType TargetAddress,
                                   uint8_t *BlockHdrPtr
                                  );
+
+static uint32_t Fee_EnterCriticalSection(void);
+
+static void Fee_ExitCriticalSection(uint32_t primaskState);
 
 static Std_ReturnType Fee_BlankCheck(const uint8_t *TargetPtr, const uint8_t *const TargetEndPtr);
 
@@ -438,108 +429,101 @@ static inline MemIf_JobResultType Fee_JobInternalSwapDataRead_Wrapper(void);
 static inline MemIf_JobResultType Fee_JobInternalSwapDataWrite_Wrapper(void);
 static inline MemIf_JobResultType Fee_JobSystemDone(void);
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_SerializeUint16
- * Description   : Serialize scalar parameter into the buffer
- *
- *END**************************************************************************/
+/*!
+ * @brief Enter the short critical section used by public API state staging.
+ */
+static uint32_t Fee_EnterCriticalSection(void)
+{
+    uint32_t primaskState = __get_PRIMASK();
+
+    __disable_irq();
+
+    return primaskState;
+}
+
+/*!
+ * @brief Restore the interrupt mask captured on critical-section entry.
+ */
+static void Fee_ExitCriticalSection(uint32_t primaskState)
+{
+    __set_PRIMASK(primaskState);
+}
+
+/*!
+ * @brief Serialize a 16-bit unsigned integer into the byte buffer and advance the pointer.
+ */
 static inline void Fee_SerializeUint16(uint16_t ParamVal, uint8_t **SerialPtr)
 {
     *((uint16_t*)((uint32_t)(*SerialPtr))) = ParamVal;
     (*SerialPtr) = &((*SerialPtr)[sizeof(uint16_t)]);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_SerializeUint32
- * Description   : Serialize scalar parameter into the buffer
- *
- *END**************************************************************************/
+/*!
+ * @brief Serialize a 32-bit unsigned integer into the byte buffer and advance the pointer.
+ */
 static inline void Fee_SerializeUint32(uint32_t ParamVal, uint8_t **SerialPtr)
 {
     *((uint32_t*)((uint32_t)(*SerialPtr))) = ParamVal;
     (*SerialPtr) = &((*SerialPtr)[sizeof(uint32_t)]);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_SerializeAddress
- * Description   : Serialize scalar parameter into the buffer
- *
- *END**************************************************************************/
+/*!
+ * @brief Serialize a flash address value (Fls_AddressType width) into the byte buffer and advance the pointer.
+ */
 static inline void Fee_SerializeAddress(Fls_AddressType ParamVal, uint8_t **SerialPtr)
 {
     *((Fls_AddressType*)((uint32_t)(*SerialPtr))) = ParamVal;
     (*SerialPtr) = &((*SerialPtr)[sizeof(Fls_AddressType)]);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_SerializeLength
- * Description   : Serialize scalar parameter into the buffer
- *
- *END**************************************************************************/
+/*!
+ * @brief Serialize scalar parameter into the buffer.
+ */
 static inline void Fee_SerializeLength(Fls_LengthType ParamVal, uint8_t **SerialPtr)
 {
     *((Fls_LengthType*)((uint32_t)(*SerialPtr))) = ParamVal;
     (*SerialPtr) = &((*SerialPtr)[sizeof(Fls_LengthType)]);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_DeserializeUint8
- * Description   : Deserialize scalar parameter from the buffer
- *
- *END**************************************************************************/
+/*!
+ * @brief Deserialize scalar parameter from the buffer.
+ */
 static inline void Fee_DeserializeUint8(const uint8_t **DeserialPtr, uint8_t *ParamVal)
 {
     *ParamVal = *(const uint8_t*)((uint32_t)(*DeserialPtr));
     (*DeserialPtr) = &((*DeserialPtr)[sizeof(uint8_t)]);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_DeserializeUint16
- * Description   : Deserialize scalar parameter from the buffer
- *
- *END**************************************************************************/
+/*!
+ * @brief Deserialize scalar parameter from the buffer.
+ */
 static inline void Fee_DeserializeUint16(const uint8_t **DeserialPtr, uint16_t *ParamVal)
 {
     *ParamVal = *(const uint16_t*)((uint32_t)(*DeserialPtr));
     (*DeserialPtr) = &((*DeserialPtr)[sizeof(uint16_t)]);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_DeserializeUint32
- * Description   : Deserialize scalar parameter from the buffer
- *
- *END**************************************************************************/
+/*!
+ * @brief Deserialize scalar parameter from the buffer.
+ */
 static inline void Fee_DeserializeUint32(const uint8_t **DeserialPtr, uint32_t *ParamVal)
 {
     *ParamVal = *(const uint32_t*)((uint32_t)(*DeserialPtr));
     (*DeserialPtr) = &((*DeserialPtr)[sizeof(uint32_t)]);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_DeserializeAddress
- * Description   : Deserialize scalar parameter from the buffer
- *
- *END**************************************************************************/
+/*!
+ * @brief Deserialize scalar parameter from the buffer.
+ */
 static inline void Fee_DeserializeAddress(const uint8_t **DeserialPtr, Fls_AddressType *ParamVal)
 {
     *ParamVal = *(const Fls_AddressType*)((uint32_t)(*DeserialPtr));
     (*DeserialPtr) = &((*DeserialPtr)[sizeof(Fls_AddressType)]);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_DeserializeLength
- * Description   : Deserialize scalar parameter from the buffer
- *
- *END**************************************************************************/
+/*!
+ * @brief Deserialize scalar parameter from the buffer.
+ */
 static inline void Fee_DeserializeLength(const uint8_t **DeserialPtr, Fls_LengthType *ParamVal)
 {
     *ParamVal = *(const Fls_LengthType*)((uint32_t)(*DeserialPtr));
@@ -547,12 +531,9 @@ static inline void Fee_DeserializeLength(const uint8_t **DeserialPtr, Fls_Length
 }
 
 #if defined(FEE_LIGHT_MODE) && (FEE_LIGHT_MODE == 1U)
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_SerializeAddress24
- * Description   : Serialize 24-bit (3 bytes) address into the buffer (Light mode)
- *
- *END**************************************************************************/
+/*!
+ * @brief Serialize 24-bit (3 bytes) address into the buffer (Light mode).
+ */
 static inline void Fee_SerializeAddress24(Fls_AddressType ParamVal, uint8_t **SerialPtr)
 {
     (*SerialPtr)[0] = (uint8_t)(ParamVal & 0xFFU);
@@ -561,12 +542,9 @@ static inline void Fee_SerializeAddress24(Fls_AddressType ParamVal, uint8_t **Se
     (*SerialPtr) = &((*SerialPtr)[3U]);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_DeserializeAddress24
- * Description   : Deserialize 24-bit (3 bytes) address from the buffer (Light mode)
- *
- *END**************************************************************************/
+/*!
+ * @brief Deserialize 24-bit (3 bytes) address from the buffer (Light mode).
+ */
 static inline void Fee_DeserializeAddress24(const uint8_t **DeserialPtr, Fls_AddressType *ParamVal)
 {
     *ParamVal = (Fls_AddressType)((*DeserialPtr)[0]) |
@@ -575,12 +553,9 @@ static inline void Fee_DeserializeAddress24(const uint8_t **DeserialPtr, Fls_Add
     (*DeserialPtr) = &((*DeserialPtr)[3U]);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_SerializeUint8
- * Description   : Serialize 8-bit checksum into the buffer (Light mode)
- *
- *END**************************************************************************/
+/*!
+ * @brief Serialize 8-bit checksum into the buffer (Light mode).
+ */
 static inline void Fee_SerializeUint8(uint8_t ParamVal, uint8_t **SerialPtr)
 {
     **SerialPtr = ParamVal;
@@ -588,144 +563,117 @@ static inline void Fee_SerializeUint8(uint8_t ParamVal, uint8_t **SerialPtr)
 }
 #endif /* FEE_LIGHT_MODE */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobIntalScanCluHdrParse_Wrapper
- * Description   :  A wrapper function for Fee_JobIntalScanCluHdrParse
- * 
- *END**************************************************************************/
+/*!
+ * @brief Invoke Fee_JobIntalScanCluHdrParse() with a valid buffer state.
+ */
 static inline MemIf_JobResultType Fee_JobIntalScanCluHdrParse_Wrapper(void)
 {
     return Fee_JobIntalScanCluHdrParse(true);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalScanBlkHdrParse_Wrapper
- * Description   :  A wrapper function for Fee_JobInternalScanBlkHdrParse
- * 
- *END**************************************************************************/
+/*!
+ * @brief Invoke Fee_JobInternalScanBlkHdrParse() with a valid buffer state.
+ */
 static inline MemIf_JobResultType Fee_JobInternalScanBlkHdrParse_Wrapper(void)
 {
     return Fee_JobInternalScanBlkHdrParse(true);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalSwapDataRead_Wrapper
- * Description   :  A wrapper function for Fee_JobInternalSwapDataRead
- * 
- *END**************************************************************************/
+/*!
+ * @brief Invoke Fee_JobInternalSwapDataRead() with a valid buffer state.
+ */
 static inline MemIf_JobResultType Fee_JobInternalSwapDataRead_Wrapper(void)
 {
     return Fee_JobInternalSwapDataRead(true);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalSwapDataWrite_Wrapper
- * Description   :  A wrapper function for Fee_JobInternalSwapDataWrite
- * 
- *END**************************************************************************/
+/*!
+ * @brief Invoke Fee_JobInternalSwapDataWrite() with a valid buffer state.
+ */
 static inline MemIf_JobResultType Fee_JobInternalSwapDataWrite_Wrapper(void)
 {
     return Fee_JobInternalSwapDataWrite(true);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : MemIf_JobResultType
- * Description   : Fee job done
- * 
- *END**************************************************************************/
+/*!
+ * @brief Return the terminal result for the synthetic scheduler done state.
+ */
 static inline MemIf_JobResultType Fee_JobSystemDone(void)
 {
     return MEMIF_JOB_FAILED;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Dispatch table used by Fee_JobSchedule().
  *
- * Function Name : Fee_JobScheduleLookupTable
- * Description   : List of Fee job functions, used by Fee_JobSchedule
- * The order of functions in this table must be identical
- * with the enumeration Fee_JobType from Fee_InternalTypes.h 
- * 
- *END**************************************************************************/
+ * The order of entries must remain aligned with the Fee_JobType enumeration.
+ */
 static MemIf_JobResultType (*Fee_JobScheduleLookupTable[])(void) =
 {
-    /* Fee_Read() related jobs */
+    /* Jobs entered from Fee_Read(). */
     Fee_JobReadBlock,                                /* FEE_JOB_READ */
 
-    /* Fee_Write() related jobs */
+    /* Jobs entered from Fee_Write(). */
     Fee_JobWriteBlock,                               /* FEE_JOB_WRITE */
     Fee_JobWriteBlockData,                           /* FEE_JOB_WRITE_DATA */
     Fee_JobWriteBlockUnalignedData,                  /* FEE_JOB_WRITE_UNALIGNED_DATA */
     Fee_JobWriteBlockValidate,                       /* FEE_JOB_WRITE_VALIDATE */
     Fee_JobWriteBlockDone,                           /* FEE_JOB_WRITE_DONE */
 
-    /* Fee_InvalidateBlock() related jobs */
+    /* Jobs entered from Fee_InvalidateBlock(). */
     Fee_JobInvalidateBlock,                          /* FEE_JOB_INVAL_BLOCK */
     Fee_JobInvalidateBlockDone,                      /* FEE_JOB_INVAL_BLOCK_DONE */
 
-    /* Fee_EraseImmediateBlock() related jobs */
+    /* Jobs entered from Fee_EraseImmediateBlock(). */
     Fee_JobEraseImmediateBlock,                      /* FEE_JOB_ERASE_IMMEDIATE */
 
-    /* Fee_Init() realted jobs */
+    /* Jobs entered from Fee_Init(). */
     Fee_JobInternalScan,                             /* FEE_JOB_INT_SCAN */
     Fee_JobInternalScanCluster,                      /* FEE_JOB_INT_SCAN_CLR */
-    Fee_JobIntalScanCluHdrParse_Wrapper,      /* FEE_JOB_INT_SCAN_CLR_HDR_PARSE */
+    Fee_JobIntalScanCluHdrParse_Wrapper,             /* FEE_JOB_INT_SCAN_CLR_HDR_PARSE */
     Fee_JobInternalScanClusterFmt,                   /* FEE_JOB_INT_SCAN_CLR_FMT */
     Fee_JobInternalScanClusterFmtDone,               /* FEE_JOB_INT_SCAN_CLR_FMT_DONE */
-    Fee_JobInternalScanBlkHdrParse_Wrapper,        /* FEE_JOB_INT_SCAN_BLOCK_HDR_PARSE */
+    Fee_JobInternalScanBlkHdrParse_Wrapper,          /* FEE_JOB_INT_SCAN_BLOCK_HDR_PARSE */
 
-    /* Internal swap jobs */
+    /* Internal cluster-swap jobs. */
     Fee_JobInternalSwapClusterFmt,                   /* FEE_JOB_INT_SWAP_CLR_FMT */
     Fee_JobInternalSwapBlock,                        /* FEE_JOB_INT_SWAP_BLOCK */
     Fee_JobInternalSwapDataRead_Wrapper,             /* FEE_JOB_INT_SWAP_DATA_READ */
     Fee_JobInternalSwapDataWrite_Wrapper,            /* FEE_JOB_INT_SWAP_DATA_WRITE */
     Fee_JobInternalSwapClusterVldDone,               /* FEE_JOB_INT_SWAP_CLR_VLD_DONE */
 
-    /* Fee system jobs done */
+    /* Terminal scheduler state. */
     Fee_JobSystemDone,                               /* FEE_JOB_DONE */
 };
 /*==================================================================================================
 *                                       LOCAL FUNCTIONS
 ==================================================================================================*/
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_GetBlockClusterGrp
- * Description   : Returns the cluster group for a block specified by its 
- * index in the Fee_aBlockInfo array
- * 
- *END**************************************************************************/
+/*!
+ * @brief Return the configured cluster-group index for a logical block.
+ */
 static inline uint8_t Fee_GetBlockClusterGrp(const uint16_t BlockRuntimeInfoIndex)
 {
     uint8_t BlockClusterGrp;
 
-    /* the config is part of Fee_BlockConfig*/
+    /* Read the cluster-group index from the generated block table. */
     BlockClusterGrp = Fee_ConfigPtr->blockConfigPtr[BlockRuntimeInfoIndex].ClrGrp;
 
     return BlockClusterGrp;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_ReservedAreaTargetedInClrGrp
- * Description   : Checks whether the area specified by 
- * Fee_aClrGrpInfo[ClrGrpIndex].DataAddrIt and 
- * Fee_aClrGrpInfo[ClrGrpIndex].HdrAddrIt touches the Reserved Area.
- * 
- *END**************************************************************************/
+/*!
+ * @brief Check whether the active cluster cursor has reached the reserved area.
+ */
 static inline bool Fee_ReservedAreaTargetedInClrGrp(const uint8_t ClrGrpIndex)
 {
     bool RetVal;
     Fls_LengthType AvailClrSpace;
     uint32_t ReservedSpace;
 
-    /* Reserved space of cluster group*/
+    /* Read the configured reserved size for the cluster group. */
     ReservedSpace = Fee_ConfigPtr->clusterConfigPtr[ ClrGrpIndex ].ReservedSize;
 
-    /* Calculate available space in active cluster */
+    /* Compute the remaining writable span in the active cluster. */
     AvailClrSpace = Fee_aClrGrpInfo[ ClrGrpIndex ].DataAddrIt -
                     Fee_aClrGrpInfo[ ClrGrpIndex ].HdrAddrIt;
 
@@ -741,34 +689,25 @@ static inline bool Fee_ReservedAreaTargetedInClrGrp(const uint8_t ClrGrpIndex)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_PowerOf2Of5LSB
- * Description   : Function to compute the power of 2 out of the 5 LSB bits 
- * of InVal value.
- * 
- *END**************************************************************************/
+/*!
+ * @brief Function to compute the power of 2 out of the 5 LSB bits of InVal value.
+ */
 static inline uint32_t Fee_PowerOf2Of5LSB(const uint32_t InVal)
 {
     return (uint32_t)(0x00000001UL << (InVal & 0x1FUL));
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_ReservedAreaTouchedByBlock
- * Description   :  Returns the information about touching the Reserved Area 
- * by the block specified by uBlockuNumber.
- * 
- *END**************************************************************************/
+/*!
+ * @brief Report whether the logical block currently touches reserved space.
+ */
 static inline bool Fee_ReservedAreaTouchedByBlock(const uint16_t BlockNumber)
 {
     uint32_t Idx;
     bool RetVal;
 
-    /*The Block information is stored by 1 bit, 32 blocks will be stored in one element of Fee_aReservedAreaTouched*/
-    /*Calculate index of the element that store the block information*/
+    /* Each array element stores one bit per logical block. */
     Idx = ((uint32_t)BlockNumber) >> 5U;
-    /*Check if the bit is 1*/
+    /* Check whether the bit assigned to this block is set. */
     if (0U != (Fee_aReservedAreaTouched[ Idx ] & Fee_PowerOf2Of5LSB((uint32_t)BlockNumber)))
     {
         RetVal = true;
@@ -780,13 +719,9 @@ static inline bool Fee_ReservedAreaTouchedByBlock(const uint16_t BlockNumber)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_TouchReservedAreaByBlock
- * Description   :  Stores the information about touching the Reserved Area 
- * for the block specified by BlockNumber.
- * 
- *END**************************************************************************/
+/*!
+ * @brief Stores the information about touching the Reserved Area for the block specified by BlockNumber.
+ */
 static inline void Fee_TouchReservedAreaByBlock(const uint16_t BlockNumber)
 {
     uint32_t Idx;
@@ -796,13 +731,9 @@ static inline void Fee_TouchReservedAreaByBlock(const uint16_t BlockNumber)
     Fee_aReservedAreaTouched[Idx] |= Fee_PowerOf2Of5LSB((uint32_t)BlockNumber);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_UntouchReservedAreaByClrGrp
- * Description   :  Removes the information about touching the Reserved Area
- *  for all blocks within a cluster group specified by ClrGrpIndex.
- * 
- *END**************************************************************************/
+/*!
+ * @brief Removes the information about touching the Reserved Area for all blocks within a cluster group specified by ClrGrpIndex.
+ */
 static inline void Fee_UntouchReservedAreaByClrGrp(const uint8_t ClrGrpIndex)
 {
     uint32_t BlockIt;
@@ -838,12 +769,9 @@ static inline void Fee_UntouchReservedAreaByClrGrp(const uint8_t ClrGrpIndex)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_SerializeBlockHdr
- * Description   :   Serialize Fee block parameters into a write buffer.
- * 
- *END**************************************************************************/
+/*!
+ * @brief Serialize Fee block parameters into a write buffer.
+ */
 static void Fee_SerializeBlockHdr(const Fee_BlockType *BlockHder,
                                   const Fls_AddressType TargetAddress,
                                   uint8_t *BlockHdrPtr
@@ -922,13 +850,9 @@ static void Fee_SerializeBlockHdr(const Fee_BlockType *BlockHder,
 #endif
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_BlankCheck
- * Description   :   Check whether specified data buffer contains only
- * the FEE_ERASED_VALUE value
- * 
- *END**************************************************************************/
+/*!
+ * @brief Check whether specified data buffer contains only the FEE_ERASED_VALUE value.
+ */
 static Std_ReturnType Fee_BlankCheck(const uint8_t *TargetPtr, const uint8_t *const TargetEndPtr)
 {
     Std_ReturnType RetVal = (Std_ReturnType)E_OK;
@@ -950,12 +874,9 @@ static Std_ReturnType Fee_BlankCheck(const uint8_t *TargetPtr, const uint8_t *co
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_DeserializeFlag
- * Description   :   Deserialize the valid or invalid flag from a read buffer. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Deserialize the valid or invalid flag from a read buffer.
+ */
 static Std_ReturnType Fee_DeserializeFlag(const uint8_t *const TargetPtr, const uint8_t FlagPattern, bool *pFlagValue)
 {
     Std_ReturnType RetVal;
@@ -983,12 +904,9 @@ static Std_ReturnType Fee_DeserializeFlag(const uint8_t *const TargetPtr, const 
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_DeserializeBlockHdr
- * Description   :   Deserialize Fee block header parameters from read buffer. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Deserialize Fee block header parameters from read buffer.
+ */
 static Fee_BlockStatusType Fee_DeserializeBlockHdr(Fee_BlockType *const BlockHder,
                                                    Fls_AddressType *const TargetAddress,
                                                    const uint8_t *BlockHdrPtr
@@ -1152,12 +1070,9 @@ static Fee_BlockStatusType Fee_DeserializeBlockHdr(Fee_BlockType *const BlockHde
 #endif
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_DeserializeClusterHdr
- * Description   :   Deserialize Fee cluster header parameters from read buffer. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Deserialize Fee cluster header parameters from read buffer.
+ */
 static Fee_ClusterStatusType Fee_DeserializeClusterHdr(Fee_ClusterHeaderType *ClrHdr,
                                                        const uint8_t *ClrHdrPtr
                                                       )
@@ -1269,12 +1184,9 @@ static Fee_ClusterStatusType Fee_DeserializeClusterHdr(Fee_ClusterHeaderType *Cl
 #endif
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_SerializeClusterHdr
- * Description   :   Serialize Fee cluster header parameters to write buffer. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Serialize Fee cluster header parameters to write buffer.
+ */
 static void Fee_SerializeClusterHdr(const Fee_ClusterHeaderType *ClrHdr,
                                     uint8_t *ClrHdrPtr
                                    )
@@ -1330,13 +1242,9 @@ static void Fee_SerializeClusterHdr(const Fee_ClusterHeaderType *ClrHdr,
 #endif
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_GetBlockIndex
- * Description   :  Searches ordered list of Fee blocks and returns index of 
- * block with matching BlockNumber. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Searches ordered list of Fee blocks and returns index of block with matching BlockNumber.
+ */
 static uint16_t Fee_GetBlockIndex(const uint16_t BlockNumber)
 {
     int32_t Low = 0;
@@ -1382,13 +1290,9 @@ static uint16_t Fee_GetBlockIndex(const uint16_t BlockNumber)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_GetBlockSize
- * Description   :  Returns the block size for a block specified by its index
- *  in the Fee_aBlockInfo array. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Returns the block size for a block specified by its index in the Fee_aBlockInfo array.
+ */
 static inline uint16_t Fee_GetBlockSize(const uint16_t BlockRuntimeInfoIndex)
 {
     uint16_t BlockSize;
@@ -1398,13 +1302,9 @@ static inline uint16_t Fee_GetBlockSize(const uint16_t BlockRuntimeInfoIndex)
     return BlockSize;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_GetBlockNumber
- * Description   :  Returns the block number for a block specified by its 
- * index in the Fee_aBlockInfo array. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Returns the block number for a block specified by its index in the Fee_aBlockInfo array.
+ */
 static inline uint16_t Fee_GetBlockNumber(const uint16_t BlockRuntimeInfoIndex)
 {
     uint16_t BlockNumber = 0U;
@@ -1413,13 +1313,9 @@ static inline uint16_t Fee_GetBlockNumber(const uint16_t BlockRuntimeInfoIndex)
     return BlockNumber;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_GetBlockImmediate
- * Description   :  Returns the immediate attribute for a block specified by 
- * its index in the Fee_aBlockInfo array. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Returns the immediate attribute for a block specified by its index in the Fee_aBlockInfo array.
+ */
 static inline bool Fee_GetBlockImmediate(const uint16_t BlockRuntimeInfoIndex)
 {
     bool Immediate;
@@ -1428,13 +1324,9 @@ static inline bool Fee_GetBlockImmediate(const uint16_t BlockRuntimeInfoIndex)
     return Immediate;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_AlignToVirtualPageSize
- * Description   :  Adjusts passed size so it's integer multiple of 
- * pre-configured + FEE_VIRTUAL_PAGE_SIZE. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Adjusts passed size so it's integer multiple of pre-configured + FEE_VIRTUAL_PAGE_SIZE.
+ */
 static uint16_t Fee_AlignToVirtualPageSize(uint16_t BlockSize)
 {
     uint16_t Retval = 0U;
@@ -1452,13 +1344,9 @@ static uint16_t Fee_AlignToVirtualPageSize(uint16_t BlockSize)
     return(Retval);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_CopyDataToPageBuffer
- * Description   :  Copy data from user to internal write buffer and fills
- * rest of the write buffer with FEE_ERASED_VALUE. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Copy data from user to internal write buffer and fills rest of the write buffer with FEE_ERASED_VALUE.
+ */
 static void Fee_CopyDataToPageBuffer(const uint8_t *SourcePtr, uint8_t *TargetPtr, const uint16_t Length)
 {
     const uint8_t *TargetEndPtr = &TargetPtr[Length];
@@ -1480,12 +1368,9 @@ static void Fee_CopyDataToPageBuffer(const uint8_t *SourcePtr, uint8_t *TargetPt
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_SerializeFlag
- * Description   :  Serialize validation or invalidation flag to write buffer. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Serialize validation or invalidation flag to write buffer.
+ */
 static void Fee_SerializeFlag(uint8_t *TargetPtr, const uint8_t FlagPattern)
 {
     const uint8_t *TargetEndPtr = &TargetPtr[FEE_VIRTUAL_PAGE_SIZE];
@@ -1502,13 +1387,9 @@ static void Fee_SerializeFlag(uint8_t *TargetPtr, const uint8_t FlagPattern)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalSwapClusterVld
- * Description   :  Validate current Fee cluster in current Fee cluster group 
- * by writing FEE_VALIDATED_VALUE into flash. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Validate current Fee cluster in current Fee cluster group by writing FEE_VALIDATED_VALUE into flash.
+ */
 static MemIf_JobResultType Fee_JobInternalSwapClusterVld(void)
 {
     MemIf_JobResultType RetVal;
@@ -1538,12 +1419,9 @@ static MemIf_JobResultType Fee_JobInternalSwapClusterVld(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalSwapBlock
- * Description   :  Copy next block from source to target cluster. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Copy next block from source to target cluster.
+ */
 static MemIf_JobResultType Fee_JobInternalSwapBlock(void)
 {
     MemIf_JobResultType RetVal;
@@ -1647,13 +1525,9 @@ static MemIf_JobResultType Fee_JobInternalSwapBlock(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalSwapClusterFmt
- * Description   :  Format current Fee cluster in current Fee cluster group by
- *  writing cluster header into flash. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Format current Fee cluster in current Fee cluster group by writing cluster header into flash.
+ */
 static MemIf_JobResultType Fee_JobInternalSwapClusterFmt(void)
 {
     MemIf_JobResultType RetVal;
@@ -1695,13 +1569,9 @@ static MemIf_JobResultType Fee_JobInternalSwapClusterFmt(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalSwapClusterErase
- * Description   :  Erase current Fee cluster in current Fee cluster group 
- * by erasing flash. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Erase current Fee cluster in current Fee cluster group by erasing flash.
+ */
 static MemIf_JobResultType Fee_JobInternalSwapClusterErase(void)
 {
     MemIf_JobResultType RetVal;
@@ -1724,14 +1594,9 @@ static MemIf_JobResultType Fee_JobInternalSwapClusterErase(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_GetNextClusterToSwap
- * Description   :  Calculate the index of the next cluster in current 
- * cluster group. In sector retirement mode, find the next good cluster
- *  with Length greater than zero.
- * 
- *END**************************************************************************/
+/*!
+ * @brief Calculate the index of the next cluster in current cluster group. In sector retirement mode, find the next good cluster with Length greater than zero.
+ */
 static inline uint8_t Fee_GetNextClusterToSwap(uint8_t CurrentCluster)
 {
     uint8_t NextCluster = CurrentCluster;
@@ -1748,13 +1613,9 @@ static inline uint8_t Fee_GetNextClusterToSwap(uint8_t CurrentCluster)
     return NextCluster;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalSwap
- * Description   :  Initialize the cluster swap internal operation on
- * current cluster group.
- * 
- *END**************************************************************************/
+/*!
+ * @brief Initialize the cluster swap internal operation on current cluster group.
+ */
 static MemIf_JobResultType Fee_JobInternalSwap(void)
 {
     MemIf_JobResultType RetVal = MEMIF_JOB_FAILED;
@@ -1779,12 +1640,9 @@ static MemIf_JobResultType Fee_JobInternalSwap(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalScanBlockHdrRead
- * Description   :  Read the Fee block header into internal buffer.
- * 
- *END**************************************************************************/
+/*!
+ * @brief Read the Fee block header into internal buffer.
+ */
 static MemIf_JobResultType Fee_JobInternalScanBlockHdrRead(void)
 {
     MemIf_JobResultType RetVal = MEMIF_JOB_OK;
@@ -1806,12 +1664,9 @@ static MemIf_JobResultType Fee_JobInternalScanBlockHdrRead(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalScanClusterErase
- * Description   :  Erase first Fee cluster in current cluster group.
- * 
- *END**************************************************************************/
+/*!
+ * @brief Erase first Fee cluster in current cluster group.
+ */
 static MemIf_JobResultType Fee_JobInternalScanClusterErase(void)
 {
     MemIf_JobResultType RetVal;
@@ -1834,13 +1689,9 @@ static MemIf_JobResultType Fee_JobInternalScanClusterErase(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalScanCluster
- * Description   :  Scan active cluster of current cluster group or erase 
- * and format first cluster if an active cluster can't be found
- * 
- *END**************************************************************************/
+/*!
+ * @brief Scan active cluster of current cluster group or erase and format first cluster if an active cluster can't be found.
+ */
 static MemIf_JobResultType Fee_JobInternalScanCluster(void)
 {
     MemIf_JobResultType RetVal = MEMIF_JOB_OK;
@@ -1887,13 +1738,9 @@ static MemIf_JobResultType Fee_JobInternalScanCluster(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalScanClusterFmt
- * Description   : Format first Fee cluster in current Fee cluster group by 
- * writing cluster header into flash .
- * 
- *END**************************************************************************/
+/*!
+ * @brief Format first Fee cluster in current Fee cluster group by writing cluster header into flash.
+ */
 static MemIf_JobResultType Fee_JobInternalScanClusterFmt(void)
 {
     MemIf_JobResultType RetVal;
@@ -1931,13 +1778,9 @@ static MemIf_JobResultType Fee_JobInternalScanClusterFmt(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalScanClusterFmtDone
- * Description   : Finalize format of first Fee cluster in current Fee 
- * cluster group.
- * 
- *END**************************************************************************/
+/*!
+ * @brief Finalize format of first Fee cluster in current Fee cluster group.
+ */
 static MemIf_JobResultType Fee_JobInternalScanClusterFmtDone(void)
 {
     MemIf_JobResultType RetVal;
@@ -1966,13 +1809,9 @@ static MemIf_JobResultType Fee_JobInternalScanClusterFmtDone(void)
     return(RetVal);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_IsBlockMatchedConfig
- * Description   : Check the block's size and type match the configuration,
- *  and its data pointer points to an acceptable area 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Check the block's size and type match the configuration, and its data pointer points to an acceptable area.
+ */
 static inline bool Fee_IsBlockMatchedConfig(uint16_t BlockIndex,
                                                uint16_t BlockRuntimeInfoIndex,
                                                const Fee_BlockType *BlockHder,
@@ -2016,12 +1855,9 @@ static inline bool Fee_IsBlockMatchedConfig(uint16_t BlockIndex,
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_UpdateBlockRuntimeInfo
- * Description   : Update block run-time information. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Update block run-time information.
+ */
 static inline void Fee_UpdateBlockRuntimeInfo(uint16_t BlockRuntimeInfoIndex,
                                               Fee_BlockStatusType BlockStatus,
                                               Fls_AddressType DataAddr,
@@ -2085,12 +1921,9 @@ static inline void Fee_UpdateBlockRuntimeInfo(uint16_t BlockRuntimeInfoIndex,
 
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalScanBlkHdrParse
- * Description   : Parse Fee block header. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Parse Fee block header.
+ */
 static MemIf_JobResultType Fee_JobInternalScanBlkHdrParse(const bool BufferValid)
 {
     MemIf_JobResultType RetVal = MEMIF_JOB_OK;
@@ -2170,12 +2003,9 @@ static MemIf_JobResultType Fee_JobInternalScanBlkHdrParse(const bool BufferValid
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalScanClusterHdrRead
- * Description   : Read Fee cluster header. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Read Fee cluster header.
+ */
 static MemIf_JobResultType Fee_JobInternalScanClusterHdrRead(void)
 {
     MemIf_JobResultType RetVal;
@@ -2203,12 +2033,9 @@ static MemIf_JobResultType Fee_JobInternalScanClusterHdrRead(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalScan
- * Description   : Initialize the cluster scan job. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Initialize the cluster scan job.
+ */
 static MemIf_JobResultType Fee_JobInternalScan(void)
 {
     MemIf_JobResultType RetVal = MEMIF_JOB_OK;
@@ -2223,12 +2050,9 @@ static MemIf_JobResultType Fee_JobInternalScan(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalScanClusterHdrDone
- * Description   : Check if all cluster have been scanned or not. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Check if all cluster have been scanned or not.
+ */
 static inline bool Fee_JobInternalScanClusterHdrDone(void)
 {
     bool RetVal;
@@ -2259,12 +2083,9 @@ static inline bool Fee_JobInternalScanClusterHdrDone(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobIntalScanCluHdrParse
- * Description   : Parse Fee cluster header. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Parse Fee cluster header.
+ */
 static MemIf_JobResultType Fee_JobIntalScanCluHdrParse(const bool BufferValid)
 {
     MemIf_JobResultType RetVal;
@@ -2318,12 +2139,9 @@ static MemIf_JobResultType Fee_JobIntalScanCluHdrParse(const bool BufferValid)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobReadBlock
- * Description   : Read Fee block. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Read Fee block.
+ */
 static MemIf_JobResultType Fee_JobReadBlock(void)
 {
     MemIf_JobResultType RetVal = MEMIF_JOB_FAILED;
@@ -2365,12 +2183,9 @@ static MemIf_JobResultType Fee_JobReadBlock(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalSwapBlockVld
- * Description   : Validate Fee block. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Validate Fee block.
+ */
 static MemIf_JobResultType Fee_JobInternalSwapBlockVld(void)
 {
     MemIf_JobResultType RetVal = MEMIF_JOB_OK;
@@ -2396,12 +2211,9 @@ static MemIf_JobResultType Fee_JobInternalSwapBlockVld(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalSwapDataRead
- * Description   : Read data from source cluster to internal Fee buffer. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Read data from source cluster to internal Fee buffer.
+ */
 static MemIf_JobResultType Fee_JobInternalSwapDataRead(const bool BufferValid)
 {
     MemIf_JobResultType RetVal;
@@ -2468,12 +2280,9 @@ static MemIf_JobResultType Fee_JobInternalSwapDataRead(const bool BufferValid)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalSwapDataWrite
- * Description   : Write data from internal Fee buffer to target cluster. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Write data from internal Fee buffer to target cluster.
+ */
 static MemIf_JobResultType Fee_JobInternalSwapDataWrite(const bool BufferValid)
 {
     MemIf_JobResultType RetVal = MEMIF_JOB_OK;
@@ -2503,12 +2312,9 @@ static MemIf_JobResultType Fee_JobInternalSwapDataWrite(const bool BufferValid)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInternalSwapClusterVldDone
- * Description   : Finalize cluster validation. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Finalize cluster validation.
+ */
 static MemIf_JobResultType Fee_JobInternalSwapClusterVldDone(void)
 {
     MemIf_JobResultType RetVal;
@@ -2616,12 +2422,9 @@ static MemIf_JobResultType Fee_JobInternalSwapClusterVldDone(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobWriteHdr
- * Description   : Write Fee block header to flash. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Write Fee block header to flash.
+ */
 static MemIf_JobResultType Fee_JobWriteHdr(void)
 {
     MemIf_JobResultType RetVal;
@@ -2673,12 +2476,9 @@ static MemIf_JobResultType Fee_JobWriteHdr(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobWriteBlockData
- * Description   : Write Fee block data to flash. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Write Fee block data to flash.
+ */
 static MemIf_JobResultType Fee_JobWriteBlockData(void)
 {
     Fls_AddressType DataAddr;
@@ -2758,12 +2558,9 @@ static MemIf_JobResultType Fee_JobWriteBlockData(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobWriteBlock
- * Description   : Write Fee block to flash. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Write Fee block to flash.
+ */
 static MemIf_JobResultType Fee_JobWriteBlock(void)
 {
     MemIf_JobResultType RetVal;
@@ -2784,12 +2581,9 @@ static MemIf_JobResultType Fee_JobWriteBlock(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobWriteBlockUnalignedData
- * Description   : Write unaligned rest of Fee block data to flash. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Write unaligned rest of Fee block data to flash.
+ */
 static MemIf_JobResultType Fee_JobWriteBlockUnalignedData(void)
 {
     MemIf_JobResultType RetVal;
@@ -2832,12 +2626,9 @@ static MemIf_JobResultType Fee_JobWriteBlockUnalignedData(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobWriteBlockValidate
- * Description   : Validate Fee block by writing validation flag to flash. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Validate Fee block by writing validation flag to flash.
+ */
 static MemIf_JobResultType Fee_JobWriteBlockValidate(void)
 {
     MemIf_JobResultType RetVal;
@@ -2870,12 +2661,9 @@ static MemIf_JobResultType Fee_JobWriteBlockValidate(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobWriteBlockDone
- * Description   : Finalize validation of Fee block. 
- * 
- *END**************************************************************************/
+/*!
+ * @brief Finalize validation of Fee block.
+ */
 static MemIf_JobResultType Fee_JobWriteBlockDone(void)
 {
 
@@ -2902,13 +2690,9 @@ static MemIf_JobResultType Fee_JobWriteBlockDone(void)
     return(MEMIF_JOB_OK);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInvalidateBlock
- * Description   : Invalidate Fee block by writing the invalidation flag 
- * to flash.
- * 
- *END**************************************************************************/
+/*!
+ * @brief Invalidate Fee block by writing the invalidation flag to flash.
+ */
 static MemIf_JobResultType Fee_JobInvalidateBlock(void)
 {
     MemIf_JobResultType RetVal = MEMIF_JOB_OK;
@@ -2959,12 +2743,9 @@ static MemIf_JobResultType Fee_JobInvalidateBlock(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobInvalidateBlockDone
- * Description   : Finalize invalidation of Fee block.
- * 
- *END**************************************************************************/
+/*!
+ * @brief Finalize invalidation of Fee block.
+ */
 static MemIf_JobResultType Fee_JobInvalidateBlockDone(void)
 {
     /* Mark the Fee block as in valid */
@@ -2977,12 +2758,9 @@ static MemIf_JobResultType Fee_JobInvalidateBlockDone(void)
     return(MEMIF_JOB_OK);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobEraseImmediateBlock
- * Description   : Erase (pre-allocate) immediate Fee block.
- * 
- *END**************************************************************************/
+/*!
+ * @brief Erase (pre-allocate) immediate Fee block.
+ */
 static MemIf_JobResultType Fee_JobEraseImmediateBlock(void)
 {
     MemIf_JobResultType RetVal = MEMIF_JOB_OK;
@@ -3004,24 +2782,18 @@ static MemIf_JobResultType Fee_JobEraseImmediateBlock(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobSchedule
- * Description   : Schedule subsequent jobs
- * 
- *END**************************************************************************/
+/*!
+ * @brief Schedule subsequent jobs.
+ */
 static MemIf_JobResultType Fee_JobSchedule(void)
 {
     /* Jump to the current Fee job through function pointer */
     return Fee_JobScheduleLookupTable[Fee_eJob]();
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobScheduleAfterSwapClusterVldDone
- * Description   : Schedule subsequent jobs
- * 
- *END**************************************************************************/
+/*!
+ * @brief Schedule subsequent jobs.
+ */
 static MemIf_JobResultType Fee_JobScheduleAfterSwapClusterVldDone(void)
 {
     MemIf_JobResultType eRetVal = MEMIF_JOB_FAILED;
@@ -3044,13 +2816,9 @@ static MemIf_JobResultType Fee_JobScheduleAfterSwapClusterVldDone(void)
     return(eRetVal);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_ReservedAreaWritable
- * Description   :   Checks whether the block specified by Fee_JobBlockIndex
- *  is writable into the reserved area.
- * 
- *END**************************************************************************/
+/*!
+ * @brief Checks whether the block specified by Fee_JobBlockIndex is writable into the reserved area.
+ */
 static bool Fee_ReservedAreaWritable(void)
 {
     bool RetVal;
@@ -3118,12 +2886,9 @@ static bool Fee_ReservedAreaWritable(void)
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobErrorSchedule
- * Description   :   Schedule the error jobs of Fee 
- *
- *END**************************************************************************/
+/*!
+ * @brief Schedule the error jobs of Fee.
+ */
 static void Fee_JobErrorSchedule(void)
 {
     uint8_t ClrGrpIndex;
@@ -3187,13 +2952,9 @@ static void Fee_JobErrorSchedule(void)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_ReadFromFls
- * Description   :   Read data from Fls, translate the emulation to logical
- *  address in sector retirement mode 
- *
- *END**************************************************************************/
+/*!
+ * @brief Read data from Fls, translate the emulation to logical address in sector retirement mode.
+ */
 static Std_ReturnType Fee_ReadFromFls(Fls_AddressType SourceAddress,
                                       uint8_t *TargetAddressPtr,
                                       Fls_LengthType Length
@@ -3202,13 +2963,9 @@ static Std_ReturnType Fee_ReadFromFls(Fls_AddressType SourceAddress,
     return Fls_Read(SourceAddress, TargetAddressPtr, Length);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_WriteToFls
- * Description   :   Write data to Fls, translate the emulation to logical 
- * address in sector retirement mode 
- *
- *END**************************************************************************/
+/*!
+ * @brief Write data to Fls, translate the emulation to logical address in sector retirement mode.
+ */
 static Std_ReturnType Fee_WriteToFls(Fls_AddressType TargetAddress,
                                      const uint8_t *SourceAddressPtr,
                                      Fls_LengthType Length
@@ -3217,13 +2974,9 @@ static Std_ReturnType Fee_WriteToFls(Fls_AddressType TargetAddress,
     return Fls_Write(TargetAddress, SourceAddressPtr, Length);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_EraseCluster
- * Description   :   Erase the whole cluster, translate the emulation to 
- * logical address in sector retirement mode and erase a sector at a time. 
- *
- *END**************************************************************************/
+/*!
+ * @brief Erase the whole cluster, translate the emulation to logical address in sector retirement mode and erase a sector at a time.
+ */
 static Std_ReturnType Fee_EraseCluster(uint8_t ClrGrpIt,
                                        uint8_t ClrIt
                                       )
@@ -3239,15 +2992,14 @@ static Std_ReturnType Fee_EraseCluster(uint8_t ClrGrpIt,
     return Fls_Erase(clusterAddress, ClusterLength);
 }
 
-/**
-* @brief        Get the Length of the cluster by the group index and cluster index
-*
-*/
+/*!
+ * @brief Return the configured length of the selected cluster.
+ */
 static inline Fls_LengthType Fee_GetClusterLength(uint8_t ClrGrpIt,
                                                   uint8_t ClrIt
                                                  )
 {
-    return Fee_ConfigPtr->clusterConfigPtr[ClrGrpIt].ClrPtr[ClrIt].Length;          /* Get from constant data configuration */
+    return Fee_ConfigPtr->clusterConfigPtr[ClrGrpIt].ClrPtr[ClrIt].Length; /* Read the value from the generated cluster table. */
 
 }
 
@@ -3256,68 +3008,59 @@ static inline Fls_LengthType Fee_GetClusterLength(uint8_t ClrGrpIt,
 /*==================================================================================================
  *                                       GLOBAL FUNCTIONS
 ==================================================================================================*/
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_EraseImmediateBlock
- * Description   :  Service to erase a logical block.
- *                  This function is not available in FEE_LIGHT_MODE mode.
- *
- *END**************************************************************************/
+/*!
+ * @brief Start the erase-immediate service for a logical block.
+ */
 #if !defined(FEE_LIGHT_MODE) || (FEE_LIGHT_MODE == 0U)
 Std_ReturnType Fee_EraseImmediateBlock (uint16_t BlockNumber)
 {
     Std_ReturnType RetVal;
     uint16_t BlockIndex = Fee_GetBlockIndex(BlockNumber);
+    uint32_t criticalState = FEE_ENTER_CRITICAL_SECTION();
+
    if((0xFFFFU == BlockIndex) || (MEMIF_IDLE != Fee_eModuleStatus))
     {
         RetVal = (Std_ReturnType)E_NOT_OK;
     }
     else
     {
-        /* Configure the erase immediate block job */
+        /* Stage the erase-immediate job context. */
         Fee_uJobBlockIndex = BlockIndex;
         Fee_eJob = FEE_JOB_ERASE_IMMEDIATE;
         Fee_eModuleStatus = MEMIF_BUSY;
 
-        /* Execute the erase immediate block job */
+        /* Mark the job as pending so the scheduler can advance it. */
         Fee_eJobResult = MEMIF_JOB_PENDING;
 
         RetVal = (Std_ReturnType)E_OK;
     }
+
+    FEE_EXIT_CRITICAL_SECTION(criticalState);
+
     return RetVal;
 }
 #endif /* !FEE_LIGHT_MODE */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_GetJobResult
- * Description   :  Service to query the result of the last accepted job
- *  issued by the upper layer software.
- *
- *END**************************************************************************/
+/*!
+ * @brief Return the result of the last accepted FEE job.
+ */
 MemIf_JobResultType Fee_GetJobResult (void)
 {
     MemIf_JobResultType RetVal = Fee_eJobResult;
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_GetStatus
- * Description   :   Service to return the status.
- *
- *END**************************************************************************/
+/*!
+ * @brief Return the current MEMIF state reported by the FEE driver.
+ */
 MemIf_StatusType Fee_GetStatus (void)
 {
     return(Fee_eModuleStatus);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_Init
- * Description   :  Service to initialize the FEE module.
- *
- *END**************************************************************************/
+/*!
+ * @brief Initialize the FEE runtime and schedule the startup scan.
+ */
 void Fee_Init (const Fee_ModuleUserConfig_t * ConfigPtr)
 {
     uint32_t InvalIndex;
@@ -3337,41 +3080,38 @@ void Fee_Init (const Fee_ModuleUserConfig_t * ConfigPtr)
 	{
 		
 		Fee_ConfigPtr = ConfigPtr;
-		/*Initialize fee flash*/
+		/* Initialize the flash backend used by FEE. */
 		Fls_Init(Fee_ConfigPtr->flashConfigPtr);
 		
-        /* Initialize all block info records */
+        /* Clear all logical block runtime records. */
         for (InvalIndex = 0U; InvalIndex < Fee_ConfigPtr->blockCnt; InvalIndex++)
         {
 
-            /* for blocks which were never written Fee returns INCONSISTENT status */
+            /* Start from the never-written state until the scan discovers valid data. */
             Fee_aBlockInfo[InvalIndex].BlockStatus = FEE_BLOCK_NEVER_WRITTEN;
             Fee_aBlockInfo[InvalIndex].DataAddr = 0U;
             Fee_aBlockInfo[InvalIndex].InvalidAddr = 0U;
         }
-        /* Invalidate all cluster groups */
+        /* Clear the active-cluster identifiers for every cluster group. */
         for (InvalIndex = 0U; InvalIndex < Fee_ConfigPtr->clusterCnt; InvalIndex++)
         {
             Fee_aClrGrpInfo[InvalIndex].ActClrID = 0U;
         }
-        /* Schedule init job */
+        /* Queue the initialization scan as the first background job. */
         Fee_eJob = FEE_JOB_INT_SCAN;
         Fee_eJobResult = MEMIF_JOB_PENDING;
 	}
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_InvalidateBlock
- * Description   :  Service to invalidate a logical block.
- *                  This function is not available in FEE_LIGHT_MODE mode.
- *
- *END**************************************************************************/
+/*!
+ * @brief Start the invalidate-block service for a logical block.
+ */
 #if !defined(FEE_LIGHT_MODE) || (FEE_LIGHT_MODE == 0U)
 Std_ReturnType Fee_InvalidateBlock (uint16_t BlockNumber)
 {
     Std_ReturnType RetVal = (Std_ReturnType)E_OK;
     uint16_t BlockIndex = Fee_GetBlockIndex(BlockNumber);
+    uint32_t criticalState = FEE_ENTER_CRITICAL_SECTION();
 
    if((0xFFFFU == BlockIndex) || (MEMIF_IDLE != Fee_eModuleStatus))
     {
@@ -3379,30 +3119,28 @@ Std_ReturnType Fee_InvalidateBlock (uint16_t BlockNumber)
     }
     else
     {
-        /* Configure the invalidate block job */
+        /* Stage the invalidate-block job context. */
         Fee_uJobBlockIndex = BlockIndex;
 
         Fee_eJob = FEE_JOB_INVAL_BLOCK;
 
         Fee_eModuleStatus = MEMIF_BUSY;
 
-        /* Execute the invalidate block job */
+        /* Mark the job as pending so the scheduler can advance it. */
         Fee_eJobResult = MEMIF_JOB_PENDING;
 
         RetVal = (Std_ReturnType)E_OK;
     }
 
+    FEE_EXIT_CRITICAL_SECTION(criticalState);
+
     return RetVal;
 }
 #endif /* !FEE_LIGHT_MODE */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobEndNotification
- * Description   :   Service to report to this module the successful end 
- * of an asynchronous operation.
- *
- *END**************************************************************************/
+/*!
+ * @brief Handle a successful completion callback from the flash backend.
+ */
 void Fee_JobEndNotification (void)
 {
     if ((MEMIF_UNINIT == Fee_eModuleStatus) && (MEMIF_JOB_OK == Fee_eJobResult) && (FEE_JOB_DONE == Fee_eJob))
@@ -3411,11 +3149,11 @@ void Fee_JobEndNotification (void)
     {
         if (FEE_JOB_DONE == Fee_eJob)
         {
-            /* Last schedule Fls job finished */
+            /* The final flash step of the current job has completed. */
             Fee_eJobResult = Fls_GetJobResult();
             Fee_eModuleStatus = MEMIF_IDLE;
 
-            /* Call job end notification function */
+            /* No additional action is required in this callback path. */
         }
         else
         {
@@ -3424,29 +3162,25 @@ void Fee_JobEndNotification (void)
             {
                 Fee_eModuleStatus = MEMIF_IDLE;
 
-                /* Call job end notification function */
+                /* The state machine has reached its terminal success state. */
              }
              else if (MEMIF_JOB_PENDING == Fee_eJobResult)
              {
-                /* Nothing to do (ongoing Fls job) */
+                /* Another flash step is still in progress. */
              }
              else
              {
                  Fee_eModuleStatus = MEMIF_IDLE;
 
-                 /* Call job error notification function */
+                 /* The state machine reported an error condition. */
               }
           }
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_JobErrorNotification
- * Description   :   Service to report to this module the failure of an 
- * asynchronous operation.
- *
- *END**************************************************************************/
+/*!
+ * @brief Handle a failed completion callback from the flash backend.
+ */
 void Fee_JobErrorNotification (void)
 {
     if ((MEMIF_UNINIT == Fee_eModuleStatus) && (MEMIF_JOB_OK == Fee_eJobResult) && (FEE_JOB_DONE == Fee_eJob))
@@ -3455,24 +3189,19 @@ void Fee_JobErrorNotification (void)
     {
         if (MEMIF_JOB_CANCELED == Fee_eJobResult)
         {
-            /* Fls job has been canceled. Do nothing in this callback.
-            The NvM_JobErrorNotification() callback will be called from the Fee_Cancel()function which called the Fls_Cancel() function */
+            /* Ignore the backend callback for explicit cancel requests. The cancel path already owns follow-up handling. */
         }
         else
         {
-              /* Schedule the error job */
+              /* Hand control to the internal error scheduler. */
               Fee_JobErrorSchedule();
         }
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_MainFunction
- * Description   :   Service to handle the requested read / write / erase 
- * jobs and the internal management operations.
- *
- *END**************************************************************************/
+/*!
+ * @brief Advance the active public or internal FEE job.
+ */
 void Fee_MainFunction (void)
 {
 	Fls_MainFunction();
@@ -3480,7 +3209,7 @@ void Fee_MainFunction (void)
     {
         switch (Fee_eJob)
         {
-            /* for all the following jobs subsequent jobs will be called in Fee job schedule function based on Job */
+            /* These entry jobs ask the scheduler for the next state transition. */
             case FEE_JOB_INT_SCAN:
             case FEE_JOB_READ:
             case FEE_JOB_WRITE:
@@ -3488,7 +3217,7 @@ void Fee_MainFunction (void)
             case FEE_JOB_ERASE_IMMEDIATE:
                 Fee_eJobResult = Fee_JobSchedule();
                 break;
-            /* for all the following jobs job end or job error notification will be called based on the job result */
+            /* These jobs wait for notification callbacks or terminal status. */
             case FEE_JOB_WRITE_DATA:
             case FEE_JOB_WRITE_UNALIGNED_DATA:
             case FEE_JOB_WRITE_VALIDATE:
@@ -3506,37 +3235,35 @@ void Fee_MainFunction (void)
             case FEE_JOB_INT_SWAP_CLR_VLD_DONE:
             case FEE_JOB_DONE:
             default:
-                /* Internal or subsequent job */
+                /* Internal state already owns the next transition. */
                 break;
         }
 
         if (MEMIF_JOB_PENDING == Fee_eJobResult)
         {
-            /* Nothing to do */
+            /* The active flash step is still running. */
         }
         else if (MEMIF_JOB_OK == Fee_eJobResult)
         {
             Fee_eModuleStatus = MEMIF_IDLE;
-            /* Call job end notification function */
+            /* The job completed successfully. */
         }
         else
         {
             Fee_eModuleStatus = MEMIF_IDLE;
-            /* Call job error notification function */
+            /* The job completed with an error result. */
         }
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_Read
- * Description   :   Service to initiate a read job. 
- *
- *END**************************************************************************/
+/*!
+ * @brief Start an asynchronous read for the requested logical block.
+ */
 Std_ReturnType Fee_Read (uint16_t BlockNumber, uint16_t BlockOffset, uint8_t * DataBufferPtr, uint16_t Length)
 {
     Std_ReturnType RetVal = (Std_ReturnType)E_NOT_OK;
     uint16_t BlockIndex = Fee_GetBlockIndex(BlockNumber);
+    uint32_t criticalState = FEE_ENTER_CRITICAL_SECTION();
 
     if((0xFFFFU == BlockIndex) || (MEMIF_IDLE != Fee_eModuleStatus))
     {
@@ -3544,7 +3271,7 @@ Std_ReturnType Fee_Read (uint16_t BlockNumber, uint16_t BlockOffset, uint8_t * D
     }
     else
     {
-        /* Configure the read job */
+        /* Stage the read job context. */
         Fee_uJobBlockIndex = BlockIndex;
 
         Fee_uJobBlockOffset = BlockOffset;
@@ -3557,24 +3284,25 @@ Std_ReturnType Fee_Read (uint16_t BlockNumber, uint16_t BlockOffset, uint8_t * D
 
         Fee_eModuleStatus = MEMIF_BUSY;
 
-        /* Execute the read job */
+        /* Mark the job as pending so the scheduler can advance it. */
         Fee_eJobResult = MEMIF_JOB_PENDING;
 
         RetVal = (Std_ReturnType)E_OK;
     }
+
+    FEE_EXIT_CRITICAL_SECTION(criticalState);
+
     return RetVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : Fee_Write
- * Description   :   Service to initiate a write job. 
- *
- *END**************************************************************************/
+/*!
+ * @brief Start an asynchronous write for the requested logical block.
+ */
 Std_ReturnType Fee_Write (uint16_t BlockNumber, const uint8_t * DataBufferPtr)
 {
     Std_ReturnType RetVal = (Std_ReturnType)E_OK;
     uint16_t BlockIndex = Fee_GetBlockIndex(BlockNumber);
+    uint32_t criticalState = FEE_ENTER_CRITICAL_SECTION();
 
    if((0xFFFFU == BlockIndex) || (MEMIF_IDLE != Fee_eModuleStatus))
     {
@@ -3582,7 +3310,7 @@ Std_ReturnType Fee_Write (uint16_t BlockNumber, const uint8_t * DataBufferPtr)
     }
     else
     {
-        /* Configure the write job */
+        /* Stage the write job context. */
         Fee_uJobBlockIndex = BlockIndex;
 
         Fee_pJobWriteDataDestPtr = DataBufferPtr;
@@ -3591,35 +3319,53 @@ Std_ReturnType Fee_Write (uint16_t BlockNumber, const uint8_t * DataBufferPtr)
 
         Fee_eModuleStatus = MEMIF_BUSY;
 
-        /* Execute the write job */
+        /* Mark the job as pending so the scheduler can advance it. */
         Fee_eJobResult = MEMIF_JOB_PENDING;
     }
+
+    FEE_EXIT_CRITICAL_SECTION(criticalState);
+
     return RetVal;
 }
 
+/*!
+ * @brief Cancel the currently active FEE job when possible.
+ */
 Std_ReturnType Fee_Cancel(void)
 {
     Std_ReturnType RetVal = (Std_ReturnType)E_OK;
+    bool callErrorNotification = false;
+    uint32_t criticalState = FEE_ENTER_CRITICAL_SECTION();
+
     if (MEMIF_UNINIT == Fee_eModuleStatus)
     {
         RetVal = (Std_ReturnType)E_NOT_OK;
     }
     else
     {
-        /* Cancel ongoing Fls job if any */
+        /* Cancel the active flash job if the backend is busy. */
         if (MEMIF_BUSY == Fee_eModuleStatus)
         {
             Fee_eJobResult = MEMIF_JOB_CANCELED;
             Fee_eJob = FEE_JOB_DONE;
             Fls_Cancel();
             Fee_eModuleStatus = MEMIF_IDLE;
-            /* No notifications from internal jobs */
+            /* Internal jobs do not raise additional notifications on cancel. */
         }
         else
         {
-            Fee_JobErrorNotification();
+            /* Reuse the standard error callback path when no job is active. */
+            callErrorNotification = true;
         }
     }
+
+    FEE_EXIT_CRITICAL_SECTION(criticalState);
+
+    if (callErrorNotification)
+    {
+        Fee_JobErrorNotification();
+    }
+
     return RetVal;
 }
 

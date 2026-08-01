@@ -8,6 +8,24 @@
 /*!
  * @file emu_driver.h
  * @version 1.4.1
+ *
+ * @brief EMU Driver - Public API for ECC error injection and reporting.
+ *
+ * This header defines the application-facing interface for the ECC Management
+ * Unit (EMU). The driver configures per-channel error injection targets,
+ * controls optional interrupt generation, and exposes status APIs for
+ * retrieving report counters, report addresses, and syndrome-derived check
+ * bit information.
+ *
+ * The APIs are organized into the following categories:
+ *   - Initialization & De-initialization
+ *   - Error Injection Control
+ *   - Error Report & Counter Access
+ *   - Interrupt Status & Control
+ *
+ * @note Enable the EMU peripheral clock before calling EMU_DRV_Init().
+ * @warning EMU validation is intended for supervisor-mode 32-bit SRAM
+ *          accesses.
  */
 
 #ifndef EMU_DRIVER_H
@@ -20,295 +38,389 @@
 #include "emu_hw_access.h"
 
 /*!
- * @ingroup emu
- * @addtogroup emu_driver
+ * @addtogroup emu
+ * @brief ECC Management Unit peripheral driver - public API.
+ * @details Provides instance-based APIs for configuring per-channel SRAM ECC
+ *          error injection, reading error reports, and managing interrupt
+ *          status for single-bit correction and double-bit detection flows.
  * @{
  */
 
-
 /*******************************************************************************
-* Definitions
-******************************************************************************/
+ * Definitions
+ ******************************************************************************/
+
 /*!
- * @brief emu bit-mapped mask
+ * @brief Data-bit selectors for injected ECC test errors.
  *
- * This enumeration type indicates which data bit is injected when the injected error occurs on the data .
- * Implements : e_emu_databit_Class
+ * Selects which SRAM data bit is inverted when the injection type targets the
+ * data path. Devices without `FEATURE_EMU_SUPPORT_64BIT_INJECTION` support
+ * `EMU_DATABIT_0` through `EMU_DATABIT_31`. Supported 64-bit devices extend
+ * the range to `EMU_DATABIT_63`.
+ *
+ * @note `EMU_DATABIT_MAX` is a sentinel upper bound and is not a selectable
+ *       injection bit.
  */
 typedef enum
 {
-    EMU_DATABIT_0,          /*!< Error code is injected at bit 0 of the data.*/
-    EMU_DATABIT_1,          /*!< Error code is injected at bit 1 of the data.*/
-    EMU_DATABIT_2,          /*!< Error code is injected at bit 2 of the data.*/
-    EMU_DATABIT_3,          /*!< Error code is injected at bit 3 of the data.*/
-    EMU_DATABIT_4,          /*!< Error code is injected at bit 4 of the data.*/
-    EMU_DATABIT_5,          /*!< Error code is injected at bit 5 of the data.*/
-    EMU_DATABIT_6,          /*!< Error code is injected at bit 6 of the data.*/
-    EMU_DATABIT_7,          /*!< Error code is injected at bit 7 of the data.*/
-    EMU_DATABIT_8,          /*!< Error code is injected at bit 8 of the data.*/
-    EMU_DATABIT_9,          /*!< Error code is injected at bit 9 of the data.*/
-    EMU_DATABIT_10,         /*!< Error code is injected at bit 10 of the data.*/
-    EMU_DATABIT_11,         /*!< Error code is injected at bit 11 of the data.*/
-    EMU_DATABIT_12,         /*!< Error code is injected at bit 12 of the data.*/
-    EMU_DATABIT_13,         /*!< Error code is injected at bit 13 of the data.*/
-    EMU_DATABIT_14,         /*!< Error code is injected at bit 14 of the data.*/
-    EMU_DATABIT_15,         /*!< Error code is injected at bit 15 of the data.*/
-    EMU_DATABIT_16,         /*!< Error code is injected at bit 16 of the data.*/
-    EMU_DATABIT_17,         /*!< Error code is injected at bit 17 of the data.*/
-    EMU_DATABIT_18,         /*!< Error code is injected at bit 18 of the data.*/
-    EMU_DATABIT_19,         /*!< Error code is injected at bit 19 of the data.*/
-    EMU_DATABIT_20,         /*!< Error code is injected at bit 20 of the data.*/
-    EMU_DATABIT_21,         /*!< Error code is injected at bit 21 of the data.*/
-    EMU_DATABIT_22,         /*!< Error code is injected at bit 22 of the data.*/
-    EMU_DATABIT_23,         /*!< Error code is injected at bit 23 of the data.*/
-    EMU_DATABIT_24,         /*!< Error code is injected at bit 24 of the data.*/
-    EMU_DATABIT_25,         /*!< Error code is injected at bit 25 of the data.*/
-    EMU_DATABIT_26,         /*!< Error code is injected at bit 26 of the data.*/
-    EMU_DATABIT_27,         /*!< Error code is injected at bit 27 of the data.*/
-    EMU_DATABIT_28,         /*!< Error code is injected at bit 28 of the data.*/
-    EMU_DATABIT_29,         /*!< Error code is injected at bit 29 of the data.*/
-    EMU_DATABIT_30,         /*!< Error code is injected at bit 30 of the data.*/
-    EMU_DATABIT_31,         /*!< Error code is injected at bit 31 of the data.*/
-    #if defined(FEATURE_EMU_SUPPORT_64BIT_INJECTION) && (FEATURE_EMU_SUPPORT_64BIT_INJECTION == 1U)
-    EMU_DATABIT_32,         /*!< Error code is injected at bit 32 of the data.*/
-    EMU_DATABIT_33,         /*!< Error code is injected at bit 33 of the data.*/
-    EMU_DATABIT_34,         /*!< Error code is injected at bit 34 of the data.*/
-    EMU_DATABIT_35,         /*!< Error code is injected at bit 35 of the data.*/
-    EMU_DATABIT_36,         /*!< Error code is injected at bit 36 of the data.*/
-    EMU_DATABIT_37,         /*!< Error code is injected at bit 37 of the data.*/
-    EMU_DATABIT_38,         /*!< Error code is injected at bit 38 of the data.*/
-    EMU_DATABIT_39,         /*!< Error code is injected at bit 39 of the data.*/
-    EMU_DATABIT_40,         /*!< Error code is injected at bit 40 of the data.*/
-    EMU_DATABIT_41,         /*!< Error code is injected at bit 41 of the data.*/
-    EMU_DATABIT_42,         /*!< Error code is injected at bit 42 of the data.*/
-    EMU_DATABIT_43,         /*!< Error code is injected at bit 43 of the data.*/
-    EMU_DATABIT_44,         /*!< Error code is injected at bit 44 of the data.*/
-    EMU_DATABIT_45,         /*!< Error code is injected at bit 45 of the data.*/
-    EMU_DATABIT_46,         /*!< Error code is injected at bit 46 of the data.*/
-    EMU_DATABIT_47,         /*!< Error code is injected at bit 47 of the data.*/
-    EMU_DATABIT_48,         /*!< Error code is injected at bit 48 of the data.*/
-    EMU_DATABIT_49,         /*!< Error code is injected at bit 49 of the data.*/
-    EMU_DATABIT_50,         /*!< Error code is injected at bit 50 of the data.*/
-    EMU_DATABIT_51,         /*!< Error code is injected at bit 51 of the data.*/
-    EMU_DATABIT_52,         /*!< Error code is injected at bit 52 of the data.*/
-    EMU_DATABIT_53,         /*!< Error code is injected at bit 53 of the data.*/
-    EMU_DATABIT_54,         /*!< Error code is injected at bit 54 of the data.*/
-    EMU_DATABIT_55,         /*!< Error code is injected at bit 55 of the data.*/
-    EMU_DATABIT_56,         /*!< Error code is injected at bit 56 of the data.*/
-    EMU_DATABIT_57,         /*!< Error code is injected at bit 57 of the data.*/
-    EMU_DATABIT_58,         /*!< Error code is injected at bit 58 of the data.*/
-    EMU_DATABIT_59,         /*!< Error code is injected at bit 59 of the data.*/
-    EMU_DATABIT_60,         /*!< Error code is injected at bit 60 of the data.*/
-    EMU_DATABIT_61,         /*!< Error code is injected at bit 61 of the data.*/
-    EMU_DATABIT_62,         /*!< Error code is injected at bit 62 of the data.*/
-    EMU_DATABIT_63,         /*!< Error code is injected at bit 63 of the data.*/
-    EMU_DATABIT_MAX = 64,   /*!< The data bit of the injected error cannot reach the 64th bit at most.*/
-    #else
-    EMU_DATABIT_MAX = 32,   /*!< The data bit of the injected error cannot reach the 32nd bit at most.*/
-    #endif
+    EMU_DATABIT_0,          /*!< Inject the ECC test error into data bit 0. */
+    EMU_DATABIT_1,          /*!< Inject the ECC test error into data bit 1. */
+    EMU_DATABIT_2,          /*!< Inject the ECC test error into data bit 2. */
+    EMU_DATABIT_3,          /*!< Inject the ECC test error into data bit 3. */
+    EMU_DATABIT_4,          /*!< Inject the ECC test error into data bit 4. */
+    EMU_DATABIT_5,          /*!< Inject the ECC test error into data bit 5. */
+    EMU_DATABIT_6,          /*!< Inject the ECC test error into data bit 6. */
+    EMU_DATABIT_7,          /*!< Inject the ECC test error into data bit 7. */
+    EMU_DATABIT_8,          /*!< Inject the ECC test error into data bit 8. */
+    EMU_DATABIT_9,          /*!< Inject the ECC test error into data bit 9. */
+    EMU_DATABIT_10,         /*!< Inject the ECC test error into data bit 10. */
+    EMU_DATABIT_11,         /*!< Inject the ECC test error into data bit 11. */
+    EMU_DATABIT_12,         /*!< Inject the ECC test error into data bit 12. */
+    EMU_DATABIT_13,         /*!< Inject the ECC test error into data bit 13. */
+    EMU_DATABIT_14,         /*!< Inject the ECC test error into data bit 14. */
+    EMU_DATABIT_15,         /*!< Inject the ECC test error into data bit 15. */
+    EMU_DATABIT_16,         /*!< Inject the ECC test error into data bit 16. */
+    EMU_DATABIT_17,         /*!< Inject the ECC test error into data bit 17. */
+    EMU_DATABIT_18,         /*!< Inject the ECC test error into data bit 18. */
+    EMU_DATABIT_19,         /*!< Inject the ECC test error into data bit 19. */
+    EMU_DATABIT_20,         /*!< Inject the ECC test error into data bit 20. */
+    EMU_DATABIT_21,         /*!< Inject the ECC test error into data bit 21. */
+    EMU_DATABIT_22,         /*!< Inject the ECC test error into data bit 22. */
+    EMU_DATABIT_23,         /*!< Inject the ECC test error into data bit 23. */
+    EMU_DATABIT_24,         /*!< Inject the ECC test error into data bit 24. */
+    EMU_DATABIT_25,         /*!< Inject the ECC test error into data bit 25. */
+    EMU_DATABIT_26,         /*!< Inject the ECC test error into data bit 26. */
+    EMU_DATABIT_27,         /*!< Inject the ECC test error into data bit 27. */
+    EMU_DATABIT_28,         /*!< Inject the ECC test error into data bit 28. */
+    EMU_DATABIT_29,         /*!< Inject the ECC test error into data bit 29. */
+    EMU_DATABIT_30,         /*!< Inject the ECC test error into data bit 30. */
+    EMU_DATABIT_31,         /*!< Inject the ECC test error into data bit 31. */
+#if defined(FEATURE_EMU_SUPPORT_64BIT_INJECTION) && (FEATURE_EMU_SUPPORT_64BIT_INJECTION == 1U)
+    EMU_DATABIT_32,         /*!< Inject the ECC test error into data bit 32. */
+    EMU_DATABIT_33,         /*!< Inject the ECC test error into data bit 33. */
+    EMU_DATABIT_34,         /*!< Inject the ECC test error into data bit 34. */
+    EMU_DATABIT_35,         /*!< Inject the ECC test error into data bit 35. */
+    EMU_DATABIT_36,         /*!< Inject the ECC test error into data bit 36. */
+    EMU_DATABIT_37,         /*!< Inject the ECC test error into data bit 37. */
+    EMU_DATABIT_38,         /*!< Inject the ECC test error into data bit 38. */
+    EMU_DATABIT_39,         /*!< Inject the ECC test error into data bit 39. */
+    EMU_DATABIT_40,         /*!< Inject the ECC test error into data bit 40. */
+    EMU_DATABIT_41,         /*!< Inject the ECC test error into data bit 41. */
+    EMU_DATABIT_42,         /*!< Inject the ECC test error into data bit 42. */
+    EMU_DATABIT_43,         /*!< Inject the ECC test error into data bit 43. */
+    EMU_DATABIT_44,         /*!< Inject the ECC test error into data bit 44. */
+    EMU_DATABIT_45,         /*!< Inject the ECC test error into data bit 45. */
+    EMU_DATABIT_46,         /*!< Inject the ECC test error into data bit 46. */
+    EMU_DATABIT_47,         /*!< Inject the ECC test error into data bit 47. */
+    EMU_DATABIT_48,         /*!< Inject the ECC test error into data bit 48. */
+    EMU_DATABIT_49,         /*!< Inject the ECC test error into data bit 49. */
+    EMU_DATABIT_50,         /*!< Inject the ECC test error into data bit 50. */
+    EMU_DATABIT_51,         /*!< Inject the ECC test error into data bit 51. */
+    EMU_DATABIT_52,         /*!< Inject the ECC test error into data bit 52. */
+    EMU_DATABIT_53,         /*!< Inject the ECC test error into data bit 53. */
+    EMU_DATABIT_54,         /*!< Inject the ECC test error into data bit 54. */
+    EMU_DATABIT_55,         /*!< Inject the ECC test error into data bit 55. */
+    EMU_DATABIT_56,         /*!< Inject the ECC test error into data bit 56. */
+    EMU_DATABIT_57,         /*!< Inject the ECC test error into data bit 57. */
+    EMU_DATABIT_58,         /*!< Inject the ECC test error into data bit 58. */
+    EMU_DATABIT_59,         /*!< Inject the ECC test error into data bit 59. */
+    EMU_DATABIT_60,         /*!< Inject the ECC test error into data bit 60. */
+    EMU_DATABIT_61,         /*!< Inject the ECC test error into data bit 61. */
+    EMU_DATABIT_62,         /*!< Inject the ECC test error into data bit 62. */
+    EMU_DATABIT_63,         /*!< Inject the ECC test error into data bit 63. */
+    EMU_DATABIT_MAX = 64,   /*!< Sentinel upper bound for supported data-bit indices. */
+#else
+    EMU_DATABIT_MAX = 32,   /*!< Sentinel upper bound for supported data-bit indices. */
+#endif
 } e_emu_databit;
 
 /*!
- * @brief emu check-mapped mask
+ * @brief Check-bit selectors for injected ECC test errors.
  *
- * This enumeration type indicates which check bit is injected when the injected error occurs on the check .
- * Implements : e_emu_chkbit_Class
+ * Selects which ECC check bit is inverted when the injection type targets the
+ * check-bit path.
+ *
+ * @note `EMU_CHKBIT_MAX` is a sentinel upper bound and is not a selectable
+ *       injection bit.
  */
 typedef enum
 {
-    EMU_CHKBIT_0,           /*!< Error code is injected at bit 0 of the check.*/
-    EMU_CHKBIT_1,           /*!< Error code is injected at bit 1 of the check.*/
-    EMU_CHKBIT_2,           /*!< Error code is injected at bit 2 of the check.*/
-    EMU_CHKBIT_3,           /*!< Error code is injected at bit 3 of the check.*/
-    EMU_CHKBIT_4,           /*!< Error code is injected at bit 4 of the check.*/
-    EMU_CHKBIT_5,           /*!< Error code is injected at bit 5 of the check.*/
-    EMU_CHKBIT_6,           /*!< Error code is injected at bit 6 of the check.*/
-    EMU_CHKBIT_MAX,         /*!< The check bit of the injected error cannot reach the seventh bit at most.*/
+    EMU_CHKBIT_0,           /*!< Inject the ECC test error into check bit 0. */
+    EMU_CHKBIT_1,           /*!< Inject the ECC test error into check bit 1. */
+    EMU_CHKBIT_2,           /*!< Inject the ECC test error into check bit 2. */
+    EMU_CHKBIT_3,           /*!< Inject the ECC test error into check bit 3. */
+    EMU_CHKBIT_4,           /*!< Inject the ECC test error into check bit 4. */
+    EMU_CHKBIT_5,           /*!< Inject the ECC test error into check bit 5. */
+    EMU_CHKBIT_6,           /*!< Inject the ECC test error into check bit 6. */
+    EMU_CHKBIT_MAX,         /*!< Sentinel upper bound for supported check-bit indices. */
 } e_emu_chkbit;
 
 /*!
- * @brief emu error inject bit
+ * @brief Injection target selection.
  *
- * The injection error can be injected in the data bit, in the check bit, 
- * or mixed injection.
- * Implements : emu_inject_bits_type_Class
+ * Selects whether EMU injects an error on the SRAM data path, on the ECC
+ * check-bit path, or on both paths at the same time.
+ *
+ * | Value | Description |
+ * |-------|-------------|
+ * | EMU_INJECT_BITS_TYPE_DATA | Inject one data-path bit error. |
+ * | EMU_INJECT_BITS_TYPE_CHK | Inject one check-bit-path error. |
+ * | EMU_INJECT_BITS_TYPE_MIXTURE | Inject one data-path bit and one check-bit error together. |
  */
 typedef enum
 {
-    EMU_INJECT_BITS_TYPE_DATA,      /*!< Inject one error bit on data*/
-    EMU_INJECT_BITS_TYPE_CHK,       /*!< Inject one error bit on check*/
-    EMU_INJECT_BITS_TYPE_MIXTURE,   /*!< Inject two error bits on data and check*/
+    EMU_INJECT_BITS_TYPE_DATA,      /*!< Inject one error bit on the data path. */
+    EMU_INJECT_BITS_TYPE_CHK,       /*!< Inject one error bit on the check-bit path. */
+    EMU_INJECT_BITS_TYPE_MIXTURE,   /*!< Inject one data bit and one check bit together. */
 } emu_inject_bits_type;
 
 /*!
- * @brief emu error inject type
- * 
- * Injection error information, including the type of injection error, 
- * which data bit to inject, or which check bit.
- * Implements : emu_inject_err_t_Class
+ * @brief Single-bit injection selection for one EMU channel.
+ *
+ * Describes which data bit and/or check bit will be programmed by the driver
+ * when the application initializes one channel with EMU_DRV_Init().
+ *
+ * | Field | Type | Description |
+ * |-------|------|-------------|
+ * | injectBitsType | emu_inject_bits_type | Selects the active injection path or paths. |
+ * | dataBit | e_emu_databit | Data-bit index used when the data path participates in the injection. |
+ * | chkBit | e_emu_chkbit | Check-bit index used when the check-bit path participates in the injection. |
  */
 typedef struct
 {
-    emu_inject_bits_type injectBitsType; /*!< Inject error type.*/
-    e_emu_databit dataBit;               /*!< Inject error on which data bit.*/
-    e_emu_chkbit chkBit;                 /*!< Inject error on which check bit.*/
+    emu_inject_bits_type injectBitsType; /*!< Injection path selection. */
+    e_emu_databit dataBit;               /*!< Data-bit index used for data-path injection. */
+    e_emu_chkbit chkBit;                 /*!< Check-bit index used for check-bit-path injection. */
 } emu_inject_err_t;
 
 /*!
- * @brief Emu Configuration Structure
+ * @brief EMU channel configuration.
  *
- * The structure includes the static parameters for Emu which are
- * device-dependent. The fields including
+ * Holds the parameters applied by EMU_DRV_Init() for one channel of one EMU
+ * instance.
  *
- * Implements : emu_config_t_Class
+ * | Field | Type | Description |
+ * |-------|------|-------------|
+ * | channel | uint32_t | EMU channel index to configure. |
+ * | injectErrAddr | uint32_t | SRAM word address monitored for error injection. |
+ * | injectErrSetInfo | emu_inject_err_t | Single-bit or mixed-bit injection selection. |
+ * | interruptEnable | bool | Enables both signal-bit and double-bit interrupts during initialization when `true`. |
  */
 typedef struct
 {
-    uint32_t channel;                   /*!< channel 0 and channel 1 corresponds to SRAM_L and SRAM_U.*/
-    uint32_t injectErrAddr;             /*!< Error injection address*/
-    emu_inject_err_t injectErrSetInfo;  /*!< Error injection Setting information*/
-    bool interruptEnable;               /*!< Enable interrupt*/
+    uint32_t channel;                   /*!< Channel index for the target SRAM bank. */
+    uint32_t injectErrAddr;             /*!< SRAM word address used as the injection target. */
+    emu_inject_err_t injectErrSetInfo;  /*!< Injection-path and bit-selection parameters. */
+    bool interruptEnable;               /*!< Enable both signal-bit and double-bit interrupts during init. */
 } emu_config_t;
-
-/*******************************************************************************
-* Function Prototypes for Emu 
-*******************************************************************************/
-/*!
- * @name Emu driver APIs
- * @{
- */
 
 #if defined(__cplusplus)
 extern "C" {
 #endif
 
+/*******************************************************************************
+ * Initialization & De-initialization
+ ******************************************************************************/
 /*!
- * @brief Initialize a Emu instance for operation.
+ * @name Initialization & De-initialization
+ * @brief Functions for resetting, configuring, and shutting down an EMU
+ *        instance.
+ * @{
+ */
+
+/*!
+ * @brief Reset an EMU instance, apply one channel configuration, and control
+ *        the initial enable state.
  *
- * This function first resets the source triggers of all EMU target modules to their default values,
- * then configures the EMU with all the user defined in-out mappings.
- * This example shows how to set up the emu_config_t parameters and how to call the
- * EMU_DRV_Init() function with the required parameters:
- *  @code
- *   emu_config_t EmuInitConfig0 = {
-        .channel = 0,
-        .injectErrAddr = 0x20000000,
-        .injectErrSetInfo = 
-        {
-            .injectBitsType = EMU_INJECT_BITS_TYPE_DATA,
-            .dataBit = 7,
-        },
-        .interruptEnable = false,
-    };
+ * This function restores the entire EMU instance to reset state, applies the
+ * channel configuration from @a configPtr, and then enables the selected
+ * channel only when @a startFlag is `1U`.
  *
- *   EMU_DRV_Init(instance, &EmuInitConfig0,1);
- *   @endcode
+ * @param[in] instance   EMU instance index. Must be less than
+ *                       `EMU_INSTANCE_COUNT`.
+ * @param[in] configPtr  Pointer to the user configuration structure.
+ *                       Must not be NULL.
+ * @param[in] startFlag  Pass `1U` to enable the configured channel
+ *                       immediately. Any other value leaves the channel
+ *                       disabled after configuration.
  *
- * @param[in] instance          The EMU instance number.
- * @param[in] configPtr         Pointer to the user configuration structure.
- * @param[in] startFlag         Whether to enable EMU module.
+ * @pre The EMU peripheral clock must already be enabled.
+ * @post The complete EMU instance has been reset and the selected channel has
+ *       been configured.
+ * @warning Re-initializing one channel clears the configuration and report
+ *          state of every other channel in the same EMU instance.
  */
 void EMU_DRV_Init(uint32_t instance, const emu_config_t *configPtr, uint32_t startFlag);
 
 /*!
- * @brief Reset to default values the source triggers corresponding to all target 
+ * @brief Disable the selected channel and restore the EMU instance to reset
+ *        state.
  *
- * @param[in] instance          The EMU instance number.
- * @param[in] channel           The EMU SRAML or SRAMU.
+ * @param[in] instance  EMU instance index. Must be less than
+ *                      `EMU_INSTANCE_COUNT`.
+ * @param[in] channel   Channel index used for the initial disable operation.
+ *
+ * @post The entire EMU instance is reset to its default register state.
  */
 void EMU_DRV_DeInit(uint32_t instance, uint32_t channel);
 
+/*! @} */ /* End of Initialization & De-initialization */
+
+/*******************************************************************************
+ * Error Injection Control
+ ******************************************************************************/
 /*!
- * @brief Get error report check bit.
+ * @name Error Injection Control
+ * @brief Functions for programming EMU injection settings after initialization.
+ * @{
+ */
+
+/*!
+ * @brief Program raw multi-bit injection masks for one channel and re-enable
+ *        EMU injection.
  *
- * @param[in] instance          The EMU instance number.
- * @param[in] channel           The EMU SRAML or SRAMU.
+ * This helper disables the selected channel, writes the target address, loads
+ * the caller-provided data and check masks, and then enables the channel
+ * again.
+ *
+ * @param[in] instance       EMU instance index. Must be less than
+ *                           `EMU_INSTANCE_COUNT`.
+ * @param[in] channel        Channel index. Must be less than
+ *                           `EMU_EICHD_COUNT`.
+ * @param[in] injectErrAddr  SRAM word address used as the injection target.
+ * @param[in] dataMulti      Raw data-bit mask. Pass `NO_INJECTION_ERROR` to
+ *                           leave the data path untouched.
+ * @param[in] chkMulti       Raw check-bit mask. Pass `NO_INJECTION_ERROR` to
+ *                           leave the check-bit path untouched.
+ *
+ * @post The selected channel is enabled with the newly programmed masks.
+ */
+void EMU_DRV_InjectError(uint32_t instance, uint32_t channel,
+                         uint32_t injectErrAddr, emu_databit_type dataMulti,
+                         emu_chkbit_type chkMulti);
+
+/*! @} */ /* End of Error Injection Control */
+
+/*******************************************************************************
+ * Error Report & Counter Access
+ ******************************************************************************/
+/*!
+ * @name Error Report & Counter Access
+ * @brief Functions for reading and clearing EMU report data.
+ * @{
+ */
+
+/*!
+ * @brief Convert the latched syndrome for one channel into a reported
+ *        check-bit index.
+ *
+ * @param[in] instance  EMU instance index. Must be less than
+ *                      `EMU_INSTANCE_COUNT`.
+ * @param[in] channel   Report channel index. Must be less than
+ *                      `EMU_ERINFO_COUNT`.
+ * @return Reported check-bit index derived from the syndrome value.
+ *
+ * @note The returned value reflects the highest set syndrome bit encoded by
+ *       the hardware report register.
  */
 uint8_t EMU_DRV_GetErrReportChkbit(uint32_t instance, uint8_t channel);
 
 /*!
- * @brief Clear signal bit interrupt flag.
+ * @brief Read the error report counter for one channel.
  *
- * @param[in] instance          The EMU instance number.
- * @param[in] channel           The EMU SRAML or SRAMU.
- */
-void EMU_DRV_ClearInterruptFlagSignalBit(uint32_t instance, uint8_t channel);
-
-/*!
- * @brief Enable double bit interrupt.
- *
- * @param[in] instance          The EMU instance number.
- * @param[in] channel           The EMU SRAML or SRAMU.
- */
-void EMU_DRV_EnableInterruptDoubleBit(uint32_t instance, uint8_t channel);
-
-/*!
- * @brief Disable double bit interrupt.
- *
- * @param[in] instance          The EMU instance number.
- * @param[in] channel           The EMU SRAML or SRAMU.
- */
-void EMU_DRV_DisableInterruptDoubleBit(uint32_t instance, uint8_t channel);
-
-/*!
- * @brief Clear double bit interrupt flag.
- *
- * @param[in] instance          The EMU instance number.
- * @param[in] channel           The EMU SRAML or SRAMU.
- */
-void EMU_DRV_ClearInterruptFlagDoubleBit(uint32_t instance, uint8_t channel);
-
-/*!
- * @brief Get error report count.
- *
- * @param[in] instance          The EMU instance number.
- * @param[in] channel           The EMU SRAML or SRAMU.
+ * @param[in] instance  EMU instance index. Must be less than
+ *                      `EMU_INSTANCE_COUNT`.
+ * @param[in] channel   Report channel index. Must be less than
+ *                      `EMU_EICHD_COUNT`.
+ * @return Current error report counter value for the selected channel.
  */
 uint32_t EMU_DRV_GetErrReportCnt(uint32_t instance, uint8_t channel);
 
 /*!
- * @brief Clear error report count.
+ * @brief Clear the error report counter for one channel.
  *
- * @param[in] instance          The EMU instance number.
- * @param[in] channel           The EMU SRAML or SRAMU.
+ * @param[in] instance  EMU instance index. Must be less than
+ *                      `EMU_INSTANCE_COUNT`.
+ * @param[in] channel   Report channel index. Must be less than
+ *                      `EMU_ERINFO_COUNT`.
  */
 void EMU_DRV_ClearErrReportCnt(uint32_t instance, uint8_t channel);
 
 /*!
- * @brief Get error report address.
+ * @brief Read the address latched for the reported ECC event on one channel.
  *
- * @param[in] instance          The EMU instance number.
- * @param[in] channel           The EMU SRAML or SRAMU.
+ * @param[in] instance  EMU instance index. Must be less than
+ *                      `EMU_INSTANCE_COUNT`.
+ * @param[in] channel   Report channel index. Must be less than
+ *                      `EMU_EICHD_COUNT`.
+ * @return Latched report address for the selected channel.
  */
 uint32_t EMU_DRV_GetErrReportAddr(uint32_t instance, uint8_t channel);
 
+/*! @} */ /* End of Error Report & Counter Access */
 
+/*******************************************************************************
+ * Interrupt Status & Control
+ ******************************************************************************/
 /*!
- * @brief Inject error data.
- *
- * @param[in] instance          The EMU instance number.
- * @param[in] channel           The EMU SRAML or SRAMU.
- * @param[in] injectErrAddr     Error Injection Address.
- * @param[in] dataMulti         Multiple error injection databit.
- * @param[in] chkMulti          Multiple error injection checkbit.
+ * @name Interrupt Status & Control
+ * @brief Functions for querying and maintaining EMU interrupt state.
+ * @{
  */
-void EMU_DRV_InjectError(uint32_t instance, uint32_t channel,
-                        uint32_t injectErrAddr,emu_databit_type dataMulti,
-                        emu_chkbit_type chkMulti);
 
 /*!
- * @brief Get single bit error correct check interrupt flag.
+ * @brief Clear the single-bit correction interrupt flag for one channel.
  *
- * @param[in] instance          The EMU instance number.
- * @param[in] channel           The EMU SRAML, SRAMU or ROM.
+ * @param[in] instance  EMU instance index. Must be less than
+ *                      `EMU_INSTANCE_COUNT`.
+ * @param[in] channel   Channel index. Must be less than `EMU_EICHD_COUNT`.
+ */
+void EMU_DRV_ClearInterruptFlagSignalBit(uint32_t instance, uint8_t channel);
+
+/*!
+ * @brief Enable the double-bit interrupt path for one channel.
+ *
+ * @param[in] instance  EMU instance index. Must be less than
+ *                      `EMU_INSTANCE_COUNT`.
+ * @param[in] channel   Channel index. Must be less than `EMU_EICHD_COUNT`.
+ */
+void EMU_DRV_EnableInterruptDoubleBit(uint32_t instance, uint8_t channel);
+
+/*!
+ * @brief Disable the double-bit interrupt path for one channel.
+ *
+ * @param[in] instance  EMU instance index. Must be less than
+ *                      `EMU_INSTANCE_COUNT`.
+ * @param[in] channel   Channel index. Must be less than `EMU_EICHD_COUNT`.
+ */
+void EMU_DRV_DisableInterruptDoubleBit(uint32_t instance, uint8_t channel);
+
+/*!
+ * @brief Clear the double-bit interrupt flag for one channel.
+ *
+ * @param[in] instance  EMU instance index. Must be less than
+ *                      `EMU_INSTANCE_COUNT`.
+ * @param[in] channel   Channel index. Must be less than `EMU_EICHD_COUNT`.
+ */
+void EMU_DRV_ClearInterruptFlagDoubleBit(uint32_t instance, uint8_t channel);
+
+/*!
+ * @brief Query the single-bit correction interrupt flag for one channel.
+ *
+ * @param[in] instance  EMU instance index. Must be less than
+ *                      `EMU_INSTANCE_COUNT`.
+ * @param[in] channel   Channel index. Must be less than `EMU_EICHD_COUNT`.
+ * @return Non-zero value when the single-bit correction flag is asserted for
+ *         the selected channel.
  */
 uint8_t EMU_DRV_GetChannelSBInterruptFlag(uint32_t instance, uint8_t channel);
+
+/*! @} */ /* End of Interrupt Status & Control */
 
 #if defined(__cplusplus)
 }
 #endif
 
-/*! @}*/ /* End of Emu driver APIs*/
-/*! @}*/ /* End of addtogroup emu_driver */
+/*! @} */ /* End of emu_driver */
 
 #endif /* EMU_DRIVER_H */

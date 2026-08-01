@@ -8,6 +8,13 @@
 /*!
  * @file tmu_hw_access.c
  * @version 1.4.1
+ *
+ * @brief TMU Hardware Access Layer - register-level routing helpers.
+ *
+ * This file implements the low-level TMU services declared in
+ * tmu_hw_access.h. The functions operate directly on TMU MUX registers to
+ * clear routes, program source selections, read back active routes, and
+ * manage the shared lock bit.
  */
 
 /*!
@@ -21,26 +28,19 @@
 #include "tmu_hw_access.h"
 
 /*******************************************************************************
-* Definitions
-*******************************************************************************/
-
-/*******************************************************************************
- * Code
+ * Initialization
  ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMU_Init
- * Description   : This function restores the TMU module to reset value.
- *
- *END**************************************************************************/
+/*!
+ * @brief Write reset values to all TMU MUX registers.
+ */
 status_t TMU_Init(TMU_Type *const base)
 {
     DEV_ASSERT(base != NULL);
 
     status_t status = STATUS_SUCCESS;
 
-    /* unlock all registers */
+    /* Clear every MUX register to its reset value. */
     for (uint8_t i = 0; i < TMU_MUX_COUNT; i++)
     {
         base->MUX[i] = 0;
@@ -49,13 +49,13 @@ status_t TMU_Init(TMU_Type *const base)
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMU_SetTrigSourceForTargetModule
- * Description   : This function configures a TMU link between a source trigger
- * and a target module, if the requested target module is not locked.
- *
- *END**************************************************************************/
+/*******************************************************************************
+ * Routing Configuration
+ ******************************************************************************/
+
+/*!
+ * @brief Program the trigger source of one TMU target module.
+ */
 void TMU_SetTrigSourceForTargetModule(TMU_Type *const base,
                                       const tmu_trigger_source_t triggerSource,
                                       const tmu_target_module_t targetModule)
@@ -68,10 +68,11 @@ void TMU_SetTrigSourceForTargetModule(TMU_Type *const base,
     uint8_t selCnt = 0U;
     uint32_t tmpReg;
 
+    /* Derive the shared MUX register index and SEL field index. */
     muxCnt = (uint8_t)targetModule >> 2U;
     selCnt = (uint8_t)targetModule & 0x3U;
 
-    /* Read value of entire TMU register in a temp variable */
+    /* Read the full register so the other route selections are preserved. */
     tmpReg = base->MUX[muxCnt];
     switch (selCnt)
     {
@@ -92,20 +93,21 @@ void TMU_SetTrigSourceForTargetModule(TMU_Type *const base,
             tmpReg |= TMU_MUX_SEL3(triggerSource);
             break;
         default:
-            /* Nothing to do */
+            /* No update for unexpected selector values. */
             break;
     }
-    /* Write back the TMU MUX register */
+
+    /* Commit the updated source selection back to the register. */
     base->MUX[muxCnt] = tmpReg;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMU_GetTrigSourceForTargetModule
- * Description   : This function returns the TMU source trigger linked to
- * a selected target module.
- *
- *END**************************************************************************/
+/*******************************************************************************
+ * Routing Query
+ ******************************************************************************/
+
+/*!
+ * @brief Read the trigger source currently selected for one target module.
+ */
 tmu_trigger_source_t TMU_GetTrigSourceForTargetModule(const TMU_Type *const base,
                                                       const tmu_target_module_t targetModule)
 {
@@ -116,37 +118,35 @@ tmu_trigger_source_t TMU_GetTrigSourceForTargetModule(const TMU_Type *const base
     uint8_t selCnt = 0U;
     uint8_t trigSource;
 
+    /* Derive the shared MUX register index and SEL field index. */
     muxCnt = (uint8_t)targetModule / 4U;
     selCnt = (uint8_t)targetModule % 4U;
 
     if (selCnt == 0U)
     {
-        /* Perform the update operation */
         trigSource = (uint8_t)((base->MUX[muxCnt] >> TMU_MUX_SEL0_SHIFT) & TMU_MUX_SEL0_MASK);
     } else if (selCnt == 1U)
     {
-        /* Perform the update operation */
         trigSource = (uint8_t)((base->MUX[muxCnt] >> TMU_MUX_SEL1_SHIFT) & TMU_MUX_SEL1_MASK);
     } else if (selCnt == 2U)
     {
-        /* Perform the update operation */
         trigSource = (uint8_t)((base->MUX[muxCnt] >> TMU_MUX_SEL2_SHIFT) & TMU_MUX_SEL2_MASK);
     } else
     {
-        /* Perform the update operation */
         trigSource = (uint8_t)((base->MUX[muxCnt] >> TMU_MUX_SEL3_SHIFT) & TMU_MUX_SEL3_MASK);
     }
 
+    /* Return the encoded route value as the public trigger-source type. */
     return (tmu_trigger_source_t) (trigSource);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMU_SetLockForTargetModule
- * Description   : This function sets the Lock bit of the TMU register corresponding
- * to the selected target module.
- *
- *END**************************************************************************/
+/*******************************************************************************
+ * Lock Control
+ ******************************************************************************/
+
+/*!
+ * @brief Set the lock bit of the TMU MUX register that owns a target module.
+ */
 void TMU_SetLockForTargetModule(TMU_Type *const base,
                                 const tmu_target_module_t targetModule)
 {
@@ -157,16 +157,13 @@ void TMU_SetLockForTargetModule(TMU_Type *const base,
 
     muxCnt = (uint8_t)targetModule / 4U;
 
-    /* Perform the update operation */
+    /* Set the shared lock bit for the owning MUX register. */
     base->MUX[muxCnt] |= (((uint32_t) 1U) << TMU_MUX_LOCK_SHIFT);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : TMU_GetLockForTargetModule
- * Description   : Get the lock bit status of the TMU register of a target module.
- *
- *END**************************************************************************/
+/*!
+ * @brief Read the lock bit of the TMU MUX register that owns a target module.
+ */
 bool TMU_GetLockForTargetModule(const TMU_Type *const base,
                                 const tmu_target_module_t targetModule)
 {
@@ -179,7 +176,7 @@ bool TMU_GetLockForTargetModule(const TMU_Type *const base,
 
     muxCnt = (uint8_t)targetModule / 4U;
 
-    /* Get the lock bit value */
+    /* Read the shared lock bit of the owning MUX register. */
     lockVal = ((base->MUX[muxCnt] & TMU_MUX_LOCK_MASK) >> TMU_MUX_LOCK_SHIFT);
 
     isLock = (lockVal == 0U) ? false : true;

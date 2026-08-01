@@ -8,6 +8,12 @@
 /*!
  * @file etmr_common.c
  * @version 1.4.1
+ *
+ * @brief eTMR Common Driver — implementation.
+ *
+ * This file implements the shared driver functions declared in
+ * etmr_common.h, including initialization, counter control,
+ * synchronization, interrupt management, and status flag access.
  */
 
 #include "etmr_common.h"
@@ -31,27 +37,22 @@ static clock_names_t g_etmrIpcClkId[eTMR_INSTANCE_COUNT] = eTMR_IPC_CLK;
 /*! @brief Pointer to runtime state structure. */
 etmr_state_t *etmrStatePtr[eTMR_INSTANCE_COUNT];
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Reset the eTMR registers for one instance.
  *
- * Function Name : eTMR_DRV_Reset
- * Description   : Resets the eTMR registers. All the register use in the driver should be
- * reset to default value of each register.
- *
- * Implements    : eTMR_DRV_Reset_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ */
 void eTMR_DRV_Reset(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
     CLOCK_DRV_ResetModule(g_etmrIpcClkId[instance]);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Disable the eTMR counter.
  *
- * Function Name : eTMR_DRV_Disable
- * Description   : Disable eTMR counter
- *
- * Implements    : eTMR_DRV_Disable_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ */
 void eTMR_DRV_Disable(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -61,13 +62,11 @@ void eTMR_DRV_Disable(uint32_t instance)
     eTMR_Disable(etmrBase);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Enable the eTMR counter.
  *
- * Function Name : eTMR_DRV_Enable
- * Description   : Enable eTMR counter
- *
- * Implements    : eTMR_DRV_Enable_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ */
 void eTMR_DRV_Enable(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -80,12 +79,12 @@ void eTMR_DRV_Enable(uint32_t instance)
     eTMR_Enable(etmrBase);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Enable or disable the global time base feature.
  *
- * Function Name : eTMR_DRV_SetGlobalTimeBase
- * Description   : Set eTMR global time base feature.
- *
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @param[in] enable    `true` to enable the global time base, `false` to disable it.
+ */
 void eTMR_DRV_SetGlobalTimeBase(uint32_t instance, bool enable)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -93,12 +92,12 @@ void eTMR_DRV_SetGlobalTimeBase(uint32_t instance, bool enable)
     eTMR_SetGlobalEnable(etmrBase, enable);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Generate or clear the global synchronization signal.
  *
- * Function Name : eTMR_DRV_GenGlobalSignal
- * Description   : Generate a trigger signal to enable global time base feature.
- *
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @param[in] enable    `true` to generate the signal, `false` to clear it.
+ */
 void eTMR_DRV_GenGlobalSignal(uint32_t instance, bool enable)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -106,14 +105,14 @@ void eTMR_DRV_GenGlobalSignal(uint32_t instance, bool enable)
     eTMR_GenGlobalSignal(etmrBase, enable);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Initialize the eTMR driver for one instance.
  *
- * Function Name : eTMR_DRV_Init
- * Description   : Initializes the eTMR driver and get the clock frequency value
- * which select one of three possible clock sources for the eTMR counter.
- *
- * Implements    : eTMR_DRV_Init_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @param[in] info      Pointer to the user configuration structure.
+ * @param[out] state    Pointer to the runtime state structure.
+ * @return Execution status.
+ */
 status_t eTMR_DRV_Init(uint32_t instance, const etmr_user_config_t *info, etmr_state_t *state)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -206,14 +205,12 @@ status_t eTMR_DRV_Init(uint32_t instance, const etmr_user_config_t *info, etmr_s
     return status;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief De-initialize the eTMR driver for one instance.
  *
- * Function Name : eTMR_DRV_Deinit
- * Description   : Shuts down the eTMR driver.
- * First, eTMR_DRV_Init must be called. Then this function will disables the eTMR module.
- *
- * Implements    : eTMR_DRV_Deinit_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @return Execution status.
+ */
 status_t eTMR_DRV_Deinit(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -221,20 +218,28 @@ status_t eTMR_DRV_Deinit(uint32_t instance)
     /* Reset all eTMR register */
     eTMR_DRV_Reset(instance);
 
-    /* Clear etmr state */
-    etmrStatePtr[instance] = NULL;
+    /* Disable IRQn */
+    INT_SYS_DisableIRQ(g_etmrOverflowIrqId[instance]);
+    INT_SYS_DisableIRQ(g_etmrFaultIrqId[instance]);
+    for (uint8_t i = 0U; i < g_etmrChannelNum[i]; i++)
+    {
+        INT_SYS_DisableIRQ(g_etmrIrqId[instance][i]);
+    }
+
+    if (etmrStatePtr[instance] != NULL)
+    {
+        /* Clear etmr state */
+        etmrStatePtr[instance] = NULL;
+    }
 
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Populate an eTMR user configuration structure with default values.
  *
- * Function Name : eTMR_DRV_GetDefaultConfig
- * Description   : This function will get the default configuration values
- * in the structure which is used as a common use-case.
- * Return        : None
- * Implements    : eTMR_DRV_GetDefaultConfig_Activity
- *END**************************************************************************/
+ * @param[out] config  Pointer to the configuration structure to populate.
+ */
 void eTMR_DRV_GetDefaultConfig(etmr_user_config_t *const config)
 {
     DEV_ASSERT(config != NULL);
@@ -256,14 +261,15 @@ void eTMR_DRV_GetDefaultConfig(etmr_user_config_t *const config)
     config->isTofIntEnabled = false;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Configure channel output masking and its synchronization behavior.
  *
- * Function Name : eTMR_DRV_SetChnOutMasks
- * Description   : This function will mask the output of the channels and at match
- * events will be ignored by the masked channels.
- *
- * Implements : eTMR_DRV_SetChnOutMasks_Activity
- *END**************************************************************************/
+ * @param[in] instance         eTMR instance index (0-based).
+ * @param[in] maskEn           Per-channel mask enable bitmap.
+ * @param[in] maskVal          Per-channel output mask value bitmap.
+ * @param[in] softwareTrigger  `true` to load via software trigger, `false` to sync with register loading.
+ * @return Execution status.
+ */
 status_t eTMR_DRV_SetChnOutMask(uint32_t instance, uint8_t maskEn, uint16_t maskVal, bool softwareTrigger)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -309,78 +315,95 @@ status_t eTMR_DRV_SetChnOutMask(uint32_t instance, uint8_t maskEn, uint16_t mask
 }
 
 #if FEATURE_eTMR_HAS_INIT_REG
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Configure the initial counter value after enabling eTMR.
  *
- * Function Name : eTMR_DRV_SetCounterInit
- * Description   : This function configure the initial counter value. The counter
- * will get this value after an overflow event.
- *
- * Implements : eTMR_DRV_SetCounterInit_Activity
- *END**************************************************************************/
+ * @param[in] instance         eTMR instance index (0-based).
+ * @param[in] counterValue     Initial counter value to load.
+ * @param[in] softwareTrigger  `true` to apply via software trigger.
+ * @return Execution status.
+ */
 status_t eTMR_DRV_SetCounterInit(uint32_t instance, uint32_t counterValue, bool softwareTrigger)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
     eTMR_Type *etmrBase = g_etmrBase[instance];
 
+    eTMR_ClearLdok(etmrBase);
     /* set counter initial value */
     eTMR_SetInitVal(etmrBase, counterValue);
     /* set ldok */
     eTMR_SetLdok(etmrBase);
-    /* generate software trigger */
-    eTMR_GenSoftwareTrigger(etmrBase, softwareTrigger);
+    if (softwareTrigger)
+    {
+        /* generate software trigger */
+        eTMR_GenSoftwareTrigger(etmrBase, softwareTrigger);
+    }
 
     return STATUS_SUCCESS;
 }
 #endif
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Configure the counter MOD value.
  *
- * Function Name : eTMR_DRV_SetCounterMod
- * Description   : This function configure the maximum counter value.
- *
- * Implements : eTMR_DRV_SetCounterMod_Activity
- *END**************************************************************************/
+ * @param[in] instance         eTMR instance index (0-based).
+ * @param[in] counterValue     MOD value to program.
+ * @param[in] softwareTrigger  `true` to apply via software trigger.
+ * @return Execution status.
+ */
 status_t eTMR_DRV_SetCounterMod(uint32_t instance, uint32_t counterValue, bool softwareTrigger)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
     eTMR_Type *etmrBase = g_etmrBase[instance];
 
+    eTMR_ClearLdok(etmrBase);
     /* set MOD value */
     eTMR_SetMod(etmrBase, counterValue);
     /* set ldok */
     eTMR_SetLdok(etmrBase);
-    /* generate software trigger */
-    eTMR_GenSoftwareTrigger(etmrBase, softwareTrigger);
+    if (softwareTrigger)
+    {
+        /* generate software trigger */
+        eTMR_GenSoftwareTrigger(etmrBase, softwareTrigger);
+    }
 
     return STATUS_SUCCESS;
 }
 
 #if defined(FEATURE_eTMR_HAS_MID) && (FEATURE_eTMR_HAS_MID == 1)
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Configure the counter MID value.
  *
- * Function Name : eTMR_DRV_SetCounterMid
- * Description   : This function configure the middle counter value.
- *
- * Implements : eTMR_DRV_SetCounterMid_Activity
- *END**************************************************************************/
-status_t eTMR_DRV_SetCounterMid(uint32_t instance, uint32_t counterValue)
+ * @param[in] instance      eTMR instance index (0-based).
+ * @param[in] counterValue  MID value to program.
+ * @param[in] softwareTrigger  `true` to apply via software trigger.
+ * @return Execution status.
+ */
+status_t eTMR_DRV_SetCounterMid(uint32_t instance, uint32_t counterValue, bool softwareTrigger)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
     eTMR_Type *etmrBase = g_etmrBase[instance];
 
+    eTMR_ClearLdok(etmrBase);
     /* set MID value */
     eTMR_SetMid(etmrBase, counterValue);
+    /* set ldok */
+    eTMR_SetLdok(etmrBase);
+    if (softwareTrigger)
+    {
+        /* generate software trigger */
+        eTMR_GenSoftwareTrigger(etmrBase, softwareTrigger);
+    }
 
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the current counter MID value.
  *
- * Function Name : eTMR_DRV_GetMid
- * Description   : This function is to get the middle value of counter.
- *
- * Implements : eTMR_DRV_GetMid_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @return Current MID register value.
+ */
 uint32_t eTMR_DRV_GetMid(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -391,13 +414,12 @@ uint32_t eTMR_DRV_GetMid(uint32_t instance)
 }
 #endif
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Set LDOK to start shadow-to-working register synchronization.
  *
- * Function Name : eTMR_DRV_SetLdok
- * Description   : This function will set the LDOK to start registers synchronization.
- *
- * Implements : eTMR_DRV_SetLdok_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @return Execution status.
+ */
 status_t eTMR_DRV_SetLdok(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -409,13 +431,12 @@ status_t eTMR_DRV_SetLdok(uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Clear the LDOK state.
  *
- * Function Name : eTMR_DRV_ClearLdok
- * Description   : This function will clear the LDOK.
- *
- * Implements : eTMR_DRV_ClearLdok_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @return Execution status.
+ */
 status_t eTMR_DRV_ClearLdok(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -427,16 +448,13 @@ status_t eTMR_DRV_ClearLdok(uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Configure synchronization for buffered eTMR registers.
  *
- * Function Name : eTMR_DRV_SetSync
- * Description   : This function configure the synchronization for PWM register
- * (INIT, MOD, MID, VAL0/1, CHMASK). If this function is used whit wrong parameters
- * it's possible to generate wrong waveform. Registers synchronization need to
- * be configured for PWM and output compare mode.
- *
- * Implements : eTMR_DRV_SetSync_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @param[in] param     Pointer to the synchronization configuration structure.
+ * @return Execution status.
+ */
 status_t eTMR_DRV_SetSync(uint32_t instance, const etmr_pwm_sync_t *param)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -481,13 +499,13 @@ status_t eTMR_DRV_SetSync(uint32_t instance, const etmr_pwm_sync_t *param)
     return retStatus;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Set the channel safe-state bitmap used on fault events.
  *
- * Function Name : eTMR_DRV_SetSafeState
- * Description   : Set channel safe state when fault is detected.
- *
- * Implements    : eTMR_DRV_SetSafeState_Activity
- *END**************************************************************************/
+ * @param[in] instance   eTMR instance index (0-based).
+ * @param[in] safeState  Safe-state bitmap for channel outputs.
+ * @return Execution status.
+ */
 status_t eTMR_DRV_SetSafeState(uint32_t instance, uint32_t safeState)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -499,13 +517,13 @@ status_t eTMR_DRV_SetSafeState(uint32_t instance, uint32_t safeState)
     return retStatus;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Configure the eTMR output trigger behavior.
  *
- * Function Name : eTMR_DRV_SetOutputTrigger
- * Description   : This function configures output trigger
- *
- * Implements : eTMR_DRV_SetOutputTrigger_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @param[in] param     Pointer to the output trigger configuration structure.
+ * @return Execution status.
+ */
 status_t eTMR_DRV_SetOutputTrigger(uint32_t instance, const etmr_trig_config_t *param)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -584,15 +602,13 @@ status_t eTMR_DRV_SetOutputTrigger(uint32_t instance, const etmr_trig_config_t *
     return retStatus;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Enable a set of eTMR interrupts.
  *
- * Function Name : eTMR_DRV_EnableInterrupts
- * Description   : This function will enable the generation a list of interrupts.
- * It includes the eTMR overflow interrupts, the reload point interrupt, the fault
- * interrupt and the channel (n) interrupt.
- *
- * Implements : eTMR_DRV_EnableInterrupts_Activity
- *END**************************************************************************/
+ * @param[in] instance       eTMR instance index (0-based).
+ * @param[in] interruptMask  Bitmask of interrupts to enable (etmr_interrupt_option_t).
+ * @return Execution status.
+ */
 status_t eTMR_DRV_EnableInterrupts(uint32_t instance, uint32_t interruptMask)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -629,13 +645,12 @@ status_t eTMR_DRV_EnableInterrupts(uint32_t instance, uint32_t interruptMask)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Disable a set of eTMR interrupts.
  *
- * Function Name : eTMR_DRV_DisableInterrupts
- * Description   : This function is used to disable some interrupts.
- *
- * Implements : eTMR_DRV_DisableInterrupts_Activity
- *END**************************************************************************/
+ * @param[in] instance       eTMR instance index (0-based).
+ * @param[in] interruptMask  Bitmask of interrupts to disable.
+ */
 void eTMR_DRV_DisableInterrupts(uint32_t instance, uint32_t interruptMask)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -670,13 +685,12 @@ void eTMR_DRV_DisableInterrupts(uint32_t instance, uint32_t interruptMask)
     }
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the currently enabled eTMR interrupts.
  *
- * Function Name : eTMR_DRV_GetEnabledInterrupts
- * Description   : This function will get the enabled eTMR interrupts.
- *
- * Implements : eTMR_DRV_GetEnabledInterrupts_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @return Bitmask of enabled interrupts.
+ */
 uint32_t eTMR_DRV_GetEnabledInterrupts(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -708,13 +722,12 @@ uint32_t eTMR_DRV_GetEnabledInterrupts(uint32_t instance)
     return enabledInterrupts;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the aggregated eTMR status flags.
  *
- * Function Name : eTMR_DRV_GetStatusFlags
- * Description   : This function will get the eTMR status flags.
- *
- * Implements : eTMR_DRV_GetStatusFlags_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @return Bitmask of active status flags.
+ */
 uint32_t eTMR_DRV_GetStatusFlags(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -755,15 +768,12 @@ uint32_t eTMR_DRV_GetStatusFlags(uint32_t instance)
     return statusFlags;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the frequency of the clock source feeding the eTMR counter.
  *
- * Function Name : eTMR_DRV_GetFrequency
- * Description   : Retrieves the frequency of the clock source feeding the eTMR counter.
- * Function will return a 0 if no clock source is selected and the eTMR counter is disabled.
- * The returned value is clock sources for the eTMR counter.
- *
- * Implements    : eTMR_DRV_GetFrequency_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @return Counter source clock frequency in Hz.
+ */
 uint32_t eTMR_DRV_GetFrequency(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -801,14 +811,13 @@ uint32_t eTMR_DRV_GetFrequency(uint32_t instance)
     return (uint32_t)(frequency / clkPrs);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Convert a target frequency in Hz to timer period ticks.
  *
- * Function Name : eTMR_DRV_ConvertFreqToPeriodTicks
- * Description   : This function converts the input parameters representing
- * frequency in Hz to a period value in ticks needed by the hardware timer.
- *
- * Implements    : eTMR_DRV_ConvertFreqToPeriodTicks_Activity
- *END**************************************************************************/
+ * @param[in] instance    eTMR instance index (0-based).
+ * @param[in] freqencyHz  Target frequency in Hz.
+ * @return Period value in timer ticks.
+ */
 uint32_t eTMR_DRV_ConvertFreqToPeriodTicks(uint32_t instance, uint32_t freqencyHz)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);

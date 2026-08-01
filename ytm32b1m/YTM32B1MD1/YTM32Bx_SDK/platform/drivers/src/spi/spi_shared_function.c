@@ -7,7 +7,7 @@
 
 /*!
  * @file spi_shared_function.c
- * @version 1.4.1
+ * @brief SPI shared internal functions for IRQ dispatching and FIFO data handling.
  */
 
 /*!
@@ -31,10 +31,10 @@ SPI_Type *g_spiBase[SPI_INSTANCE_COUNT] = SPI_BASE_PTRS;
 /*! @brief Table to save SPI IRQ enumeration numbers defined in the CMSIS header file. */
 IRQn_Type g_spiIrqId[SPI_INSTANCE_COUNT] = SPI_IRQS;
 
-/* Pointer to runtime state structure.*/
+/*! @brief Pointer to runtime state structure for each SPI instance. */
 spi_state_t *g_spiStatePtr[SPI_INSTANCE_COUNT] = FEATURE_SPI_STATE_STRUCTURES_NULL;
 
-/* Table to save SPI clock names as defined in clock manager. */
+/*! @brief Table to save SPI clock names as defined in clock manager. */
 const clock_names_t s_spiClkNames[SPI_INSTANCE_COUNT] = FEATURE_SPI_CLOCKS_NAMES; /*PRQA S 1533*/
 
 /*******************************************************************************
@@ -42,14 +42,7 @@ const clock_names_t s_spiClkNames[SPI_INSTANCE_COUNT] = FEATURE_SPI_CLOCKS_NAMES
  ******************************************************************************/
 
 /*!
- * @brief The function SPI_DRV_IRQHandler passes IRQ control to either the master or
- * slave driver.
- *
- * The address of the IRQ handlers are checked to make sure they are non-zero before
- * they are called. If the IRQ handler's address is zero, it means that driver was
- * not present in the link (because the IRQ handlers are marked as weak). This would
- * actually be a program error, because it means the master/slave config for the IRQ
- * was set incorrectly.
+ * @brief Dispatch SPI IRQ to the appropriate master or slave handler.
  */
 void SPI_DRV_IRQHandler(uint32_t instance)
 {
@@ -71,13 +64,11 @@ void SPI_DRV_IRQHandler(uint32_t instance)
 }
 
 /*!
- * @brief Fill up the TX FIFO with data.
- * This function fills up the TX FIFO with data based on the bytes/frame.
- * This is not a public API as it is called from other driver functions.
+ * @brief Fill the TX FIFO from the software transmit buffer.
  */
 void SPI_DRV_FillupTxBuffer(uint32_t instance)
 {
-    /* Instantiate local variable of type dspi_master_state_t and point to global state. */
+    /* Instantiate local variable of type spi_state_t and point to global state. */
     spi_state_t *spiState = g_spiStatePtr[instance];
     SPI_Type *base = g_spiBase[instance];
     uint32_t wordToSend = 0;
@@ -154,10 +145,7 @@ void SPI_DRV_FillupTxBuffer(uint32_t instance)
 }
 
 /*!
- * @brief Read all data from RX FIFO
- * This function will read all data from RX FIFO and will transfer this information in
- * RX software buffer.
- * This is not a public API as it is called from other driver functions.
+ * @brief Read data from the RX FIFO into the software receive buffer.
  */
 void SPI_DRV_ReadRXBuffer(uint32_t instance)
 {
@@ -174,7 +162,7 @@ void SPI_DRV_ReadRXBuffer(uint32_t instance)
     while (filledSpace != 0U)
     {
         receivedWord = SPI_ReadData(base);
-        /* Get the number of bytes which can be read from this 32 bites */
+        /* Get the number of bytes which can be read from this 32 bits word. */
         if ((spiState->bytesPerFrame - spiState->rxFrameCnt) <= (uint16_t)4)
         {
             numOfBytes = (uint16_t)(spiState->bytesPerFrame - spiState->rxFrameCnt);
@@ -205,7 +193,7 @@ void SPI_DRV_ReadRXBuffer(uint32_t instance)
 
         /* Update internal variable used in transmission. */
         spiState->rxCount = (uint16_t)(spiState->rxCount - numOfBytes);
-        /* Verify if all bytes were sent. */
+        /* Verify if all bytes were received. */
         if (spiState->rxCount == 0U)
         {
             break;
@@ -215,8 +203,7 @@ void SPI_DRV_ReadRXBuffer(uint32_t instance)
 }
 
 /*!
- * @brief Disable the TEIE interrupts at the end of a transfer.
- * Disable the interrupts and clear the status for transmit/receive errors.
+ * @brief Disable transmit/receive error interrupts and clear error flags.
  */
 void SPI_DRV_DisableTEIEInterrupts(uint32_t instance)
 {
@@ -231,4 +218,3 @@ void SPI_DRV_DisableTEIEInterrupts(uint32_t instance)
 /*******************************************************************************
  * EOF
  ******************************************************************************/
-

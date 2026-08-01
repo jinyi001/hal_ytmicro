@@ -8,6 +8,37 @@
 /*!
  * @file i2c_hw_access.h
  * @version 1.4.1
+ *
+ * @brief I2C Hardware Access Layer.
+ *
+ * This header provides low-level inline accessor functions for the I2C
+ * peripheral registers. Functions are organized into the following categories:
+ *
+ * **Master side:**
+ *   - Master Enable & FIFO Reset
+ *   - Master Clock Configuration (prescaler, SCL high/low, setup/hold, Hs-mode)
+ *   - Master Pin & NACK Configuration
+ *   - Master FIFO Management (size, watermark, count)
+ *   - Master Data I/O (command transmit, data receive)
+ *   - Master Status Events (Rx ready, Tx request, errors, bus busy)
+ *   - Master Status Clear
+ *   - Master Interrupt Control
+ *   - Master DMA Control
+ *   - Master Timeout Configuration
+ *
+ * **Slave side:**
+ *   - Slave Enable
+ *   - Slave Address Configuration
+ *   - Slave Status Events (bit error, STOP, repeated START, address valid, Rx/Tx)
+ *   - Slave Status Clear
+ *   - Slave ACK/NACK & Clock Stretching Control
+ *   - Slave Data I/O
+ *   - Slave Interrupt Control
+ *   - Slave DMA Control
+ *   - Slave High-Speed Mode Detection
+ *
+ * @note This is an internal layer used by the I2C Driver (i2c_driver.h/c).
+ *       Application code should use the I2C_DRV_* APIs from i2c_driver.h.
  */
 
 /*!
@@ -24,16 +55,22 @@
 #include "i2c_driver.h"
 #include "device_registers.h"
 
+/*!
+ * @addtogroup i2c_hw_access I2C Hardware Access
+ * @ingroup i2c
+ * @brief Low-level register access functions for the I2C peripheral.
+ * @{
+ */
 
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
 
-
 /*!
- * I2C master interrupts
+ * @name Master Interrupt Mask Definitions
+ * @brief Bit masks for enabling/disabling individual master interrupt sources.
+ * @{
  */
-
 #define   I2C_MASTER_DATA_MATCH_INT             (I2C_MIE_MATIE_MASK)    /*!< Data Match Interrupt       */
 #define   I2C_MASTER_PIN_LOW_TIMEOUT_INT        (I2C_MIE_TOIE_MASK)     /*!< Pin Low Timeout Interrupt  */
 #define   I2C_MASTER_FIFO_ERROR_INT             (I2C_MIE_OPERRIE_MASK)  /*!< FIFO Error Interrupt       */
@@ -43,9 +80,12 @@
 #define   I2C_MASTER_END_PACKET_INT             (I2C_MIE_EPIE_MASK)     /*!< End Packet Interrupt       */
 #define   I2C_MASTER_RECEIVE_DATA_INT           (I2C_MIE_RXIE_MASK)     /*!< Receive Data Interrupt     */
 #define   I2C_MASTER_TRANSMIT_DATA_INT          (I2C_MIE_TXIE_MASK)     /*!< Transmit Data Interrupt    */
+/*! @} */
 
 /*!
- * I2C slave interrupts
+ * @name Slave Interrupt Mask Definitions
+ * @brief Bit masks for enabling/disabling individual slave interrupt sources.
+ * @{
  */
 #define   I2C_SLAVE_SMBUS_ALERT_RESPONSE_INT    (I2C_SIE_ALERTIE_MASK)  /*!< SMBus Alert Response Interrupt */
 #define   I2C_SLAVE_GENERAL_CALL_INT            (I2C_SIE_GCIE_MASK)     /*!< General Call Interrupt         */
@@ -59,8 +99,11 @@
 #define   I2C_SLAVE_ADDRESS_VALID_INT           (I2C_SIE_ADDRIE_MASK)   /*!< Address Valid Interrupt        */
 #define   I2C_SLAVE_RECEIVE_DATA_INT            (I2C_SIE_RXIE_MASK)     /*!< Receive Data Interrupt         */
 #define   I2C_SLAVE_TRANSMIT_DATA_INT           (I2C_SIE_TXIE_MASK)     /*!< Transmit Data Interrupt        */
+/*! @} */
 
-/*! @brief Pin configuration selection
+/*! @brief Pin configuration selection.
+ *
+ * Selects the electrical drive mode for the I2C SDA/SCL pins.
  */
 typedef enum
 {
@@ -69,7 +112,9 @@ typedef enum
     I2C_CFG_2PIN_OUTPUT_ONLY = 3U,  /*!< 2-pin output only mode (ultra-fast mode) */
 } i2c_pin_config_t;
 
-/*! @brief Master NACK reaction configuration
+/*! @brief Master NACK reaction configuration.
+ *
+ * Controls how the I2C master responds to a NACK from the slave.
  */
 typedef enum
 {
@@ -77,7 +122,9 @@ typedef enum
     I2C_NACK_IGNORE = 1U,  /*!< Treat a received NACK as if it was an ACK */
 } i2c_nack_config_t;
 
-/*! @brief I2C master prescaler options
+/*! @brief I2C master prescaler options.
+ *
+ * Clock divider applied to the I2C functional clock for baud rate generation.
  */
 typedef enum
 {
@@ -91,7 +138,10 @@ typedef enum
     I2C_MASTER_PRESC_DIV_128 = 7U,  /*!< Divide by 128 */
 } i2c_master_prescaler_t;
 
-/*! @brief Slave address configuration
+/*! @brief Slave address matching configuration.
+ *
+ * Selects the address match formula used by the I2C slave to validate
+ * received addresses against ADDR0 and ADDR1 register values.
  */
 typedef enum
 {
@@ -105,7 +155,9 @@ typedef enum
     I2C_SLAVE_ADDR_MATCH_RANGE_10BIT = 7U,  /*!< From Address match 0 (10-bit) to Address match 1 (10-bit) */
 } i2c_slave_addr_config_t;
 
-/*! @brief Slave NACK reaction configuration
+/*! @brief Slave NACK reaction configuration.
+ *
+ * Controls whether the slave ends the current transfer upon detecting a NACK.
  */
 typedef enum
 {
@@ -113,7 +165,9 @@ typedef enum
     I2C_SLAVE_NACK_CONTINUE_TRANSFER = 1U,  /*!< Slave will not end transfer when NACK detected */
 } i2c_slave_nack_config_t;
 
-/*! @brief Slave ACK transmission options
+/*! @brief Slave ACK/NACK transmission options.
+ *
+ * Instructs the slave to transmit ACK or NACK after receiving a data byte.
  */
 typedef enum
 {
@@ -122,7 +176,7 @@ typedef enum
 } i2c_slave_nack_transmit_t;
 
 /*******************************************************************************
- * API
+ * Master FIFO Management
  ******************************************************************************/
 
 #if defined(__cplusplus)
@@ -130,7 +184,9 @@ extern "C" {
 #endif
 
 /*!
- * @name Configuration
+ * @name Master FIFO Management
+ * @brief Functions for querying FIFO size, resetting FIFOs, and configuring
+ *        FIFO watermarks for the I2C master.
  * @{
  */
 
@@ -193,16 +249,25 @@ static inline void I2C_Reset_MasterTxFIFOCmd(I2C_Type *baseAddr)
     baseAddr->TXFIFO |= I2C_TXFIFO_RESET_MASK;
 }
 
+/*! @} */ /* End of Master FIFO Management */
+
+/*******************************************************************************
+ * Master Enable & Reset
+ ******************************************************************************/
+/*!
+ * @name Master Enable & Reset
+ * @brief Functions for enabling/disabling the I2C master module.
+ * @{
+ */
 
 /*!
- * @brief Enable or disable the I2C master
- * 
- * This function enables or disables the I2C module in master mode. If the module 
- * is enabled, the transmit FIFO  is not empty and the I2C bus is idle, then 
- * the I2C master will immediately initiate a transfer on the I2C bus.
- * 
- * @param baseAddr  base address of the I2C module
- * @param enable  specifies whether to enable or disable the I2C master
+ * @brief Enable or disable the I2C master.
+ *
+ * If the module is enabled, the transmit FIFO is not empty and the I2C bus
+ * is idle, the I2C master will immediately initiate a transfer on the bus.
+ *
+ * @param[in] baseAddr  Pointer to the I2C peripheral base address.
+ * @param[in] enable    true = enable master, false = disable master.
  */
 static inline void I2C_Set_MasterEnable(I2C_Type *baseAddr, bool enable)
 {
@@ -212,15 +277,26 @@ static inline void I2C_Set_MasterEnable(I2C_Type *baseAddr, bool enable)
     baseAddr->MCTRL = (uint32_t) regValue;
 }
 
+/*! @} */ /* End of Master Enable & Reset */
+
+/*******************************************************************************
+ * Master Status Events
+ ******************************************************************************/
 /*!
- * @brief Indicate the availability of receive data
- * 
- * This function returns true when the number of words in the receive FIFO is greater 
- * than the receive FIFO watermark. See function I2C_MasterSetRxFIFOWatermark()
- * for configuring the receive FIFO watermark.
- * 
- * @param baseAddr  base address of the I2C module
- * @return  receive data ready/not ready
+ * @name Master Status Events
+ * @brief Functions for querying I2C master event flags (Rx ready, Tx request,
+ *        FIFO error, arbitration lost, NACK, bus busy, line-low timeout).
+ * @{
+ */
+
+/*!
+ * @brief Check if receive data is available.
+ *
+ * Returns true when the number of words in the receive FIFO is greater
+ * than the receive FIFO watermark.
+ *
+ * @param[in] baseAddr  Pointer to the I2C peripheral base address.
+ * @return  true if receive data is ready, false otherwise.
  */
 static inline bool I2C_Get_MasterReceiveDataReadyEvent(const I2C_Type *baseAddr)
 {
@@ -325,13 +401,24 @@ static inline bool I2C_Get_MasterBusBusyEvent(const I2C_Type *baseAddr)
     return (bool) ((regValue != 0U) ? true : false);
 }
 
+/*! @} */ /* End of Master Status Events */
+
+/*******************************************************************************
+ * Master Status Clear
+ ******************************************************************************/
 /*!
- * @brief Clear the FIFO error event flag
- * 
- * This function clears the FIFO error event. This event must be cleared before 
- * the I2C master can initiate a START condition.
- * 
- * @param baseAddr  base address of the I2C module
+ * @name Master Status Clear
+ * @brief Functions for clearing I2C master event flags.
+ * @{
+ */
+
+/*!
+ * @brief Clear the FIFO error event flag.
+ *
+ * This event must be cleared before the I2C master can initiate a
+ * new START condition.
+ *
+ * @param[in] baseAddr  Pointer to the I2C peripheral base address.
  */
 static inline void I2C_Clear_MasterFIFOErrorEvent(I2C_Type *baseAddr)
 {
@@ -377,14 +464,25 @@ static inline void I2C_Clear_MasterNACKDetectEvent(I2C_Type *baseAddr)
     baseAddr->MSTS = ((uint32_t) 1U << I2C_MSTS_NACKIF_SHIFT);
 }
 
+/*! @} */ /* End of Master Status Clear */
+
+/*******************************************************************************
+ * Master DMA Control
+ ******************************************************************************/
 /*!
- * @brief Enable/disable receive data DMA requests
- * 
- * This function enables or disables generation of Rx DMA requests when data
- * can be read from the receive FIFO, as configured by the receive FIFO watermark.
- * 
- * @param baseAddr  base address of the I2C module
- * @param enable  specifies whether to enable or disable DMA requests
+ * @name Master DMA Control
+ * @brief Functions for enabling/disabling DMA requests on master Rx/Tx paths.
+ * @{
+ */
+
+/*!
+ * @brief Enable or disable receive data DMA requests.
+ *
+ * When enabled, the I2C master generates Rx DMA requests whenever the
+ * number of words in the receive FIFO exceeds the watermark.
+ *
+ * @param[in] baseAddr  Pointer to the I2C peripheral base address.
+ * @param[in] enable    true = enable Rx DMA, false = disable Rx DMA.
  */
 static inline void I2C_Set_MasterRxDMA(I2C_Type *baseAddr, bool enable)
 {
@@ -411,25 +509,23 @@ static inline void I2C_Set_MasterTxDMA(I2C_Type *baseAddr, bool enable)
     baseAddr->MCTRL = (uint32_t) regValue;
 }
 
+/*! @} */ /* End of Master DMA Control */
+
+/*******************************************************************************
+ * Master Interrupt Control
+ ******************************************************************************/
 /*!
- * @brief Enable or disable specified I2C master interrupts
- * 
- * This function can enable or disable one or more master interrupt sources 
- * specified by the interrupts parameter.
- * 
- * @param baseAddr  base address of the I2C module
- * @param interrupts  interrupts to be enabled or disabled; 
- *  must be a bitwise or between one or more of the following constants: 
- *  - I2C_MASTER_DATA_MATCH_INT          - Data Match Interrupt
- *  - I2C_MASTER_PIN_LOW_TIMEOUT_INT     - Pin Low Timeout Interrupt
- *  - I2C_MASTER_FIFO_ERROR_INT          - FIFO Error Interrupt
- *  - I2C_MASTER_ARBITRATION_LOST_INT    - Arbitration Lost Interrupt
- *  - I2C_MASTER_NACK_DETECT_INT         - NACK Detect Interrupt
- *  - I2C_MASTER_STOP_DETECT_INT         - STOP Detect Interrupt
- *  - I2C_MASTER_END_PACKET_INT          - End Packet Interrupt
- *  - I2C_MASTER_RECEIVE_DATA_INT        - Receive Data Interrupt
- *  - I2C_MASTER_TRANSMIT_DATA_INT       - Transmit Data Interrupt
- * @param enable  specifies whether to enable or disable specified interrupts
+ * @name Master Interrupt Control
+ * @brief Functions for enabling/disabling I2C master interrupt sources.
+ * @{
+ */
+
+/*!
+ * @brief Enable or disable specified I2C master interrupts.
+ *
+ * @param[in] baseAddr    Pointer to the I2C peripheral base address.
+ * @param[in] interrupts  Bitmask of interrupts (OR of I2C_MASTER_*_INT defines).
+ * @param[in] enable      true = enable, false = disable.
  */
 static inline void I2C_Set_MasterInt(I2C_Type *baseAddr, uint32_t interrupts, bool enable)
 {
@@ -445,14 +541,24 @@ static inline void I2C_Set_MasterInt(I2C_Type *baseAddr, uint32_t interrupts, bo
     baseAddr->MIE = tmp;
 }
 
+/*! @} */ /* End of Master Interrupt Control */
+
+/*******************************************************************************
+ * Master Pin & NACK Configuration
+ ******************************************************************************/
 /*!
- * @brief Set the pin mode of the module
- * 
- * This function sets the pin mode of the module. See type i2c_pin_config_t for 
- * a description of available modes.
- * 
- * @param baseAddr  base address of the I2C module
- * @param configuration  pin mode of the module
+ * @name Master Pin & NACK Configuration
+ * @brief Functions for configuring I2C pin drive mode and NACK reaction.
+ * @{
+ */
+
+/*!
+ * @brief Set the pin mode of the I2C module.
+ *
+ * Configures the electrical drive mode for the I2C SDA/SCL pins.
+ *
+ * @param[in] baseAddr       Pointer to the I2C peripheral base address.
+ * @param[in] configuration  Desired pin mode (see #i2c_pin_config_t).
  */
 static inline void I2C_Set_MasterPinConfig(I2C_Type *baseAddr, i2c_pin_config_t configuration)
 {
@@ -480,14 +586,26 @@ static inline void I2C_Set_MasterNACKConfig(I2C_Type *baseAddr, i2c_nack_config_
     baseAddr->MCTRL = (uint32_t) regValue;
 }
 
+/*! @} */ /* End of Master Pin & NACK Configuration */
+
+/*******************************************************************************
+ * Master Clock Configuration
+ ******************************************************************************/
 /*!
- * @brief Configure the I2C master prescaler
- * 
- * This function configures the clock prescaler used for all I2C master logic, 
+ * @name Master Clock Configuration
+ * @brief Functions for configuring prescaler, SCL high/low periods,
+ *        data valid delay, and setup/hold timing.
+ * @{
+ */
+
+/*!
+ * @brief Set the I2C master clock prescaler.
+ *
+ * The prescaler divides the I2C functional clock for all master timing
  * except the digital glitch filters.
- * 
- * @param baseAddr  base address of the I2C module
- * @param prescaler  I2C master prescaler
+ *
+ * @param[in] baseAddr   Pointer to the I2C peripheral base address.
+ * @param[in] prescaler  Desired prescaler value (see #i2c_master_prescaler_t).
  */
 static inline void I2C_Set_MasterPrescaler(I2C_Type *baseAddr, i2c_master_prescaler_t prescaler)
 {
@@ -617,18 +735,29 @@ static inline uint8_t I2C_Get_MasterClockLowPeriod(const I2C_Type *baseAddr)
     return (uint8_t) tmp;
 }
 
+/*! @} */ /* End of Master Clock Configuration */
+
+/*******************************************************************************
+ * Master High-Speed Clock Configuration
+ ******************************************************************************/
+/*!
+ * @name Master High-Speed Clock Configuration
+ * @brief Functions for configuring SCL timing in High-Speed (Hs) mode.
+ *
+ * These settings only take effect during High-Speed mode transfers.
+ * Available only when `I2C_HAS_HIGH_SPEED_MODE` is defined.
+ * @{
+ */
+
 #if(I2C_HAS_HIGH_SPEED_MODE)
 
 /*!
- * @brief Set the data hold time for SDA in high-speed mode
- * 
- * This function sets the minimum number of cycles (minus one) that is used as the 
- * data hold time for SDA in High-Speed mode. Must be configured less than the 
- * minimum SCL low period.
- * This setting only has effect during High-Speed mode transfers.
- * 
- * @param baseAddr  base address of the I2C module
- * @param value  value of the data hold time for SDA
+ * @brief Set the SDA data valid delay in High-Speed mode.
+ *
+ * Must be configured less than the minimum SCL low period.
+ *
+ * @param[in] baseAddr  Pointer to the I2C peripheral base address.
+ * @param[in] value     Data valid delay value (cycles minus one).
  */
 static inline void I2C_Set_MasterDataValidDelayHS(I2C_Type *baseAddr, uint8_t value)
 {
@@ -753,15 +882,25 @@ static inline uint8_t I2C_Get_MasterClockLowPeriodHS(const I2C_Type *baseAddr)
 
 #endif
 
+/*! @} */ /* End of Master High-Speed Clock Configuration */
+
+/*******************************************************************************
+ * Master FIFO Watermark & Count
+ ******************************************************************************/
 /*!
- * @brief Set the receive FIFO watermark
- * 
- * This function configures the receive FIFO watermark. Whenever the number of words in the receive 
- * FIFO is greater than the receive FIFO watermark, a receive data ready event is generated.
- * Writing a value equal or greater than the FIFO size will be truncated.
- * 
- * @param baseAddr  base address of the I2C module
- * @param value  number of words in the receive FIFO that will cause the receive data flag to be set
+ * @name Master FIFO Watermark & Count
+ * @brief Functions for configuring FIFO watermarks and reading FIFO counts.
+ * @{
+ */
+
+/*!
+ * @brief Set the receive FIFO watermark.
+ *
+ * When the number of words in the receive FIFO exceeds this value, a receive
+ * data ready event is generated. Values >= FIFO size are truncated.
+ *
+ * @param[in] baseAddr  Pointer to the I2C peripheral base address.
+ * @param[in] value     Watermark threshold (0 to FIFO_SIZE - 1).
  */
 static inline void I2C_Set_MasterRxFIFOWatermark(I2C_Type *baseAddr, uint16_t value)
 {
@@ -834,15 +973,27 @@ static inline uint16_t I2C_Get_MasterTxFIFOCount(const I2C_Type *baseAddr)
     return (uint16_t) tmp;
 }
 
+/*! @} */ /* End of Master FIFO Watermark & Count */
+
+/*******************************************************************************
+ * Master Data I/O
+ ******************************************************************************/
 /*!
- * @brief Provide commands and data for the I2C master
- * 
- * This function stores commands and data in the transmit FIFO and increments the FIFO 
- * write pointer.
- * 
- * @param baseAddr  base address of the I2C module
- * @param cmd  command for the I2C master
- * @param data  data for the I2C master
+ * @name Master Data I/O
+ * @brief Functions for writing commands/data to the transmit FIFO and
+ *        reading received data from the receive FIFO.
+ * @{
+ */
+
+/*!
+ * @brief Write a command and data byte to the master transmit FIFO.
+ *
+ * The command selects the I2C bus operation (transmit, receive, START, STOP)
+ * and the data byte is sent on the bus.
+ *
+ * @param[in] baseAddr  Pointer to the I2C peripheral base address.
+ * @param[in] cmd       Master command (see #i2c_master_command_t).
+ * @param[in] data      Data byte to transmit.
  */
 static inline void I2C_Cmd_MasterTransmit(I2C_Type *baseAddr, i2c_master_command_t cmd, uint8_t data)
 {
@@ -865,13 +1016,22 @@ static inline uint8_t I2C_Get_MasterRxData(const I2C_Type *baseAddr)
     return (uint8_t) tmp;
 }
 
+/*! @} */ /* End of Master Data I/O */
+
+/*******************************************************************************
+ * Slave Enable
+ ******************************************************************************/
 /*!
- * @brief Enable or disable the I2C slave
- * 
- * This function enables or disables the I2C module in slave mode.
- * 
- * @param baseAddr  base address of the I2C module
- * @param enable  specifies whether to enable or disable the I2C slave
+ * @name Slave Enable
+ * @brief Functions for enabling/disabling the I2C slave module.
+ * @{
+ */
+
+/*!
+ * @brief Enable or disable the I2C slave.
+ *
+ * @param[in] baseAddr  Pointer to the I2C peripheral base address.
+ * @param[in] enable    true = enable slave, false = disable slave.
  */
 static inline void I2C_Set_SlaveEnable(I2C_Type *baseAddr, bool enable)
 {
@@ -881,17 +1041,27 @@ static inline void I2C_Set_SlaveEnable(I2C_Type *baseAddr, bool enable)
     baseAddr->SCTRL = (uint32_t) regValue;
 }
 
+/*! @} */ /* End of Slave Enable */
+
+/*******************************************************************************
+ * Slave Status Events
+ ******************************************************************************/
+/*!
+ * @name Slave Status Events
+ * @brief Functions for querying I2C slave event flags (bit error, STOP,
+ *        repeated START, address valid, Rx/Tx data, FIFO error).
+ * @{
+ */
 
 #if(I2C_HAS_ULTRA_FAST_MODE)
 
 /*!
- * @brief Check the detection of a FIFO overflow or underflow
- * 
- * This function checks for the occurrence of a slave FIFO overflow or underflow. 
+ * @brief Check for slave FIFO overflow or underflow.
+ *
  * This event can only occur if clock stretching is disabled.
- * 
- * @param baseAddr  base address of the I2C module
- * @return  indication of a FIFO overflow or underflow
+ *
+ * @param[in] baseAddr  Pointer to the I2C peripheral base address.
+ * @return  true if FIFO overflow/underflow detected, false otherwise.
  */
 static inline bool I2C_Get_SlaveFIFOErrorEvent(const I2C_Type *baseAddr)
 {
@@ -1007,14 +1177,23 @@ static inline bool I2C_Get_SlaveTransmitDataEvent(const I2C_Type *baseAddr)
     return (bool) ((regValue != 0U) ? true : false);
 }
 
+/*! @} */ /* End of Slave Status Events */
+
+/*******************************************************************************
+ * Slave Status Clear
+ ******************************************************************************/
+/*!
+ * @name Slave Status Clear
+ * @brief Functions for clearing I2C slave event flags.
+ * @{
+ */
+
 #if(I2C_HAS_ULTRA_FAST_MODE)
 
 /*!
- * @brief Clear the FIFO overflow or underflow flag
- * 
- * This function clears the FIFO overflow or underflow event.
- * 
- * @param baseAddr  base address of the I2C module
+ * @brief Clear the slave FIFO overflow/underflow flag.
+ *
+ * @param[in] baseAddr  Pointer to the I2C peripheral base address.
  */
 static inline void I2C_Clear_SlaveFIFOErrorEvent(I2C_Type *baseAddr)
 {
@@ -1059,28 +1238,23 @@ static inline void I2C_Clear_SlaveRepeatedStartEvent(I2C_Type *baseAddr)
     baseAddr->SSTS = ((uint32_t) 1U << I2C_SSTS_RSIF_SHIFT);
 }
 
+/*! @} */ /* End of Slave Status Clear */
+
+/*******************************************************************************
+ * Slave Interrupt Control
+ ******************************************************************************/
 /*!
- * @brief Enable or disable specified I2C slave interrupts
- * 
- * This function can enable or disable one or more slave interrupt sources 
- * specified by the interrupts parameter.
- * 
- * @param baseAddr  base address of the I2C module
- * @param interrupts  interrupts to be enabled or disabled; 
- *  must be a bitwise or between one or more of the following constants: 
- *  - I2C_SLAVE_SMBUS_ALERT_RESPONSE  - SMBus Alert Response Interrupt
- *  - I2C_SLAVE_GENERAL_CALL          - General Call Interrupt
- *  - I2C_SLAVE_ADDRESS_MATCH_1       - Address Match 1 Interrupt
- *  - I2C_SLAVE_ADDRESS_MATCH_0       - Address Match 0 Interrupt
- *  - I2C_SLAVE_FIFO_ERROR            - FIFO Error Interrupt
- *  - I2C_SLAVE_BIT_ERROR             - Bit Error Interrupt
- *  - I2C_SLAVE_STOP_DETECT           - STOP Detect Interrupt
- *  - I2C_SLAVE_REPEATED_START        - Repeated Start Interrupt
- *  - I2C_SLAVE_TRANSMIT_ACK          - Transmit ACK Interrupt
- *  - I2C_SLAVE_ADDRESS_VALID         - Address Valid Interrupt
- *  - I2C_SLAVE_RECEIVE_DATA          - Receive Data Interrupt
- *  - I2C_SLAVE_TRANSMIT_DATA         - Transmit Data Interrupt
- * @param enable  specifies whether to enable or disable specified interrupts
+ * @name Slave Interrupt Control
+ * @brief Functions for enabling/disabling I2C slave interrupt sources.
+ * @{
+ */
+
+/*!
+ * @brief Enable or disable specified I2C slave interrupts.
+ *
+ * @param[in] baseAddr    Pointer to the I2C peripheral base address.
+ * @param[in] interrupts  Bitmask of interrupts (OR of I2C_SLAVE_*_INT defines).
+ * @param[in] enable      true = enable, false = disable.
  */
 static inline void I2C_Set_SlaveInt(I2C_Type *baseAddr, uint32_t interrupts, bool enable)
 {
@@ -1132,14 +1306,22 @@ static inline bool I2C_Get_SlaveInt(const I2C_Type *baseAddr, uint32_t interrupt
     return hasInterrupts;
 }
 
+/*! @} */ /* End of Slave Interrupt Control */
+
+/*******************************************************************************
+ * Slave DMA Control
+ ******************************************************************************/
 /*!
- * @brief Enable/disable slave receive data DMA requests
- * 
- * This function enables or disables generation of Rx DMA requests when received
- * data is available.
- * 
- * @param baseAddr  base address of the I2C module
- * @param enable  specifies whether to enable or disable receive data DMA requests
+ * @name Slave DMA Control
+ * @brief Functions for enabling/disabling DMA requests on slave Rx/Tx paths.
+ * @{
+ */
+
+/*!
+ * @brief Enable or disable slave receive data DMA requests.
+ *
+ * @param[in] baseAddr  Pointer to the I2C peripheral base address.
+ * @param[in] enable    true = enable Rx DMA, false = disable Rx DMA.
  */
 static inline void I2C_Set_SlaveRxDMA(I2C_Type *baseAddr, bool enable)
 {
@@ -1166,14 +1348,25 @@ static inline void I2C_Set_SlaveTxDMA(I2C_Type *baseAddr, bool enable)
     baseAddr->SCTRL = (uint32_t) regValue;
 }
 
+/*! @} */ /* End of Slave DMA Control */
+
+/*******************************************************************************
+ * Slave Address Configuration
+ ******************************************************************************/
 /*!
- * @brief Control address match configuration
- * 
- * This function configures the condition that will cause an address match to 
- * occur. See type i2c_slave_addr_config_t for a description of available options.
- * 
- * @param baseAddr  base address of the I2C module
- * @param configuration  configures the condition that will cause an address to match
+ * @name Slave Address Configuration
+ * @brief Functions for configuring slave address matching, ADDR0 register,
+ *        received address readback, and High-Speed mode detection.
+ * @{
+ */
+
+/*!
+ * @brief Set the address match configuration.
+ *
+ * Configures the condition that triggers a slave address match.
+ *
+ * @param[in] baseAddr       Pointer to the I2C peripheral base address.
+ * @param[in] configuration  Address match mode (see #i2c_slave_addr_config_t).
  */
 static inline void I2C_Set_SlaveAddrConfig(I2C_Type *baseAddr, i2c_slave_addr_config_t configuration)
 {
@@ -1202,15 +1395,26 @@ static inline void I2C_Set_SlaveHighSpeedModeDetect(I2C_Type *baseAddr, bool ena
     baseAddr->SCTRL = (uint32_t) regValue;
 }
 
+/*! @} */ /* End of Slave Address Configuration */
+
+/*******************************************************************************
+ * Slave ACK/NACK & Clock Stretching
+ ******************************************************************************/
 /*!
- * @brief Control slave behaviour when NACK is detected
- * 
- * This function controls the option to ignore received NACKs. When enabled, the 
- * I2C slave will continue transfers after a NACK is detected. This option is needed
- * for Ultra-Fast mode.
- * 
- * @param baseAddr  base address of the I2C module
- * @param nack_config  slave behaviour when NACK is detected
+ * @name Slave ACK/NACK & Clock Stretching
+ * @brief Functions for controlling slave NACK handling, ACK transmission,
+ *        and SCL clock stretching on various bus events.
+ * @{
+ */
+
+/*!
+ * @brief Configure slave behaviour when NACK is detected.
+ *
+ * When enabled, the slave continues transfers after a NACK.
+ * Required for Ultra-Fast mode operation.
+ *
+ * @param[in] baseAddr     Pointer to the I2C peripheral base address.
+ * @param[in] nack_config  NACK reaction mode (see #i2c_slave_nack_config_t).
  */
 static inline void I2C_Set_SlaveIgnoreNACK(I2C_Type *baseAddr, i2c_slave_nack_config_t nack_config)
 {
@@ -1293,18 +1497,27 @@ static inline void I2C_Set_SlaveAddrStall(I2C_Type *baseAddr, bool enable)
     baseAddr->SCTRL = (uint32_t) regValue;
 }
 
+/*! @} */ /* End of Slave ACK/NACK & Clock Stretching */
+
+/*******************************************************************************
+ * Slave Address & Data I/O
+ ******************************************************************************/
 /*!
- * @brief Configure the ADDR0 address for slave address match
- * 
- * This function configures the ADDR0 value which is used to validate the received 
- * slave address. In 10-bit mode, the first address byte is compared to 
- * { 11110, ADDR0[10:9] } and the second address byte is compared to ADDR0[8:1]. 
- * In 7-bit mode, the address is compared to ADDR0[7:1]
- * The formula used for address validation is configured with function 
- * I2C_Set_SlaveAddrConfig().
- * 
- * @param baseAddr  base address of the I2C module
- * @param addr  ADDR0 address for slave address match
+ * @name Slave Address & Data I/O
+ * @brief Functions for configuring the slave address register (ADDR0),
+ *        reading the received address, and transmitting/receiving data.
+ * @{
+ */
+
+/*!
+ * @brief Set the ADDR0 register for slave address matching.
+ *
+ * In 7-bit mode the address is compared to ADDR0[7:1]. In 10-bit mode,
+ * the first byte is compared to {11110, ADDR0[10:9]} and the second
+ * byte to ADDR0[8:1].
+ *
+ * @param[in] baseAddr  Pointer to the I2C peripheral base address.
+ * @param[in] addr      Address value to write to ADDR0.
  */
 static inline void I2C_Set_SlaveAddr0(I2C_Type *baseAddr, uint16_t addr)
 {
@@ -1380,14 +1593,26 @@ static inline uint8_t I2C_Get_SlaveData(const I2C_Type *baseAddr)
     return (uint8_t) tmp;
 }
 
+/*! @} */ /* End of Slave Address & Data I/O */
+
+/*******************************************************************************
+ * Master Timeout Configuration
+ ******************************************************************************/
 /*!
- * @brief Set the idle timeout period
- * 
- * This function is to configure the number of cycles that the line idle flag is 
- * set after detecting that SDA and SCL are high.
- * 
- * @param baseAddr  base address of the I2C module
- * @param value  timeout period
+ * @name Master Timeout Configuration
+ * @brief Functions for configuring idle timeout and line-low timeout
+ *        detection for bus error recovery.
+ * @{
+ */
+
+/*!
+ * @brief Set the idle timeout period.
+ *
+ * Configures the number of prescaled cycles after SDA and SCL are both
+ * high before the bus is considered idle.
+ *
+ * @param[in] baseAddr  Pointer to the I2C peripheral base address.
+ * @param[in] value     Timeout period value.
  */
 static inline void I2C_Set_MasterTimeoutPeriod(I2C_Type *baseAddr, uint16_t value)
 {
@@ -1438,19 +1663,15 @@ static inline void I2C_Set_MasterLineLowDetect(I2C_Type *baseAddr)
     baseAddr->TOCFG |= I2C_TOCFG_SDA_MASK;
 }
 
-
-
-
-/*! @}*/
+/*! @} */ /* End of Master Timeout Configuration */
 
 #if defined(__cplusplus)
 }
 #endif
 
-/*! @}*/
+/*! @} */ /* End of i2c_hw_access group */
 
-#endif /* __I2C_HW_ACCESS_H__*/
+#endif /* I2C_HW_ACCESS_H */
 /*******************************************************************************
  * EOF
  ******************************************************************************/
-

@@ -15,18 +15,21 @@
 /* USER CODE END Header */
 #include "sdk_project_config.h"
 /* Includes ------------------------------------------------------------------*/
-
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-#define FLASH_INST        (0U)
-#define TEST_FLASH_ADDR_0 (0x32000U)
-#define TEST_FLASH_LEN_0  (4 * 1024U)
-#define TEST_FLASH_ADDR_1 (0x64000U)
-#define TEST_FLASH_LEN_1  (6 * 1024U)
+#define FLASH_INST            (0U)
+#define TEST_FLASH_ADDR_0     (0x32000U)
+#define TEST_FLASH_LEN_0      (4 * 1024U)
+#define TEST_FLASH_ADDR_1     (0x64000U)
+#define TEST_FLASH_LEN_1      (6 * 1024U)
+#define CUS_NVR_TEST          (1U) /* 1: test custom NVR, 0: not test custom NVR */
+#define CUS_NVR_TEST_ADDR     (0x10000400U)
+#define CUS_NVR_TEST_LEN      (0x200U) /* 512 bytes */
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -51,6 +54,7 @@ static void Board_Init(void);
 /* USER CODE BEGIN 0 */
 /* USER CODE END 0 */
 
+
 /**
  * @brief  The application entry point.
  * @retval int
@@ -61,7 +65,7 @@ int main(void)
     status_t status = STATUS_SUCCESS;
     uint32_t addr;
     uint32_t data[4];
-    /* USER CODE END 1 */
+    /* USER CODE END 1 */ 
     Board_Init();
     /* USER CODE BEGIN 2 */
     PRINTF("Build %s %s\n", __DATE__, __TIME__);
@@ -115,6 +119,68 @@ int main(void)
         }
     }
     PRINTF("Flash block 1 check finished.\n");
+
+#if CUS_NVR_TEST
+    PRINTF("Checking CUS NVR from 0x%x to 0x%x!\r\n",
+           CUS_NVR_TEST_ADDR,
+           CUS_NVR_TEST_ADDR + CUS_NVR_TEST_LEN);
+
+    /* Unlock NVR for customer access */
+    EFM->CUS_KEY = 0x4dff32U;
+
+    /* CUS_NVR is in block 1, if code running in block 0, no need to disable global interrupt */
+    /* Erase the CUS NVR sector (single sector, 1KB) */
+    status |= FLASH_DRV_EraseNVR(FLASH_INST, CUS_NVR_TEST_ADDR);
+
+    /* Verify erase: check all 0xFF using FLASH_DRV_ReadNVR */
+    for (addr = CUS_NVR_TEST_ADDR; addr < (CUS_NVR_TEST_ADDR + CUS_NVR_TEST_LEN); addr += 4U * 4U)
+    {
+        status |= FLASH_DRV_ReadNVR(FLASH_INST, addr, 4U * 4U, data);
+        if ((data[0] != 0xFFFFFFFFU) ||
+            (data[1] != 0xFFFFFFFFU) ||
+            (data[2] != 0xFFFFFFFFU) ||
+            (data[3] != 0xFFFFFFFFU))
+        {
+            flashError = true;
+            PRINTF("CUS NVR Address %x erase failed (not all 0xFF)!\r\n", addr);
+            PRINTF("Readback 0x%x,%x,%x,%x.\r\n",
+                   data[0], data[1], data[2], data[3]);
+        }
+    }
+
+    /* Program 512 bytes to CUS NVR, 16 bytes per write unit */
+    for (addr = CUS_NVR_TEST_ADDR; addr < (CUS_NVR_TEST_ADDR + CUS_NVR_TEST_LEN); addr += 4U * 4U)
+    {
+        data[0] = addr;
+        data[1] = addr + 4U;
+        data[2] = addr + 8U;
+        data[3] = addr + 12U;
+        status |= FLASH_DRV_ProgramNVR(FLASH_INST, addr, 4U * 4U, data);
+    }
+
+    /* Verify CUS NVR using FLASH_DRV_ReadNVR */
+    for (addr = CUS_NVR_TEST_ADDR; addr < (CUS_NVR_TEST_ADDR + CUS_NVR_TEST_LEN); addr += 4U * 4U)
+    {
+        status |= FLASH_DRV_ReadNVR(FLASH_INST, addr, 4U * 4U, data);
+        if ((data[0] != addr) ||
+            (data[1] != addr + 4U) ||
+            (data[2] != addr + 8U) ||
+            (data[3] != addr + 12U))
+        {
+            flashError = true;
+            PRINTF("CUS NVR Address %x program failed!\r\n", addr);
+            PRINTF("Expected 0x%x,%x,%x,%x, actual 0x%x,%x,%x,%x.\r\n",
+                   addr, addr + 4U, addr + 8U, addr + 12U,
+                   data[0], data[1], data[2], data[3]);
+        }
+    }
+
+    /* Lock NVR */
+    EFM->CUS_KEY = 0x0U;
+
+    PRINTF("CUS NVR check finished.\n");
+#endif /* CUS_NVR_TEST */
+
     if (!flashError)
     {
         PRINTF("Flash Demo Pass!\n");
@@ -144,16 +210,16 @@ int main(void)
 
 static void Board_Init(void)
 {
-    CLOCK_SYS_Init(g_clockManConfigsArr, CLOCK_MANAGER_CONFIG_CNT, g_clockManCallbacksArr, CLOCK_MANAGER_CALLBACK_CNT);
-    if (STATUS_SUCCESS != CLOCK_SYS_UpdateConfiguration(CLOCK_MANAGER_ACTIVE_INDEX, CLOCK_MANAGER_POLICY_AGREEMENT))
+    CLOCK_SYS_Init(g_clockManConfigsArr,CLOCK_MANAGER_CONFIG_CNT,g_clockManCallbacksArr,CLOCK_MANAGER_CALLBACK_CNT);
+    if(STATUS_SUCCESS != CLOCK_SYS_UpdateConfiguration(CLOCK_MANAGER_ACTIVE_INDEX,CLOCK_MANAGER_POLICY_AGREEMENT))
     {
         /* USER CODE BEGIN ERROR_HANDLER 1 */
         SystemSoftwareReset();
         /* USER CODE END ERROR_HANDLER 1 */
     }
-    PINS_DRV_Init(NUM_OF_CONFIGURED_PINS0, g_pin_mux_InitConfigArr0);
+    PINS_DRV_Init(NUM_OF_CONFIGURED_PINS0,g_pin_mux_InitConfigArr0);
     UTILITY_PRINT_Init();
-    FLASH_DRV_Init(0, &flash_config0, &flash_config0_State);
+    FLASH_DRV_Init(0,&flash_config0,&flash_config0_State);
 }
 
 /* USER CODE BEGIN 4 */

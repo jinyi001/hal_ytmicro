@@ -1,117 +1,288 @@
 /*!
-@defgroup crc Cyclic Redundancy Check (CRC)
-@brief The YTMicro SDK provides Peripheral Drivers for the Cyclic Redundancy Check (CRC) module.
+@defgroup crc
+@ingroup mod_security Cyclic Redundancy Check (CRC)
+@brief Hardware-accelerated CRC computation module for the YTMicro SDK.
 
--# CRC SDK driver supports:
-    - Generate 16/32-bit CRC code for error detection.
-    - Provides a hardware fix polynomial, seed, and other parameters required to implement 16/32-bit CRC standard.
-    - Calculate 16/32-bit code for 32 bits of data at a time.
-.
-### Important note when use CRC module: ###
-- When generating CRC-32 for the ITU-T V.42 standard the user needs to set
-   SWAP_BYTEWISE together with INV and SWAP.
-- When generating CRC-16-CCITT(0x1021) standard the user needs to set SWAP_BITWISE bit.
-.
+@details
+The CRC module provides a hardware-based cyclic redundancy check engine
+that computes checksums over arbitrary data streams. It is commonly used for
+data integrity verification in communication protocols, flash programming,
+and memory protection.
 
-# Basic Operations of CRC
-___________
-1. To initialize the CRC module, call CRC_DRV_Init() function and pass
-   the user configuration data structure to it.
-    This is example code to configure the CRC driver using CRC_DRV_GetDefaultConfig() function:
-~~~~~{.c}
-    #define INST_CRC (0U)
+@section crc_features Key Features
+- Hardware-accelerated CRC computation (single-cycle per data word).
+- Supports **CRC-16** and **CRC-32** protocols, with optional **CRC-4** and
+  **CRC-8** on select devices.
+- Configurable initial seed (starting checksum value).
+- Configurable bit-order transpose (reflection) on input and output paths.
+- Optional output complement (final XOR) for protocols that require it.
+- Accepts 8-bit, 16-bit, or 32-bit data input widths.
+- Supports streaming (multi-block) CRC computation — data can be fed
+  incrementally without restarting the calculation.
 
-    /* Configuration structure crc_InitConfig */
-    crc_user_config_t crc_InitConfig;
+@section crc_standards Supported CRC Standards
 
-    /* Get default configuration for CRC module: CRC-16-CCITT (0x1021) standard */
-    CRC_DRV_GetDefaultConfig(&crc_InitConfig);
+The following table lists common CRC standards and their corresponding
+configuration parameter values for the crc_user_config_t structure:
 
-    /* Initializes the CRC */
-    CRC_DRV_Init(INST_CRC, &crc_InitConfig);
-~~~~~
-2. To configure and operate the CRC module:
-    Function CRC_DRV_Configure() shall be used to write user configuration to CRC
-    hardware module before starting operation by calling CRC_DRV_WriteData().
-    Finally, using CRC_DRV_GetCrcResult() function to get the result of CRC calculation.
-    This is example code to configure and get CRC block for YTM32B1L:
-~~~~~{.c}
-    #define INST_CRC (0U)
+| Standard                  | crcWidth     | seed       | writeTranspose       | readTranspose        | complementChecksum |
+|---------------------------|--------------|------------|----------------------|----------------------|--------------------|
+| CRC-16-CCITT (0x1021)     | CRC_BITS_16  | 0xFFFF     | CRC_TRANSPOSE_BITS   | CRC_TRANSPOSE_NONE   | false              |
+| CRC-16-IBM (0x8005)       | CRC_BITS_16  | 0x0000     | CRC_TRANSPOSE_BITS   | CRC_TRANSPOSE_BITS   | false              |
+| CRC-32 (0x04C11DB7)       | CRC_BITS_32  | 0xFFFFFFFF | CRC_TRANSPOSE_BITS   | CRC_TRANSPOSE_BITS   | true               |
+| CRC-32/ITU-T V.42         | CRC_BITS_32  | 0xFFFFFFFF | CRC_TRANSPOSE_BITS   | CRC_TRANSPOSE_BITS   | true               |
 
-    uint8_t buffer[] = { 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30 };
-    uint32_t result;
+@warning When generating CRC-32 for the ITU-T V.42 standard, you **must** set
+SWAP_BYTEWISE (readTranspose) together with INV (complementChecksum) and
+SWAP_IN (writeTranspose). Failure to do so produces incorrect results.
 
-    /* Set the CRC configuration: CRC-16-CCITT (0x1021) standard */
-    CRC_DRV_Configure(INST_CRC, &crc_InitConfig);
-    /* Write data to the current CRC calculation */
-    CRC_DRV_WriteData(INST_CRC, buffer, 10U);
-    /* Get result of CRC calculation (0x3218U) */
-    result = CRC_DRV_GetCrcResult(INST_CRC);
+@warning When generating CRC-16-CCITT (0x1021), you **must** set the
+SWAP_BITWISE bit (writeTranspose = CRC_TRANSPOSE_BITS).
 
-    /* De-init */
-    CRC_DRV_Deinit(INST_CRC);
-~~~~~
-3. To get result of 32-bit data call CRC_DRV_GetCrc32() function.
-~~~~~{.c}
-    #define INST_CRC (0U)
+@section crc_arch Module Architecture
 
-    uint32_t seed = 0xFFFFU;
-    uint32_t data = 0x12345678U;
-    uint32_t result;
+The CRC module is organized in a two-layer architecture:
 
-    /* Get result of 32-bit data (0x30EC) at CRC-16-CCITT (0x1021) standard configuration mode */
-    result = CRC_DRV_GetCrc32(INST_CRC, data, true, seed);
-~~~~~
-4. To get result of 16-bit data call CRC_DRV_GetCrc16() function.
-~~~~~{.c}
-    #define INST_CRC (0U)
+@verbatim
+┌──────────────────────────────────────────────┐
+│              Application Code                │
+│         (calls CRC_DRV_* functions)          │
+├──────────────────────────────────────────────┤
+│          CRC Driver Layer (crc_driver.h/c)   │
+│  ● Instance-based API (CRC_DRV_Init, etc.)   │
+│  ● Uses instance index (0..N) to resolve     │
+│    peripheral base address                   │
+├──────────────────────────────────────────────┤
+│     CRC HW Access Layer (crc_hw_access.h/c)  │
+│  ● Direct register-level access (CRC_Init,   │
+│    CRC_SetDataReg, CRC_GetCrcResult, etc.)   │
+│  ● Mostly inline functions for performance   │
+├──────────────────────────────────────────────┤
+│           CRC Peripheral Hardware            │
+│         (DATA, INIT, RESULT, CTRL regs)      │
+└──────────────────────────────────────────────┘
+@endverbatim
 
-    uint32_t seed = 0xFFFFU;
-    uint16_t data = 0x1234U;
-    uint32_t result;
+@subsection crc_arch_driver Driver Layer (crc_driver.h)
+Application code should **only** use the `CRC_DRV_*` functions from crc_driver.h.
+These functions accept a zero-based **instance** index and resolve the hardware
+base address internally using `CRC_BASE_PTRS`.
 
-    /* Get result of 16-bit data (0x0EC9) at CRC-16-CCITT (0x1021) standard configuration mode */
-    result = CRC_DRV_GetCrc16(INST_CRC, data, true, seed);
-~~~~~
-5. To get current configuration of the CRC module, just call CRC_DRV_GetConfig() function.
-~~~~~{.c}
-    #define INST_CRC (0U)
-    crc_user_config_t crc_InitConfig;
+@subsection crc_arch_hw HW Access Layer (crc_hw_access.h)
+This internal layer provides low-level inline register accessors. It is
+organized into five functional groups:
+- **Initialization** — CRC_Init()
+- **Data Input** — CRC_SetDataReg(), CRC_SetDataReg16(), CRC_SetDataReg8()
+- **Result & Seed** — CRC_GetCrcResult(), CRC_GetResultReg(), CRC_GetSeedReg(), CRC_SetSeedReg()
+- **Protocol Config** — CRC_SetProtocolWidth(), CRC_GetProtocolWidth(), CRC_SetFXorMode(), CRC_GetFXorMode()
+- **Transpose Config** — CRC_SetWriteTranspose(), CRC_GetWriteTranspose(), CRC_SetReadTranspose(), CRC_GetReadTranspose()
 
-    /* Get current configuration of the CRC module */
-    CRC_DRV_GetConfig(INST_CRC, &crc_InitConfig);
-~~~~~
-6. To Get default configuration of the CRC module, just call CRC_DRV_GetDefaultConfig() function.
-~~~~~{.c}
-    #define INST_CRC (0U)
-    crc_user_config_t crc_InitConfig;
+@section crc_config Configuration Parameters
 
-    /* Get default configuration of the CRC module */
-    CRC_DRV_GetDefaultConfig(&crc_InitConfig);
-~~~~~
+@subsection crc_config_struct crc_user_config_t Fields
+| Field              | Type             | Description                                                                    | Default Value                        |
+|--------------------|------------------|-------------------------------------------------                               |--------------------------------------|
+| crcWidth           | crc_bit_width_t  | CRC polynomial width (CRC_BITS_16 / CRC_BITS_32; CRC_BITS_4 / CRC_BITS_8 on supported devices). | FEATURE_CRC_DEFAULT_WIDTH (CRC_BITS_16) |
+| readTranspose      | crc_transpose_t  | Bit-order transpose applied to the CRC result on readback.                     | FEATURE_CRC_DEFAULT_READ_TRANSPOSE (NONE) |
+| writeTranspose     | crc_transpose_t  | Bit-order transpose applied to input data before CRC computation.              | FEATURE_CRC_DEFAULT_WRITE_TRANSPOSE (NONE) |
+| complementChecksum | bool             | If true, CRC result is complemented (XORed with 0xFFFF / 0xFFFFFFFF) on read. | false                                |
+| seed               | uint32_t         | Initial checksum value. Determines starting state of the CRC engine.           | FEATURE_CRC_DEFAULT_SEED (0xFFFF)    |
 
-## Integration guideline ##
+@subsection crc_config_features Device Feature Macros
+| Macro                              | Description                                           |
+|------------------------------------|-------------------------------------------------------|
+| FEATURE_CRC_DEFAULT_WIDTH          | Default CRC width (typically CRC_BITS_16).            |
+| FEATURE_CRC_DEFAULT_READ_TRANSPOSE | Default read transpose (typically CRC_TRANSPOSE_NONE).|
+| FEATURE_CRC_DEFAULT_WRITE_TRANSPOSE| Default write transpose (typically CRC_TRANSPOSE_NONE).|
+| FEATURE_CRC_DEFAULT_POLYNOMIAL     | Default polynomial value (typically 0x1021).          |
+| FEATURE_CRC_DEFAULT_SEED           | Default seed value (typically 0xFFFF).                |
+| FEATURE_CRC_SUPPORT_CRC4           | Set to 1 if device supports 4-bit CRC mode.          |
+| FEATURE_CRC_SUPPORT_CRC8           | Set to 1 if device supports 8-bit CRC mode.          |
+| FEATURE_CRC_DRIVER_SOFT_POLYNOMIAL | Defined if device uses software-configurable poly.    |
 
-### Compilation units ###
+@section crc_usage Usage Patterns
 
-The following files need to be compiled in the project:
-\verbatim
-${SDK_PATH}\platform\drivers\src\crc\crc_driver.c
-${SDK_PATH}\platform\drivers\src\crc\crc_hw_access.c
-\endverbatim
+@subsection crc_usage_basic Pattern 1: Basic Initialization and Block CRC Calculation
+The most common usage: initialize with a standard CRC configuration, feed a
+data buffer, and retrieve the checksum.
 
-### Include path ###
+@code{.c}
+#define INST_CRC (0U)
 
-The following paths need to be added to the include path of the toolchain:
-\verbatim
-${SDK_PATH}\platform\drivers\inc\
-\endverbatim
+crc_user_config_t crcConfig;
+uint8_t buffer[] = { 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39 };
+uint32_t result;
 
-### Compile symbols ###
+/* Step 1: Get default configuration (CRC-16-CCITT, seed=0xFFFF) */
+CRC_DRV_GetDefaultConfig(&crcConfig);
 
-No special symbols are required for this component
+/* Step 2: Initialize CRC instance */
+CRC_DRV_Init(INST_CRC, &crcConfig);
 
-### Dependencies ###
+/* Step 3: Optionally reconfigure (e.g., change to CRC-32) */
+/* CRC_DRV_Configure(INST_CRC, &crcConfig); */
 
-\ref clock_manager
+/* Step 4: Feed data */
+CRC_DRV_WriteData(INST_CRC, buffer, sizeof(buffer));
+
+/* Step 5: Get CRC result */
+result = CRC_DRV_GetCrcResult(INST_CRC);
+
+/* Step 6: De-initialize when done */
+CRC_DRV_Deinit(INST_CRC);
+@endcode
+
+@subsection crc_usage_single Pattern 2: Single-Value Quick CRC (32/16/8-bit)
+When you only need to compute the CRC of a single data word without full
+init/deinit overhead:
+
+@code{.c}
+#define INST_CRC (0U)
+
+uint32_t seed = 0xFFFFU;
+uint32_t data32 = 0x12345678U;
+uint16_t data16 = 0x1234U;
+uint32_t result;
+
+/* CRC of a single 32-bit word, with new seed */
+result = CRC_DRV_GetCrc32(INST_CRC, data32, true, seed);
+
+/* CRC of a single 16-bit half-word, with new seed */
+result = CRC_DRV_GetCrc16(INST_CRC, data16, true, seed);
+
+/* CRC of a single 8-bit byte, continuing previous calculation (no new seed) */
+result = CRC_DRV_GetCrc8(INST_CRC, 0x42U, false, 0U);
+@endcode
+
+@subsection crc_usage_stream Pattern 3: Streaming (Multi-Block) CRC
+Feed data in multiple segments. The CRC accumulates across calls as long
+as the seed is not re-written between them:
+
+@code{.c}
+#define INST_CRC (0U)
+
+crc_user_config_t crcConfig;
+CRC_DRV_GetDefaultConfig(&crcConfig);
+CRC_DRV_Init(INST_CRC, &crcConfig);
+
+/* First segment */
+uint8_t segment1[] = { 0x01, 0x02, 0x03, 0x04 };
+CRC_DRV_WriteData(INST_CRC, segment1, 4U);
+
+/* Optional: read intermediate CRC */
+uint32_t intermediateCrc = CRC_DRV_GetCrcResult(INST_CRC);
+
+/* Second segment — CRC continues from previous state */
+uint8_t segment2[] = { 0x05, 0x06, 0x07, 0x08 };
+CRC_DRV_WriteData(INST_CRC, segment2, 4U);
+
+/* Final CRC over all 8 bytes */
+uint32_t finalCrc = CRC_DRV_GetCrcResult(INST_CRC);
+
+CRC_DRV_Deinit(INST_CRC);
+@endcode
+
+@subsection crc_usage_reconfig Pattern 4: Runtime Reconfiguration
+Switch between CRC protocols at runtime without de-init:
+
+@code{.c}
+#define INST_CRC (0U)
+
+crc_user_config_t crcConfig;
+uint32_t result16, result32;
+uint8_t data[] = { 0xAA, 0xBB, 0xCC, 0xDD };
+
+/* --- CRC-16-CCITT calculation --- */
+CRC_DRV_GetDefaultConfig(&crcConfig);  /* CRC-16 by default */
+CRC_DRV_Init(INST_CRC, &crcConfig);
+CRC_DRV_WriteData(INST_CRC, data, sizeof(data));
+result16 = CRC_DRV_GetCrcResult(INST_CRC);
+
+/* --- Switch to CRC-32 --- */
+crcConfig.crcWidth = CRC_BITS_32;
+crcConfig.seed = 0xFFFFFFFFU;
+crcConfig.complementChecksum = true;
+crcConfig.writeTranspose = CRC_TRANSPOSE_BITS;
+crcConfig.readTranspose = CRC_TRANSPOSE_BITS;
+CRC_DRV_Configure(INST_CRC, &crcConfig);  /* Reconfigure in-place */
+CRC_DRV_WriteData(INST_CRC, data, sizeof(data));
+result32 = CRC_DRV_GetCrcResult(INST_CRC);
+
+CRC_DRV_Deinit(INST_CRC);
+@endcode
+
+@section crc_api API Quick Reference
+
+@subsection crc_api_init Initialization & De-initialization
+| Function                    | Description                                                    |
+|-----------------------------|----------------------------------------------------------------|
+| CRC_DRV_Init()              | Initialize CRC instance with user configuration.               |
+| CRC_DRV_Deinit()            | Reset CRC instance to default state.                           |
+| CRC_DRV_GetDefaultConfig()  | Fill configuration struct with device defaults.                |
+
+@subsection crc_api_config Configuration
+| Function                    | Description                                                    |
+|-----------------------------|----------------------------------------------------------------|
+| CRC_DRV_Configure()         | Apply configuration to CRC hardware at runtime.                |
+| CRC_DRV_GetConfig()         | Read current configuration from CRC hardware.                  |
+
+@subsection crc_api_calc CRC Calculation
+| Function                    | Description                                                    |
+|-----------------------------|----------------------------------------------------------------|
+| CRC_DRV_GetCrc32()          | Compute CRC of one 32-bit word (optionally with new seed).     |
+| CRC_DRV_GetCrc16()          | Compute CRC of one 16-bit half-word (optionally with new seed).|
+| CRC_DRV_GetCrc8()           | Compute CRC of one 8-bit byte (optionally with new seed).      |
+| CRC_DRV_WriteData()         | Feed a byte array into the running CRC calculation.            |
+| CRC_DRV_WriteData16()       | Feed a half-word array into the running CRC calculation.       |
+| CRC_DRV_WriteData32()       | Feed a word array into the running CRC calculation.            |
+| CRC_DRV_GetCrcResult()      | Retrieve the current CRC result.                               |
+
+@section crc_notes Important Notes
+
+@subsection crc_notes_clock Clock Dependency
+The CRC peripheral clock must be enabled via the clock_manager **before**
+calling CRC_DRV_Init(). The driver does not manage clocks internally.
+See @ref clock_manager.
+
+@subsection crc_notes_transpose Transpose and XOR Requirements
+- **CRC-32 ITU-T V.42**: requires `writeTranspose = CRC_TRANSPOSE_BITS`,
+  `readTranspose = CRC_TRANSPOSE_BITS`, and `complementChecksum = true`.
+  Omitting any of these produces incorrect checksums.
+- **CRC-16-CCITT (0x1021)**: requires `writeTranspose = CRC_TRANSPOSE_BITS`.
+
+@subsection crc_notes_device Device Variations
+Not all CRC bit widths are available on all devices:
+- **CRC-4**: only available when `FEATURE_CRC_SUPPORT_CRC4 == 1`.
+- **CRC-8**: only available when `FEATURE_CRC_SUPPORT_CRC8 == 1`.
+- Check the device-specific `<device>_features.h` header for support.
+
+@subsection crc_notes_streaming Streaming CRC Behavior
+When using CRC_DRV_WriteData() in streaming mode (Pattern 3), do **not** call
+CRC_DRV_Configure() between data segments, because it writes a new seed and
+resets the running checksum. Use CRC_DRV_GetCrcResult() to inspect intermediate
+values without disrupting the calculation.
+
+@section crc_integration Integration Guide
+
+@subsection crc_integration_files Compilation Units
+The following source files must be added to the project build:
+@verbatim
+${SDK_PATH}/platform/drivers/src/crc/crc_driver.c
+${SDK_PATH}/platform/drivers/src/crc/crc_hw_access.c
+@endverbatim
+
+@subsection crc_integration_include Include Paths
+Add the following directory to the toolchain include path:
+@verbatim
+${SDK_PATH}/platform/drivers/inc/
+@endverbatim
+
+@subsection crc_integration_symbols Compile Symbols
+No special compile-time symbols are required for this module. Device-specific
+feature macros (`FEATURE_CRC_*`) are automatically defined in the device
+features header.
+
+@subsection crc_integration_deps Dependencies
+- @ref clock_manager — Required for enabling the CRC peripheral clock.
+
 */

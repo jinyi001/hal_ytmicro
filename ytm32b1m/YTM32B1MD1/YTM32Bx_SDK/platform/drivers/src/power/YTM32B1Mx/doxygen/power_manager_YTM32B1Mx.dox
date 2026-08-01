@@ -1,91 +1,98 @@
 /*!
-@defgroup power_manager_ytm32b1ld0 Power Manager Driver
+@defgroup power_manager_ytm32b1mx Power Manager (YTM32B1Mx)
 @ingroup power_manager
-@brief This module covers the device-specific power_manager functionality implemented for YTM32B1LD0 SOC.
+@brief Device-specific Power Manager implementation for the YTM32B1Mx series.
 
-## Hardware background ##
+@details
+This module provides the YTM32B1Mx-specific implementation of the Power Manager
+driver. It implements the platform-specific POWER_SYS_Do* functions that
+perform the actual hardware register manipulation for power mode transitions
+on the YTM32B1M series MCUs.
 
-System Clock Unit(SCU) and Power Control Unit(PCU) is passing the system into and out of all low-power
- and Run modes.\n Controls the power, clocks and memories of the system to achieve
-the power consumption and functionality of that mode.
+@section power_b1mx_features Key Features
+- Supports RUN, SLEEP, DEEPSLEEP, and STANDBY power modes (all variants).
+- Supports POWERDOWN mode (on devices with FEATURE_SOC_SUPPORT_POWERDOWN_MODE).
+- Supports DEEP POWERDOWN mode (on devices with FEATURE_SOC_SUPPORT_DEEPPOWERDOWN_MODE).
+- CMU (Clock Monitoring Unit) save/restore around low-power entry.
+- SysTick disable/restore to prevent spurious wakeup.
+- FXOSC wait-for-valid after wakeup from deep sleep modes.
+- Cache invalidate/restore around low-power entry (on devices with FEATURE_SOC_SUPPORT_CACHE).
+- Flash idle wait before low-power entry (errata E220008 workaround).
 
+@section power_b1mx_modes Supported Power Modes
+| Power Mode     | Description                                                        |
+|----------------|--------------------------------------------------------------------|
+| RUN            | Normal run mode, full clock and peripherals.                       |
+| SLEEP          | Core in sleep, normal interrupt wakeup, peripherals active.        |
+| DEEPSLEEP      | Most clocks gated, async interrupt wakeup.                         |
+| STANDBY        | Internal LDO in low power, async interrupt or WKU wakeup.         |
+| POWERDOWN      | Only part of digital powered, WKU wakeup (device-dependent).      |
+| DEEP POWERDOWN | Deepest low-power state, limited wakeup sources (device-dependent).|
 
-## Driver consideration ##
+@section power_b1mx_config Configuration
+@subsection power_b1mx_config_struct power_manager_user_config_t
+| Field           | Type                    | Description                                       |
+|-----------------|-------------------------|----------------------------------------------------|
+| powerMode       | power_manager_modes_t   | Target power mode to enter.                        |
+| sleepOnExitValue| bool                    | If true, core returns to sleep after ISR completes.|
 
-Power mode entry and sleep-on-exit-value are provided at
-initialization time through the power manager user configuration structure.\n
-The available power mode entries are the following ones: SLEEP, DEEPSLEEP, STANDBY, POWERDONE.\n
+@section power_b1mx_usage Usage Example
+@code{.c}
+power_manager_user_config_t pwrMan_InitConfig = {
+    .powerMode = POWER_MANAGER_RUN,
+    .sleepOnExitValue = false,
+};
 
-This is an example of configuration:
-@code
+power_manager_user_config_t *powerConfigsArr[] = {
+    &pwrMan_InitConfig
+};
 
- power_manager_user_config_t pwrMan_InitConfig = {
-     .powerMode = POWER_MANAGER_RUN,
-     .sleepOnExitValue = false,
- };
+power_manager_callback_user_config_t *powerCallbacksConfigsArr[] = {(void *)0};
 
- power_manager_user_config_t *powerConfigsArr[] = {
-     &pwrMan_InitConfig
- };
+if (STATUS_SUCCESS != POWER_SYS_Init(&powerConfigsArr, 1, &powerCallbacksConfigsArr, 0)) {
+    /* Handle error */
+}
 
- power_manager_callback_user_config_t * powerCallbacksConfigsArr[] = {(void *)0};
-
- if (STATUS_SUCCESS != POWER_SYS_Init(&powerConfigsArr,1,&powerCallbacksConfigsArr,0)) {
-     ...
- }
- else {
-     ...
- }
-
- if (STATUS_SUCCESS != POWER_SYS_SetMode(0,POWER_MANAGER_POLICY_AGREEMENT)) {
-     ...
- }
- else {
-     ...
- }
-
+if (STATUS_SUCCESS != POWER_SYS_SetMode(0, POWER_MANAGER_POLICY_AGREEMENT)) {
+    /* Handle error */
+}
 @endcode
 
-### Compilation units ###
+@section power_b1mx_integration Integration Guide
+@subsection power_b1mx_files Compilation Units
+The following source files must be compiled in the project:
+@verbatim
+${SDK_PATH}/platform/drivers/src/power/power_manager.c
+${SDK_PATH}/platform/drivers/src/power/YTM32B1Mx/power_manager_YTM32B1Mx.c
+@endverbatim
 
-The following files need to be compiled in the project:
-\verbatim
-${SDK_PATH}\platform\drivers\src\power_manager.c
-${SDK_PATH}\platform\drivers\src\YTM32B1MDx\power_manager_YTM32B1MDx.c
-\endverbatim
+@subsection power_b1mx_include Include Paths
+The following paths must be added to the include path of the toolchain:
+@verbatim
+${SDK_PATH}/platform/drivers/inc/
+${SDK_PATH}/platform/drivers/src/power/
+${SDK_PATH}/platform/drivers/src/power/YTM32B1Mx/
+@endverbatim
 
-### Include path ###
+@subsection power_b1mx_symbols Compile Symbols
+No special symbols are required for this component. Platform-specific feature
+macros are automatically defined in the device features header.
 
-The following paths need to be added to the include path of the toolchain:
-\verbatim
-${SDK_PATH}\platform\drivers\inc\
-${SDK_PATH}\platform\drivers\src\power\
-${SDK_PATH}\platform\drivers\src\power\YTM32B1MDx\
-\endverbatim
+@subsection power_b1mx_deps Dependencies
+- @ref clock_manager — Required for FXOSC valid wait after wakeup.
 
-### Compile symbols ###
+@section power_b1mx_notes Important Notes
 
-No special symbols are required for this component
+1. The Power Manager does not check if necessary wakeup sources are enabled.
+   It is the responsibility of the application to configure wakeup sources
+   before calling POWER_SYS_SetMode().
 
-### Dependencies ###
+2. The debug module is not available under DeepSleep/Standby/PowerDown modes.
+   Disconnect the debugger before low-power entry.
 
-\ref clock_manager
+3. Do not call POWER_SYS_SetMode() from an interrupt service routine.
 
-
-
-## Important Note
-
-1. The power manager driver won't check if necessary wakeup sources are enabled.
-   It is the responsibility of the user to ensure that the wakeup sources are
-   enabled before calling the power manager APIs.
-
-2. The debug module is not available under DeepSleep/Standby mode. Please remove
-  the debugger before low power mode entry.
-
-3. The power manager driver doesn't call in the interrupt service routine.
-
-4. If user code is configured to enter low power mode right after system start, the
-   debugger may not be able to access the system, and user could not program the chip
-   again, so add delay during development.
+4. If the application enters low-power mode immediately at startup, the
+   debugger may not be able to connect. Add a startup delay during development.
 
 */

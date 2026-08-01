@@ -8,6 +8,13 @@
 /*!
  * @file rtc_driver.c
  * @version 1.4.1
+ *
+ * @brief RTC Driver — implementation of the public RTC_DRV_* API.
+ *
+ * This file implements the application-level RTC driver functions declared in
+ * rtc_driver.h. The driver wraps the low-level hardware access helpers in
+ * rtc_hw_access.h and maintains per-instance runtime state for alarm and
+ * interrupt callback handling.
  */
 
 /*!
@@ -19,58 +26,51 @@
 
 #include "rtc_hw_access.h"
 
+/*******************************************************************************
+ * Variables
+ ******************************************************************************/
 
-/*!< Table of RTC base pointers */
+/*! @brief Table of base addresses for RTC peripheral instances. */
 static RTC_Type *const g_rtcBase[RTC_INSTANCE_COUNT] = RTC_BASE_PTRS;
 
-/*!< @brief Table used to store the RTC IRQ names */
+/*! @brief Table of generic RTC IRQ numbers for each instance. */
 static const IRQn_Type g_rtcIrqNumbers[] = RTC_IRQS;
 #if FEATURE_RTC_HAS_SEPARATE_SECOND_IRQ
-/*!< @brief Table used to store the RTC Seconds IRQ names */
+/*! @brief Table of dedicated RTC seconds IRQ numbers for each instance. */
 static const IRQn_Type g_rtcSecondsIrqNb[] = RTC_SECONDS_IRQS;
 #else
+/*! @brief Devices without a dedicated seconds IRQ reuse the generic RTC IRQ. */
 static const IRQn_Type       g_rtcSecondsIrqNb[]   = RTC_IRQS;
 #endif
 
-/* Table of month length (in days) for the Un-leap-year*/
+/* Month lengths for a non-leap year; index 0 is unused. */
 static const uint8_t ULY[] = {0U, 31U, 28U, 31U, 30U, 31U, 30U, 31U, 31U, 30U, 31U, 30U, 31U};
 
-/* Table of month length (in days) for the Leap-year*/
+/* Month lengths for a leap year; index 0 is unused. */
 static const uint8_t LY[] = {0U, 31U, 29U, 31U, 30U, 31U, 30U, 31U, 31U, 30U, 31U, 30U, 31U};
 
-/* Number of days from begin of the non Leap-year*/
+/* Cumulative day offsets at the start of each month for a non-leap year. */
 static const uint16_t MONTH_DAYS[] = {0U, 0U, 31U, 59U, 90U, 120U, 151U, 181U, 212U, 243U, 273U, 304U, 334U};
 
 /*!
- * @brief static RTC runtime structure, it is designed only for internal
- * purposes such as storing interrupt configuration for each instance.
+ * @brief Per-instance runtime state used by the RTC driver.
  */
 static struct
 {
-    bool isAlarmTimeNew;   /*!< Check if there is a new alarm               */
-    rtc_alarm_config_t *alarmConfig;      /*!< Time Alarm configuration                    */
-    rtc_overflow_config_t *overflowConfig;   /*!< Time Overflow interrupt configuration       */
-    rtc_seconds_config_t *secondsConfig;    /*!< Time seconds interrupt configuration        */
-
+    bool isAlarmTimeNew;                     /*!< Tracks whether a recurring alarm has been rescheduled. */
+    rtc_alarm_config_t *alarmConfig;         /*!< Stored alarm configuration pointer. */
+    rtc_overflow_config_t *overflowConfig;   /*!< Stored overflow interrupt configuration pointer. */
+    rtc_seconds_config_t *secondsConfig;     /*!< Stored periodic seconds interrupt configuration pointer. */
 } g_rtcRuntimeConfig[RTC_INSTANCE_COUNT];
 
 
 /*******************************************************************************
- * Code
+ * Initialization & De-initialization
  ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_Init
- * Description   : This function initializes the RTC instance with the settings
- *                 provided by the user via the rtcUserCfg parameter. The user must ensure
- *                 that clock is enabled for the RTC instance used. If the Control register
- *                 is locked then this method returns STATUS_ERROR.
- *                 In order to clear the CR Lock the user must perform a power-on reset.
- * Return        : STATUS_SUCCESS if the operation was successful, STATUS_ERROR
- *                 if Control Register is locked.
- * Implements    : RTC_DRV_Init_Activity
- *END**************************************************************************/
+/*!
+ * @brief Initialize the RTC instance and store the runtime callback configuration.
+ */
 status_t RTC_DRV_Init(uint32_t instance, const rtc_init_config_t *rtcUserCfg)
 {
     DEV_ASSERT(instance < RTC_INSTANCE_COUNT);
@@ -79,34 +79,24 @@ status_t RTC_DRV_Init(uint32_t instance, const rtc_init_config_t *rtcUserCfg)
     status_t statusCode = STATUS_SUCCESS;
     RTC_Type *basePtr = g_rtcBase[instance];
 
-    /* Initialize runtime structure */
+    /* Refresh the runtime configuration pointers used by the ISR paths. */
     g_rtcRuntimeConfig[instance].alarmConfig = rtcUserCfg->rtcAlarmConfig;
     g_rtcRuntimeConfig[instance].overflowConfig = rtcUserCfg->rtcOverflowConfig;
     g_rtcRuntimeConfig[instance].secondsConfig = rtcUserCfg->rtcSecondsConfig;
     g_rtcRuntimeConfig[instance].isAlarmTimeNew = false;
 
-    /* Check if the control register is already enabled. If true, the method cannot
-     * continue.
-     */
+    /* Reinitialize the hardware only when the counter is not already running. */
     if (RTC_GetTimeCounterEnable(g_rtcBase[instance]) == false)
     {
-        /* Disable the RTC instance IRQ to perform a software reset */
+        /* Reset the peripheral before applying the requested configuration. */
         INT_SYS_DisableIRQ(g_rtcIrqNumbers[instance]);
-        /* Perform a software reset */
         RTC_SoftwareReset(basePtr);
-        /* Unlock Enable register */
         RTC_EnableRegisterUnlock(basePtr);
-        /* Clear the pending interrupt generated by the software reset */
         INT_SYS_ClearPending(g_rtcIrqNumbers[instance]);
-        /* Clear all three interrupt enable */
         RTC_ClearIntEnable(basePtr);
-        /* Setup RTC instance as configured in the structure */
         (void) RTC_ConfigureClockOut(basePtr, rtcUserCfg->clockOutConfig);
-        /* Setup clock source */
         RTC_SetClockSource(basePtr, rtcUserCfg->clockSource);
-        /* Set counter enable/disable in debug */
         RTC_SetDebugMode(basePtr, rtcUserCfg->debugEnable);
-        /* Check if compensation needs to be updated */
         if (rtcUserCfg->compensation != 0)
         {
             RTC_SetTimeCompensation(basePtr,
@@ -115,7 +105,7 @@ status_t RTC_DRV_Init(uint32_t instance, const rtc_init_config_t *rtcUserCfg)
         }
     }
 
-    /* enable corresponding interrupt */
+    /* Apply optional interrupt configuration blocks supplied by the caller. */
     if (rtcUserCfg->rtcOverflowConfig != NULL)
     {
         RTC_DRV_ConfigureOverflowInt(instance, rtcUserCfg->rtcOverflowConfig);
@@ -140,56 +130,36 @@ status_t RTC_DRV_Init(uint32_t instance, const rtc_init_config_t *rtcUserCfg)
         g_rtcRuntimeConfig[instance].secondsConfig = NULL;
     }
 
-    /* Return the exit code */
     return statusCode;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_Deinit
- * Description   : This function deinitializes the RTC instance.
- *                 If the Control register is locked then this method returns
- *                 STATUS_ERROR.
- *                 In order to clear the CR Lock the user must perform a power-on reset.
- * Return        : STATUS_SUCCESS if the operation was successful or
- *                 STATUS_ERROR if Control register is locked.
- * Implements    : RTC_DRV_Deinit_Activity
- *END**************************************************************************/
+/*!
+ * @brief De-initialize the RTC instance with a software reset.
+ */
 status_t RTC_DRV_Deinit(uint32_t instance)
 {
     DEV_ASSERT(instance < RTC_INSTANCE_COUNT);
 
     status_t statusCode = STATUS_SUCCESS;
 
-    /* Check if the control register is locked. If true, the method cannot
-     * continue.
-     */
+    /* Skip the reset if the counter is already disabled. */
     if (RTC_GetTimeCounterEnable(g_rtcBase[instance]) == false)
     {
         statusCode = STATUS_ERROR;
     } else
     {
-        /* Disable RTC instance's interrupts */
         INT_SYS_DisableIRQ(g_rtcIrqNumbers[instance]);
         INT_SYS_DisableIRQ(g_rtcSecondsIrqNb[instance]);
-        /* Perform a software reset */
         RTC_SoftwareReset(g_rtcBase[instance]);
-        /* Clear the pending interrupt generated by the software reset */
         INT_SYS_ClearPending(g_rtcIrqNumbers[instance]);
     }
 
-    /* Return the exit code */
     return statusCode;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_GetDefaultConfig
- * Description   : This function will set the default configuration
- *        		   values into the structure passed as a parameter
- * Return        : None
- * Implements    : RTC_DRV_GetDefaultConfig_Activity
- *END**************************************************************************/
+/*!
+ * @brief Populate an RTC initialization structure with default values.
+ */
 void RTC_DRV_GetDefaultConfig(rtc_init_config_t *config)
 {
     DEV_ASSERT(config != NULL);
@@ -200,14 +170,13 @@ void RTC_DRV_GetDefaultConfig(rtc_init_config_t *config)
     config->compensationInterval = 0U;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_SetRtcInterrupt
- * Description   : This function will set the default configuration
- *        		   values into the structure passed as a parameter
- * Return        : None
- * Implements    : RTC_DRV_GetDefaultConfig_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Interrupt Source Control
+ ******************************************************************************/
+
+/*!
+ * @brief Enable one RTC interrupt source in hardware.
+ */
 void RTC_DRV_SetRtcInterrupt(uint32_t instance, rtc_interrupt_mode_t mode)
 {
     DEV_ASSERT(instance < RTC_INSTANCE_COUNT);
@@ -230,13 +199,9 @@ void RTC_DRV_SetRtcInterrupt(uint32_t instance, rtc_interrupt_mode_t mode)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_ClearRtcInterrupt
- * Description   : Clear RTC interrupt mode.
- * Return        : None
- * Implements    : RTC_DRV_ClearRtcInterrupt_Activity
- *END**************************************************************************/
+/*!
+ * @brief Disable one RTC interrupt source in hardware.
+ */
 void RTC_DRV_ClearRtcInterrupt(uint32_t instance, rtc_interrupt_mode_t mode)
 {
     DEV_ASSERT(instance < RTC_INSTANCE_COUNT);
@@ -259,13 +224,9 @@ void RTC_DRV_ClearRtcInterrupt(uint32_t instance, rtc_interrupt_mode_t mode)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_ClearRtcInterruptFlag
- * Description   : Clear RTC interrupt flag.
- * Return        : None
- * Implements    : RTC_DRV_ClearRtcInterruptFlag_Activity
- *END**************************************************************************/
+/*!
+ * @brief Clear the pending flag for one RTC interrupt source.
+ */
 void RTC_DRV_ClearRtcInterruptFlag(uint32_t instance, rtc_interrupt_mode_t mode)
 {
     DEV_ASSERT(instance < RTC_INSTANCE_COUNT);
@@ -288,255 +249,179 @@ void RTC_DRV_ClearRtcInterruptFlag(uint32_t instance, rtc_interrupt_mode_t mode)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_StartCounter
- * Description   : Start RTC instance counter. Before calling this function the user
- *                 should use RTC_DRV_SetTimeDate to configure the start time
- * Return        : STATUS_SUCCESS if the operation was successful, STATUS_ERROR
- *                 if the counter cannot be enabled or is already enabled.
- * Implements    : RTC_DRV_StartCounter_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Counter Control
+ ******************************************************************************/
+
+/*!
+ * @brief Start the RTC counter.
+ */
 status_t RTC_DRV_StartCounter(uint32_t instance)
 {
     DEV_ASSERT(instance < RTC_INSTANCE_COUNT);
 
     status_t statusCode = STATUS_SUCCESS;
 
-    /* Enable the counter */
     statusCode = RTC_Enable(g_rtcBase[instance]);
 
-    /* Return the exit code */
     return statusCode;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_StopCounter
- * Description   : This function disables the RTC instance counter.
- * Return        : STATUS_SUCCESS if the operation was successful, STATUS_ERROR
- *                 if the counter could not be stopped.
- * Implements    : RTC_DRV_StopCounter_Activity
- *END**************************************************************************/
+/*!
+ * @brief Stop the RTC counter.
+ */
 status_t RTC_DRV_StopCounter(uint32_t instance)
 {
     DEV_ASSERT(instance < RTC_INSTANCE_COUNT);
 
     status_t statusCode = STATUS_SUCCESS;
 
-    /* Disable the RTC instance */
     statusCode = RTC_Disable(g_rtcBase[instance]);
 
-    /* Return the exit code */
     return statusCode;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_GetCurrentTimeDate
- * Description   : This retrieves the current time and date from the RTC instance.
- * Data is saved into currentTime, which is a pointer of the rtc_timedate_t
- * type.
- * Return        : STATUS_SUCCESS if the operation was successful, STATUS_ERROR
- *                 if there was a problem.
- * Implements    : RTC_DRV_GetCurrentTimeDate_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Calendar Time Access
+ ******************************************************************************/
+
+/*!
+ * @brief Read the current RTC time and convert it to calendar format.
+ */
 status_t RTC_DRV_GetCurrentTimeDate(uint32_t instance, rtc_timedate_t *const currentTime)
 {
     DEV_ASSERT(instance < RTC_INSTANCE_COUNT);
     DEV_ASSERT(currentTime != NULL);
 
-    /* Declare local variables */
     status_t statusCode = STATUS_SUCCESS;
     uint32_t seconds;
     uint32_t tempSeconds;
 
-    /* Make two consecutive reads to ensure that the read was not
-     * done when the counter is incrementing.
-     * This is recommended in the reference manual.
-     */
+    /* Double-read the seconds register to avoid sampling during rollover. */
     tempSeconds = RTC_GetTimeSecondsRegister(g_rtcBase[instance]);
     seconds = RTC_GetTimeSecondsRegister(g_rtcBase[instance]);
-    /* If the read was done when the counter was incrementing,
-     * try and read again.
-     */
     if (tempSeconds != seconds)
     {
-        /* Get the current time again */
         tempSeconds = RTC_GetTimeSecondsRegister(g_rtcBase[instance]);
         if (tempSeconds != seconds)
         {
-            /* If the last two reads are not equal, there is an error */
             statusCode = STATUS_ERROR;
         } else
         {
-            /* Convert the current time from seconds to time date structure */
             RTC_DRV_ConvertSecondsToTimeDate(&seconds, currentTime);
         }
     } else
     {
-        /* Convert the current time from seconds to time date structure */
         RTC_DRV_ConvertSecondsToTimeDate(&seconds, currentTime);
     }
 
-    /* Return the exit code */
     return statusCode;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_SetTimeDate
- * Description   : This modifies the time and date of the RTC instance.
- * Return        : STATUS_SUCCESS if the operation was successful, STATUS_ERROR
- *                 if the time provided was invalid or if the counter was not
- *                 stopped.
- * Implements    : RTC_DRV_SetTimeDate_Activity
- *END**************************************************************************/
+/*!
+ * @brief Program the RTC time using a calendar date/time value.
+ */
 status_t RTC_DRV_SetTimeDate(uint32_t instance, const rtc_timedate_t *timeDate)
 {
     DEV_ASSERT(instance < RTC_INSTANCE_COUNT);
     DEV_ASSERT(timeDate != NULL);
 
-    /* Declare local variables */
     status_t statusCode = STATUS_SUCCESS;
     uint32_t seconds = 0;
 
-    /* Check if the time is in the correct format */
     if (RTC_DRV_IsTimeDateCorrectFormat(timeDate) == false)
     {
-        /* Set the exit code to error */
         statusCode = STATUS_ERROR;
     } else
     {
-        /* Convert the desired time to seconds */
         RTC_DRV_ConvertTimeDateToSeconds(timeDate, &seconds);
-        /* Set the time */
         statusCode = RTC_SetTimeSecondsRegister(g_rtcBase[instance], seconds);
     }
 
-    /* Return the exit code */
     return statusCode;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_ConfigureTimeCompensation
- * Description   : This method configures time compensation. Data is passed by
- *                 the compInterval and compensation parameters.
- *                 For more details regarding coefficient calculation see the
- *                 Reference Manual.
- * Return        : STATUS_SUCCESS if the operation was successful,
- *                 STATUS_ERROR if the TC Register is locked.
- * Implements : RTC_DRV_ConfigureTimeCompensation_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Time Compensation
+ ******************************************************************************/
+
+/*!
+ * @brief Program the RTC compensation value and interval.
+ */
 status_t RTC_DRV_ConfigureTimeCompensation(uint32_t instance, uint8_t compInterval, int8_t compensation)
 {
     DEV_ASSERT(instance < RTC_INSTANCE_COUNT);
 
-    /* Declare local variables */
     status_t statusCode = STATUS_SUCCESS;
 
-    /* Set the corresponding values for compensation and compensation
-     * interval.
-     */
     RTC_SetTimeCompensation(g_rtcBase[instance], compensation, compInterval);
 
-    /* Return the exit code */
     return statusCode;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_GetTimeCompensation
- * Description   : This retrieves the time compensation coefficients and saves
- *                 them on the variables referenced by the parameters.
- * Return        : None
- * Implements    : RTC_DRV_GetTimeCompensation_Activity
- *END**************************************************************************/
+/*!
+ * @brief Read the currently active RTC compensation values.
+ */
 void RTC_DRV_GetTimeCompensation(uint32_t instance, uint8_t *compInterval, int8_t *compensation)
 {
     DEV_ASSERT(instance < RTC_INSTANCE_COUNT);
     DEV_ASSERT(compInterval != NULL);
     DEV_ASSERT(compensation != NULL);
 
-    /* Get the compensation interval */
     RTC_GetCurrentTimeCompensation(g_rtcBase[instance], compensation, compInterval);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_ConvertSecondsToTimeDate
- * Description   : This method converts seconds into time-date format.
- * Return        : None
- * Implements    : RTC_DRV_ConvertSecondsToTimeDate_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Conversion & Validation Helpers
+ ******************************************************************************/
+
+/*!
+ * @brief Convert an RTC seconds count to calendar form.
+ */
 void RTC_DRV_ConvertSecondsToTimeDate(const uint32_t *const seconds, rtc_timedate_t *const timeDate)
 {
     DEV_ASSERT(seconds != NULL);
     DEV_ASSERT(timeDate != NULL);
 
-    /* Declare the variables needed */
     uint8_t i;
     bool yearLeap = false;
     uint32_t numberOfDays = 0U;
     uint32_t tempSeconds;
     uint16_t daysInYear;
 
-    /* Because the starting year(1970) is not leap, set the daysInYear
-     * variable with the number of the days in a normal year
-     */
+    /* The supported epoch starts at 1970, which is not a leap year. */
     daysInYear = DAYS_IN_A_YEAR;
 
-    /* Set the year to the beginning of the range */
     timeDate->year = YEAR_RANGE_START;
 
-    /* Get the number of days */
     numberOfDays = (*seconds) / SECONDS_IN_A_DAY;
-    /* Get the number of seconds remaining */
     tempSeconds = (*seconds) % SECONDS_IN_A_DAY;
 
-    /* Get the current hour */
     timeDate->hour = (uint16_t) (tempSeconds / SECONDS_IN_A_HOUR);
-    /* Get the remaining seconds */
     tempSeconds = tempSeconds % SECONDS_IN_A_HOUR;
-    /* Get the minutes */
     timeDate->minutes = (uint16_t) (tempSeconds / SECONDS_IN_A_MIN);
-    /* Get seconds */
     timeDate->seconds = (uint8_t) (tempSeconds % SECONDS_IN_A_MIN);
 
-    /* Get the current year */
+    /* Consume full years until the remaining day count fits in the current year. */
     while (numberOfDays >= daysInYear)
     {
-        /* Increment year if the number of days is greater than the ones in
-         * one year
-         */
         timeDate->year++;
-        /* Subtract the number of the days */
         numberOfDays -= daysInYear;
 
-        /* Check if the year is leap or unleap */
         if (!RTC_DRV_IsYearLeap(timeDate->year))
         {
-            /* Set the number of non leap year to the current year number
-             * of days.
-             */
             daysInYear = DAYS_IN_A_YEAR;
         } else
         {
-            /* Set the number of leap year to the current year number
-             * of days.
-             */
             daysInYear = DAYS_IN_A_LEAP_YEAR;
         }
     }
 
-    /* Add the current day */
     numberOfDays += 1U;
 
-    /* Check if the current year is leap */
     yearLeap = RTC_DRV_IsYearLeap(timeDate->year);
 
-    /* Get the month */
+    /* Consume full months until the remaining day count fits in the current month. */
     for (i = 1U; i <= 12U; i++)
     {
         uint32_t daysInCurrentMonth = ((yearLeap == true) ? (uint32_t) LY[i] : (uint32_t) ULY[i]);
@@ -551,30 +436,23 @@ void RTC_DRV_ConvertSecondsToTimeDate(const uint32_t *const seconds, rtc_timedat
 
     }
 
-    /* Set the current day */
     timeDate->day = (uint16_t) numberOfDays;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_ConvertTimeDateToSeconds
- * Description   : This method converts time-date into seconds.
- * Return        : None
- * Implements    : RTC_DRV_ConvertTimeDateToSeconds_Activity
- *END**************************************************************************/
+/*!
+ * @brief Convert a calendar date/time value to an RTC seconds count.
+ */
 void RTC_DRV_ConvertTimeDateToSeconds(const rtc_timedate_t *timeDate, uint32_t *const seconds)
 {
     DEV_ASSERT(seconds != NULL);
     DEV_ASSERT(timeDate != NULL);
 
-    /* Declare local variables */
     uint16_t year;
 
-    /* Convert years to seconds */
     (*seconds) = (uint32_t) (DAYS_IN_A_YEAR * (uint32_t) (SECONDS_IN_A_DAY));
     (*seconds) *= ((uint32_t) timeDate->year - YEAR_RANGE_START);
 
-    /* Add the seconds from the leap years */
+    /* Add one extra day for each leap year between the epoch and the target year. */
     for (year = YEAR_RANGE_START; year < timeDate->year; year++)
     {
         if (RTC_DRV_IsYearLeap(year))
@@ -583,47 +461,31 @@ void RTC_DRV_ConvertTimeDateToSeconds(const rtc_timedate_t *timeDate, uint32_t *
         }
     }
 
-    /* If the current year is leap and 29th of February has passed, add
-     * another day to seconds passed.
-     */
+    /* Add February 29 when the target date is after it in a leap year. */
     if ((RTC_DRV_IsYearLeap(year)) && (timeDate->month > 2U))
     {
         (*seconds) += SECONDS_IN_A_DAY;
     }
 
-    /* Add the rest of the seconds from the current month */
     (*seconds) += MONTH_DAYS[timeDate->month] * SECONDS_IN_A_DAY;
-    /* Add the rest of the seconds from the current day */
     (*seconds) += (uint32_t) (((uint32_t) timeDate->day - 1U) * (uint32_t) SECONDS_IN_A_DAY);
-    /* Add the rest of the seconds from the current time */
     (*seconds) += (uint32_t) (((uint32_t) timeDate->hour * SECONDS_IN_A_HOUR) + \
                              ((uint32_t) timeDate->minutes * SECONDS_IN_A_MIN) + \
                              (uint32_t) timeDate->seconds);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_IsTimeDateCorrectFormat
- * Description   : This method checks if date-time structure is in a correct
- *                 format
- * Return        : True if the following conditions are met:
- *                  - is a valid year, month and date
- *                  - is a valid time format
- *                 False otherwise
- * Implements    : RTC_DRV_IsTimeDateCorrectFormat_Activity
- *END**************************************************************************/
+/*!
+ * @brief Validate that a calendar date/time value is supported by the RTC driver.
+ */
 bool RTC_DRV_IsTimeDateCorrectFormat(const rtc_timedate_t *const timeDate)
 {
     DEV_ASSERT(timeDate != NULL);
 
-    /* Declare local variables */
     bool returnCode = true;
     const uint8_t *pDays;
 
-    /* Set the days-in-month table for the corresponding year */
     pDays = RTC_DRV_IsYearLeap(timeDate->year) ? (LY) : (ULY);
 
-    /* Check if the time and date are in the correct ranges */
     if ((timeDate->year < YEAR_RANGE_START) || (timeDate->year > YEAR_RANGE_END)
         || (timeDate->month < 1U) || (timeDate->month > 12U)
         || (timeDate->day < 1U) || (timeDate->day > 31U)
@@ -632,7 +494,6 @@ bool RTC_DRV_IsTimeDateCorrectFormat(const rtc_timedate_t *const timeDate)
     {
         returnCode = false;
     }
-        /* Check if the day is a valid day from the corresponding month */
     else if (timeDate->day > pDays[timeDate->month])
     {
         returnCode = false;
@@ -641,18 +502,12 @@ bool RTC_DRV_IsTimeDateCorrectFormat(const rtc_timedate_t *const timeDate)
         returnCode = true;
     }
 
-    /* Return the exit code */
     return returnCode;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_IsYearLeap
- * Description   : This method checks if the year passed as a parameter is a leap
- *                 one.
- * Return        : True if the year is leap, false if otherwise.
- * Implements    : RTC_DRV_IsYearLeap_Activity
- *END**************************************************************************/
+/*!
+ * @brief Check whether a year is a leap year.
+ */
 bool RTC_DRV_IsYearLeap(uint16_t year)
 {
     bool isYearLeap = false;
@@ -671,176 +526,117 @@ bool RTC_DRV_IsYearLeap(uint16_t year)
         isYearLeap = true;
     }
 
-    /* Return the exit code */
     return isYearLeap;
 }
 
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_IRQHandler
- * Description   : This method is the API's Interrupt handler for generic and
- *                 alarm IRQ. It will handle the alarm repetition and calls the
- *                 user callbacks if they are not NULL.
- * Return        : None
- *
- * Implements    : RTC_DRV_IRQHandler_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Internal IRQ Handlers
+ ******************************************************************************/
+
+/*!
+ * @brief Handle generic RTC alarm and overflow interrupt work.
+ */
 void RTC_DRV_IRQHandler(uint32_t instance)
 {
     DEV_ASSERT(instance < RTC_INSTANCE_COUNT);
 
     uint32_t tempSeconds;
-    /* Get the alarm configuration */
     rtc_alarm_config_t *alarmConfig = g_rtcRuntimeConfig[instance].alarmConfig;
-    /* Get the fault interrupt configuration */
     const rtc_overflow_config_t *const overflowConfig = g_rtcRuntimeConfig[instance].overflowConfig;
 
-    /* Check if an alarm has occurred */
     if (RTC_GetTimeAlarmFlag(g_rtcBase[instance]) == true)
     {
-        /* If the alarm interrupt configuration has been defined process the
-         * alarm IRQ
-         */
         if ((alarmConfig != NULL))
         {
-            /* If recurrence is enabled modify the alarm register to the next
-             * alarm.
-             */
             if ((alarmConfig->numberOfRepeats > 0UL) || (alarmConfig->repeatForever == true))
             {
-                /* Get current time */
                 tempSeconds = RTC_GetTimeSecondsRegister(g_rtcBase[instance]);
-                /* Current time is incremented with the repetition value */
                 tempSeconds += alarmConfig->repetitionInterval - 1UL;
-                /* Set new value to trigger the alarm */
                 RTC_SetTimeAlarmRegister(g_rtcBase[instance], tempSeconds);
 
                 g_rtcRuntimeConfig[instance].isAlarmTimeNew = true;
-                /* If the alarm repeats forever, set number of repeats to 0
-                 * to avoid an accidental trigger of the core overflow flag
-                 */
+                /* Keep the repeat counter quiescent for infinite-repeat mode. */
                 alarmConfig->numberOfRepeats = (alarmConfig->repeatForever == false) ? (alarmConfig->numberOfRepeats -
                                                                                         1UL) : 0UL;
             } else
             {
-                /* If the alarm does not repeat, write 0 to ALM to clear the
-                 * alarm flag.
-                 */
                 RTC_SetTimeAlarmRegister(g_rtcBase[instance], 0UL);
-                /* Set the internal variable which indicates that a new alarm is enabled to false */
                 g_rtcRuntimeConfig[instance].isAlarmTimeNew = false;
             }
-            /* If the user has defined a callback, call it */
             if (alarmConfig->rtcAlarmCallback != NULL)
             {
                 alarmConfig->rtcAlarmCallback(alarmConfig->callbackParams);
             }
         }
     }
-        /* If the IRQ is not caused by the alarm then call the user callback if
-         * defined.
-         */
     else if (overflowConfig != NULL)
     {
         if (overflowConfig->rtcOverflowCallback != NULL)
         {
-            /* Call the RTC interrupt callback function with callback parameter */
             overflowConfig->rtcOverflowCallback(overflowConfig->callbackParams);
         }
-    } else
-    {
-        /* Do nothing*/
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_SecondsIRQHandler
- * Description   : This method is the API's Interrupt handler for RTC Second
- *                 interrupt. This ISR will call the user callback if defined.
- * Return        : None
- * Implements    : RTC_DRV_SecondsIRQHandler_Activity
- *END**************************************************************************/
+/*!
+ * @brief Handle the RTC periodic seconds interrupt.
+ */
 void RTC_DRV_SecondsIRQHandler(uint32_t instance)
 {
     DEV_ASSERT(instance < RTC_INSTANCE_COUNT);
 
     const rtc_seconds_config_t *const intCfg = g_rtcRuntimeConfig[instance].secondsConfig;
 
-    /* If the interrupt is configured by the driver API and the user callback
-     * is not NULL, then call it.
-     */
     if ((intCfg != NULL) && (intCfg->rtcSecondsCallback != NULL))
     {
-        /* Call the RTC Seconds interrupt callback function with callback parameter */
         intCfg->rtcSecondsCallback(intCfg->callbackParams);
     }
     RTC_ClearTimeSecondsIntFlag(g_rtcBase[instance]);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_ConfigureOverflowInt
- * Description   : This method configures overflow interrupt
- * Return        : None
- * Implements    : RTC_DRV_ConfigureFaultInt_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Interrupt Callback Configuration
+ ******************************************************************************/
+
+/*!
+ * @brief Configure the RTC overflow interrupt callback state.
+ */
 void RTC_DRV_ConfigureOverflowInt(uint32_t instance, rtc_overflow_config_t *intConfig)
 {
     DEV_ASSERT(instance < RTC_INSTANCE_COUNT);
     DEV_ASSERT(intConfig != NULL);
 
-    /* Disable the IRQ to avoid accidental interrupt requests */
+    /* Update the callback pointer atomically with respect to the IRQ line. */
     INT_SYS_DisableIRQ(g_rtcIrqNumbers[instance]);
-    /* Save the configuration into the instance's runtime structure */
     g_rtcRuntimeConfig[instance].overflowConfig = intConfig;
-
-    /* Enable or disable selected interrupts */
     RTC_SetTimeOverflowIntEnable(g_rtcBase[instance], intConfig->overflowIntEnable);
-
-    /* After the configuration is done, re-enable the interrupt in NVIC */
     INT_SYS_EnableIRQ(g_rtcIrqNumbers[instance]);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_ConfigureSecondsInt
- * Description   : This method configures the Time Seconds Interrupt with the
- *                 configuration from the intConfig parameter.
- * Return        : None
- * Implements    : RTC_DRV_ConfigureSecondsInt_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configure the RTC periodic seconds interrupt.
+ */
 void RTC_DRV_ConfigureSecondsInt(uint32_t instance, rtc_seconds_config_t *const intConfig)
 {
     DEV_ASSERT(instance < RTC_INSTANCE_COUNT);
     DEV_ASSERT(intConfig != NULL);
 
-    /* Disable the IRQ to avoid accidental interrupt requests */
+    /* Update the callback pointer atomically with respect to the IRQ line. */
     INT_SYS_DisableIRQ(g_rtcSecondsIrqNb[instance]);
-    /* Disable the IRQ to avoid accidental interrupt requests */
     g_rtcRuntimeConfig[instance].secondsConfig = intConfig;
-
-    /* Configure the interrupt frequency */
     RTC_SetTimeSecondsIntConf(g_rtcBase[instance], intConfig->secondsIntConfig);
-
-    /* Enable or disable Time Seconds interrupt */
     RTC_SetTimeSecondsIntEnable(g_rtcBase[instance], intConfig->secondsIntEnable);
-
-    /* After the configuration is done, re-enable the interrupt in NVIC */
     INT_SYS_EnableIRQ(g_rtcSecondsIrqNb[instance]);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_ConfigureAlarmInt
- * Description   : This method configures the alarm with the
- *                 configuration from the alarmConfig parameter.
- *
- * Return        : STATUS_SUCCESS if the configuration is successful or
- *                 STATUS_ERROR if the alarm time is invalid.
- * Implements    : RTC_DRV_ConfigureAlarm_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Alarm Management
+ ******************************************************************************/
+
+/*!
+ * @brief Configure an RTC alarm and optional recurring alarm behavior.
+ */
 status_t RTC_DRV_ConfigureAlarmInt(uint32_t instance, rtc_alarm_config_t *const alarmConfig)
 {
     DEV_ASSERT(instance < RTC_INSTANCE_COUNT);
@@ -850,28 +646,18 @@ status_t RTC_DRV_ConfigureAlarmInt(uint32_t instance, rtc_alarm_config_t *const 
     uint32_t alarmTime;
     uint32_t currentTime;
 
-    /* Check if the alarm time is in a correct format */
     if (RTC_DRV_IsTimeDateCorrectFormat(&(alarmConfig->alarmTime)) == true)
     {
-        /* Convert the time date to seconds */
         RTC_DRV_ConvertTimeDateToSeconds(&(alarmConfig->alarmTime), &alarmTime);
-        /* Get current time in seconds */
         currentTime = RTC_GetTimeSecondsRegister(g_rtcBase[instance]);
 
-        /* Check if the alarm time is greater than current time */
         if (alarmTime > currentTime)
         {
-            /* Disable the IRQ to avoid accidental interrupt requests */
             INT_SYS_DisableIRQ(g_rtcIrqNumbers[instance]);
             g_rtcRuntimeConfig[instance].alarmConfig = alarmConfig;
 
-            /* Write alarm time into Time Alarm Register */
             RTC_SetTimeAlarmRegister(g_rtcBase[instance], alarmTime);
-            /* Enable/disable interrupt source based on the configuration */
             RTC_SetTimeAlarmIntEnable(g_rtcBase[instance], alarmConfig->alarmIntEnable);
-            /* After the configuration is done, re-enable the interrupt in
-             * NVIC.
-             */
             INT_SYS_EnableIRQ(g_rtcIrqNumbers[instance]);
         } else
         {
@@ -882,17 +668,12 @@ status_t RTC_DRV_ConfigureAlarmInt(uint32_t instance, rtc_alarm_config_t *const 
         statusCode = STATUS_ERROR;
     }
 
-    /* Return the exit code */
     return statusCode;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_GetAlarmConfig
- * Description   : This method retrieves the alarm configuration.
- * Return        : None
- * Implements    : RTC_DRV_GetAlarmConfig_Activity
- *END**************************************************************************/
+/*!
+ * @brief Copy the alarm configuration currently stored by the driver.
+ */
 void RTC_DRV_GetAlarmConfig(uint32_t instance, rtc_alarm_config_t *alarmConfig)
 {
     DEV_ASSERT(instance < RTC_INSTANCE_COUNT);
@@ -901,30 +682,19 @@ void RTC_DRV_GetAlarmConfig(uint32_t instance, rtc_alarm_config_t *alarmConfig)
     *alarmConfig = *(g_rtcRuntimeConfig[instance].alarmConfig);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_IsAlarmPending
- * Description   : This method specifies if an alarm has occurred.
- * Return        : True if an alarm has occurred, false if not.
- * Implements    : RTC_DRV_IsAlarmPending_Activity
- *END**************************************************************************/
+/*!
+ * @brief Check whether the RTC alarm flag is asserted.
+ */
 bool RTC_DRV_IsAlarmPending(uint32_t instance)
 {
     DEV_ASSERT(instance < RTC_INSTANCE_COUNT);
 
-    /* Return the exit code */
     return RTC_GetTimeAlarmFlag(g_rtcBase[instance]);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : RTC_DRV_GetNextAlarmTime
- * Description   : This method retrieves the next alarm time;
- * Return        : STATUS_SUCCESS if the next alarm time is valid
- *                 STATUS_ERROR if there is no new alarm
- *
- * Implements    : RTC_DRV_GetNextAlarmTime_Activity
- *END**************************************************************************/
+/*!
+ * @brief Retrieve the next alarm time scheduled by recurring-alarm handling.
+ */
 status_t RTC_DRV_GetNextAlarmTime(uint32_t instance, rtc_timedate_t *const alarmTime)
 {
     DEV_ASSERT(instance < RTC_INSTANCE_COUNT);
@@ -932,7 +702,7 @@ status_t RTC_DRV_GetNextAlarmTime(uint32_t instance, rtc_timedate_t *const alarm
 
     status_t statusCode = STATUS_SUCCESS;
     uint32_t alarmInSec;
-    /* Check if is a new alarm and if true update alarm time date format from time seconds */
+
     if (g_rtcRuntimeConfig[instance].isAlarmTimeNew == true)
     {
         alarmInSec = RTC_GetTimeAlarmRegister(g_rtcBase[instance]);
@@ -941,7 +711,6 @@ status_t RTC_DRV_GetNextAlarmTime(uint32_t instance, rtc_timedate_t *const alarm
     {
         statusCode = STATUS_ERROR;
     }
-    /* Return the exit code */
 
     return statusCode;
 }

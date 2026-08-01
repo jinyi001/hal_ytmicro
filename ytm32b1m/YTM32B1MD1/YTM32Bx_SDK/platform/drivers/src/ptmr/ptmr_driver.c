@@ -8,6 +8,12 @@
 /*!
  * @file ptmr_driver.c
  * @version 1.4.1
+ *
+ * @brief pTMR Driver — implementation of the public pTMR_DRV_* API.
+ *
+ * This file implements the application-level pTMR driver functions declared
+ * in ptmr_driver.h. Each function wraps the low-level hardware access layer
+ * (ptmr_hw_access.h) and provides instance-based access to the pTMR peripheral.
  */
 
 #include <stddef.h>
@@ -20,33 +26,37 @@
  * Variables
  ******************************************************************************/
 
-/* Table of base addresses for pTMR instances */
+/*! @brief Table of base addresses for pTMR peripheral instances. */
 static pTMR_Type * const s_ptmrBase[] = pTMR_BASE_PTRS;
-/* Table to save pTMR indexes for clock configuration */
+
+/*! @brief Table of clock names for pTMR peripheral clock configuration. */
 static const clock_names_t s_ptmrClkNames[pTMR_INSTANCE_COUNT] = pTMR_CLOCK_NAMES;
+
 #if (defined(FEATURE_pTMR_HAS_IPC_CLOCK_SOURCE) && (FEATURE_pTMR_HAS_IPC_CLOCK_SOURCE == 1))
-/* Table to save pTMR IPC clock configuration */
+/*! @brief Table of IPC clock names for pTMR function clock configuration. */
 static const clock_names_t s_ptmrIpcClkNames[pTMR_INSTANCE_COUNT] = pTMR_IPC_CLOCK_NAMES;
 #endif /* FEATURE_pTMR_HAS_IPC_CLOCK_SOURCE */
-/* pTMR functional clock variable which will be updated in some driver functions */
+
+/*! @brief Cached functional clock frequency for each pTMR instance (Hz). */
 static uint32_t s_ptmrSourceClockFrequency[pTMR_INSTANCE_COUNT] = {0};
+
+/*! @brief Table mapping pTMR instance and channel to IRQ numbers. */
 static const IRQn_Type ptmrIrqId[pTMR_INSTANCE_COUNT][pTMR_CH_COUNT] = pTMR_IRQS;
 
 /*******************************************************************************
- * INTERNAL FUNCTIONS
+ * Internal Functions
  ******************************************************************************/
-static void pTMR_Update_ClockFreq(uint32_t instance);
-/******************************************************************************
- * Code
- *****************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : pTMR_DRV_GetDefaultConfig
- * Description   : This function gets default pTMR module configuration structure.
- *
- * Implements    : pTMR_DRV_GetDefaultConfig_Activity
- *END**************************************************************************/
+/*! @brief Update the cached clock frequency for the given pTMR instance. */
+static void pTMR_Update_ClockFreq(uint32_t instance);
+
+/*******************************************************************************
+ * Initialization & De-initialization
+ ******************************************************************************/
+
+/*!
+ * @brief Populate a module configuration structure with default values.
+ */
 void pTMR_DRV_GetDefaultConfig(ptmr_user_config_t * const config)
 {
     DEV_ASSERT(config != NULL);
@@ -54,13 +64,9 @@ void pTMR_DRV_GetDefaultConfig(ptmr_user_config_t * const config)
     config->enableRunInDebug = false;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : pTMR_DRV_GetDefaultChanConfig
- * Description   : This function gets default timer channel configuration structure.
- *
- * Implements    : pTMR_DRV_GetDefaultChanConfig_Activity
- *END**************************************************************************/
+/*!
+ * @brief Populate a channel configuration structure with default values.
+ */
 void pTMR_DRV_GetDefaultChanConfig(ptmr_user_channel_config_t * const config)
 {
     DEV_ASSERT(config != NULL);
@@ -71,18 +77,9 @@ void pTMR_DRV_GetDefaultChanConfig(ptmr_user_channel_config_t * const config)
     config->isInterruptEnabled = true;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : pTMR_DRV_Init
- * Description   : Initializes pTMR module.
- * This function resets pTMR module, enables the pTMR module, configures pTMR
- * module operation in Debug and DOZE mode. The pTMR configuration structure shall
- * be passed as arguments.
- * This configuration structure affects all timer channels.
- * This function should be called before calling any other pTMR driver function.
- *
- * Implements    : pTMR_DRV_Init_Activity
- *END**************************************************************************/
+/*!
+ * @brief Initialize the pTMR module.
+ */
 void pTMR_DRV_Init(uint32_t instance,
                    const ptmr_user_config_t *userConfig)
 {
@@ -113,15 +110,9 @@ void pTMR_DRV_Init(uint32_t instance,
     pTMR_SetTimerRunInDebugCmd(base, userConfig->enableRunInDebug);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : pTMR_DRV_Deinit
- * Description   : De-initializes pTMR module.
- * This function disables pTMR module.
- * In order to use the pTMR module again, pTMR_DRV_Init must be called.
- *
- * Implements    : pTMR_DRV_Deinit_Activity
- *END**************************************************************************/
+/*!
+ * @brief De-initialize the pTMR module.
+ */
 void pTMR_DRV_Deinit(uint32_t instance)
 {
     pTMR_Type * base;
@@ -141,22 +132,9 @@ void pTMR_DRV_Deinit(uint32_t instance)
     pTMR_Reset(base, 5);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : pTMR_DRV_InitChannel
- * Description   : Initializes pTMR channel.
- * This function initializes the pTMR timers by using a channel, this function
- * configures timer channel chaining, timer channel mode, timer channel period,
- * interrupt generation, trigger source, trigger select, reload on trigger,
- * stop on interrupt and start on trigger.
- * The timer channel number and its configuration structure shall be passed as arguments.
- * Timer channels do not start counting by default after calling this function.
- * The function pTMR_DRV_StartTimerChannels must be called to start the timer channel counting.
- * In order to re-configures the period, call the pTMR_DRV_SetTimerPeriodByUs or
- * pTMR_DRV_SetTimerPeriodByCount.
- *
- * Implements    : pTMR_DRV_InitChannel_Activity
- *END**************************************************************************/
+/*!
+ * @brief Initialize an individual pTMR timer channel.
+ */
 status_t pTMR_DRV_InitChannel(uint32_t instance,
                               uint32_t channel,
                               const ptmr_user_channel_config_t * userChannelConfig)
@@ -207,16 +185,13 @@ status_t pTMR_DRV_InitChannel(uint32_t instance,
     return reVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : pTMR_DRV_StartTimerChannels
- * Description   : Starts timer channel counting.
- * This function allows starting timer channels simultaneously .
- * After calling this function, timer channels are going operate depend on mode and
- * control bits which controls timer channel start, reload and restart.
- *
- * Implements    : pTMR_DRV_StartTimerChannels_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Timer Start & Stop
+ ******************************************************************************/
+
+/*!
+ * @brief Start the specified timer channel counting.
+ */
 void pTMR_DRV_StartTimerChannels(uint32_t instance,
                                  uint32_t channel)
 {
@@ -230,17 +205,9 @@ void pTMR_DRV_StartTimerChannels(uint32_t instance,
     pTMR_StartTimerChannels(base, channel);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : pTMR_DRV_StopTimerChannels
- * Description   : Stop timer channel from counting.
- * This function allows stop timer channels simultaneously from counting.
- * Timer channels reload their periods respectively after the next time
- * they call the pTMR_DRV_StartTimerChannels. Note that: In 32-bit Trigger Accumulator
- * mode, the counter will load on the first trigger rising edge.
- *
- * Implements    : pTMR_DRV_StopTimerChannels_Activity
- *END**************************************************************************/
+/*!
+ * @brief Stop the specified timer channel counting.
+ */
 void pTMR_DRV_StopTimerChannels(uint32_t instance,
                                 uint32_t channel)
 {
@@ -254,19 +221,13 @@ void pTMR_DRV_StopTimerChannels(uint32_t instance,
     pTMR_StopTimerChannels(base, channel);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : pTMR_DRV_SetTimerPeriodByUs
- * Description   : Sets timer channel period in microseconds unit.
- * This function sets the timer channel period in microseconds
- * when timer channel mode is 32 bit periodic or dual 16 bit counter mode.
- * The period range depends on the frequency of the pTMR functional clock and
- * operation mode of timer channel.
- * If the required period is out of range, use the suitable mode if applicable.
- * This function is only valid for one single channel.
- *
- * Implements    : pTMR_DRV_SetTimerPeriodByUs_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Timer Period
+ ******************************************************************************/
+
+/*!
+ * @brief Set the timer channel period in microseconds.
+ */
 status_t pTMR_DRV_SetTimerPeriodByUs(uint32_t instance,
                                      uint32_t channel,
                                      uint32_t periodUs)
@@ -298,18 +259,9 @@ status_t pTMR_DRV_SetTimerPeriodByUs(uint32_t instance,
     return reVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : pTMR_DRV_SetTimerPeriodByCount
- * Description   : Sets the timer channel period in count unit.
- * This function sets the timer channel period in count unit.
- * The counter period of a running timer channel can be modified by first setting
- * a new load value, the value will be loaded after the timer channel expires.
- * To abort the current cycle and start a timer channel period with the new value,
- * the timer channel must be disabled and enabled again.
- *
- * Implements    : pTMR_DRV_SetTimerPeriodByCount_Activity
- *END**************************************************************************/
+/*!
+ * @brief Set the timer channel period in raw count units.
+ */
 void pTMR_DRV_SetTimerPeriodByCount(uint32_t instance,
                                     uint32_t channel,
                                     uint32_t count)
@@ -325,15 +277,9 @@ void pTMR_DRV_SetTimerPeriodByCount(uint32_t instance,
 
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : pTMR_DRV_GetTimerPeriodByUs
- * Description   : Gets the timer channel period in microseconds.
- * The returned period here makes sense if the operation mode of timer channel
- * is 32 bit periodic counter or dual 16 bit periodic counter.
- *
- * Implements    : pTMR_DRV_GetTimerPeriodByUs_Activity
- *END**************************************************************************/
+/*!
+ * @brief Get the timer channel period in microseconds.
+ */
 uint64_t pTMR_DRV_GetTimerPeriodByUs(uint32_t instance,
                                      uint32_t channel)
 {
@@ -356,13 +302,9 @@ uint64_t pTMR_DRV_GetTimerPeriodByUs(uint32_t instance,
     return currentPeriod;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : pTMR_DRV_GetTimerPeriodByCount
- * Description   : Gets the current timer channel period in count unit.
- *
- * Implements    : pTMR_DRV_GetTimerPeriodByCount_Activity
- *END**************************************************************************/
+/*!
+ * @brief Get the timer channel period in raw count units.
+ */
 uint32_t pTMR_DRV_GetTimerPeriodByCount(uint32_t instance,
                                         uint32_t channel)
 {
@@ -379,20 +321,9 @@ uint32_t pTMR_DRV_GetTimerPeriodByCount(uint32_t instance,
     return currentPeriod;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : pTMR_DRV_GetCurrentTimerUs
- * Description   : Gets current timer channel counting value in microseconds unit.
- * This function returns an absolute time stamp in microseconds.
- * One common use of this function is to measure the running time of a part of
- * code. Call this function at both the beginning and end of code. The time
- * difference between these two time stamps is the running time.
- * The return counting value here makes sense if the operation mode of timer channel
- * is 32 bit periodic counter or dual 16 bit periodic counter or 32-bit trigger input capture.
- * Need to make sure the running time will not exceed the timer channel period.
- *
- * Implements    : pTMR_DRV_GetCurrentTimerUs_Activity
- *END**************************************************************************/
+/*!
+ * @brief Get the current timer channel counter value in microseconds.
+ */
 uint64_t pTMR_DRV_GetCurrentTimerUs(uint32_t instance,
                                     uint32_t channel)
 {
@@ -415,16 +346,9 @@ uint64_t pTMR_DRV_GetCurrentTimerUs(uint32_t instance,
     return currentTime;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : pTMR_DRV_GetCurrentTimerCount
- * Description   : Gets the current timer channel counting value in count.
- * This function returns the real-time timer channel counting value, the value in
- * a range from 0 to timer channel period.
- * Need to make sure the running time does not exceed the timer channel period.
- *
- * Implements    : pTMR_DRV_GetCurrentTimerCount_Activity
- *END**************************************************************************/
+/*!
+ * @brief Get the current timer channel counter value in raw counts.
+ */
 uint32_t pTMR_DRV_GetCurrentTimerCount(uint32_t instance,
                                        uint32_t channel)
 {
@@ -441,14 +365,13 @@ uint32_t pTMR_DRV_GetCurrentTimerCount(uint32_t instance,
     return currentTime;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : pTMR_DRV_EnableTimerChannelInterrupt
- * Description   : This function allows enabling interrupt generation of timer channel
- * when timeout occurs or input trigger occurs.
- *
- * Implements    : pTMR_DRV_EnableTimerChannelInterrupt_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Interrupt Management
+ ******************************************************************************/
+
+/*!
+ * @brief Enable interrupt generation for the specified timer channel.
+ */
 void pTMR_DRV_EnableTimerChannelInterrupt(uint32_t instance,
                                           uint32_t channel)
 {
@@ -462,14 +385,9 @@ void pTMR_DRV_EnableTimerChannelInterrupt(uint32_t instance,
     pTMR_EnableInterruptTimerChannels(base, channel);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : pTMR_DRV_DisableTimerChannelInterrupt
- * Description   : This function allows disabling interrupt generation of timer channel
- * when timeout occurs or input trigger occurs.
- *
- * Implements    : pTMR_DRV_DisableTimerChannelInterrupt_Activity
- *END**************************************************************************/
+/*!
+ * @brief Disable interrupt generation for the specified timer channel.
+ */
 void pTMR_DRV_DisableTimerChannelInterrupt(uint32_t instance,
                                            uint32_t channel)
 {
@@ -483,15 +401,9 @@ void pTMR_DRV_DisableTimerChannelInterrupt(uint32_t instance,
     pTMR_DisableInterruptTimerChannels(base, channel);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : pTMR_DRV_GetInterruptFlagTimerChannels
- * Description   : Gets the current interrupt flag of timer channels.
- * In compare modes, the flag sets to 1 at the end of the timer period.
- * In capture modes, the flag sets to 1 when the trigger asserts.
- *
- * Implements    : pTMR_DRV_GetInterruptFlagTimerChannels_Activity
- *END**************************************************************************/
+/*!
+ * @brief Get the interrupt flag status of the specified timer channel.
+ */
 uint32_t pTMR_DRV_GetInterruptFlagTimerChannels(uint32_t instance,
                                                 uint32_t channel)
 {
@@ -505,14 +417,9 @@ uint32_t pTMR_DRV_GetInterruptFlagTimerChannels(uint32_t instance,
     return pTMR_GetInterruptFlagTimerChannels(base, channel);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : pTMR_DRV_ClearInterruptFlagTimerChannels
- * Description   : Clears the interrupt flag of timer channels.
- * This function clears the interrupt flag of timer channels after
- * their interrupt event occurred.
- * Implements    : pTMR_DRV_ClearInterruptFlagTimerChannels_Activity
- *END**************************************************************************/
+/*!
+ * @brief Clear the interrupt flag of the specified timer channel.
+ */
 void pTMR_DRV_ClearInterruptFlagTimerChannels(uint32_t instance,
                                               uint32_t channel)
 {
@@ -526,11 +433,13 @@ void pTMR_DRV_ClearInterruptFlagTimerChannels(uint32_t instance,
     pTMR_ClearInterruptFlagTimerChannels(base, channel);
 }
 
-/*FUNCTION**********************************************************************
- * Function Name : pTMR_Get_ClockFreq
- * Description   : Get pTMR clock frequency based on pTMR clock setting
- * END**************************************************************************/
+/*******************************************************************************
+ * Internal Functions
+ ******************************************************************************/
 
+/*!
+ * @brief Update the cached clock frequency for the given pTMR instance.
+ */
 static void pTMR_Update_ClockFreq(uint32_t instance)
 {
     DEV_ASSERT(instance < pTMR_INSTANCE_COUNT);

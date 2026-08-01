@@ -1,107 +1,336 @@
 /*!
- @defgroup adc_driver ADC Driver
- @ingroup adc
- @brief Analog to Digital Converter Peripheral Driver.
+@defgroup adc
+@ingroup mod_analog Analog-to-Digital Converter (ADC)
+@brief Multi-mode SAR ADC module for analog sampling, sequencing, and watchdog monitoring.
 
- The ADC is a configurable 12-bit (selectable to between 8-bit, 10-bit and 12-bit resolution) single-ended SAR converter.
+@details
+The ADC module converts external analog inputs into digital samples using a
+successive-approximation (SAR) engine. The driver exposes configuration APIs
+for converter timing, trigger selection, scan sequences, DMA handoff, result
+FIFO access, and analog watchdog monitoring.
 
- Features of the ADC include:
-     - up to 32 control channels (depending on the device variant), with configurable triggers
-     - up to 32 selectable external input sources (depending on the device variant) and multiple internal input sources
-     - hardware compare and average functions
-     - auto-calibration feature
+The exact feature set depends on the target device. Optional capabilities such
+as injected conversions, multiple watchdog channels, second sample-time
+registers, and low-power-keep behavior are enabled through `FEATURE_ADC_*`
+macros in the device-specific feature headers.
 
- ## Hardware background ##
- The ADC included in the YTM32B1Mx series is a selectable resolution (8, 10, 12-bit), single-ended,
- SAR converter. Depending on the device variant, each ADC instance has
- up to 40 selectable input channels (up to 32 external and up to 8 internal)
- and up to 32 control channels (each with a result register, an input channel selection register
- and interrupt enable).
+@section adc_features Key Features
+- Selectable conversion resolution: 12-bit, 10-bit, 8-bit, or 6-bit.
+- Configurable startup time, sample time, and input clock divider.
+- Software-triggered or hardware-triggered conversion flow.
+- Sequence conversion modes for step, loop, and continuous scanning.
+- Result FIFO with DMA watermark support.
+- Analog watchdog compare window for threshold monitoring.
+- Optional injected conversion path on supported devices.
+- Polled status APIs for conversion completion, end-of-sequence, ready, sample-end,
+  overrun, and watchdog events.
 
- <b>Sample time</b> is configurable through selection of A/D clock and a
- configurable sample time (in A/D clocks).
+@section adc_modes Supported Modes
 
- Also provided are the Hardware Average and Hardware Compare Features.
+@subsection adc_modes_resolution Resolution Modes
+| Mode | Description |
+|------|-------------|
+| `ADC_RESOLUTION_12BIT` | Highest conversion precision. |
+| `ADC_RESOLUTION_10BIT` | Reduced conversion width for faster processing or smaller result range. |
+| `ADC_RESOLUTION_8BIT` | Compact conversion result for lightweight sampling paths. |
+| `ADC_RESOLUTION_6BIT` | Lowest conversion width with the smallest result range. |
 
- <b>Hardware Average</b> will sample a selectable number of measurements and
- average them before signaling a Conversion Complete.
+@subsection adc_modes_trigger Trigger Modes
+| Mode | Description |
+|------|-------------|
+| `ADC_TRIGGER_SOFTWARE` | Start conversion through software control. |
+| `ADC_TRIGGER_HARDWARE` | Start conversion from the configured hardware trigger source. |
+| `ADC_TRIG_INJECT_*` | Combined normal/injected trigger selection on devices that support injection mode. |
 
- <b>Hardware Compare</b> can be used to signal if an input channel goes outside
- (or inside) of a predefined range.
+@subsection adc_modes_sequence Sequence Modes
+| Mode | Description |
+|------|-------------|
+| `ADC_CONV_STEP` | Convert one configured channel per trigger event. |
+| `ADC_CONV_LOOP` | Convert the full configured sequence for each trigger event. |
+| `ADC_CONV_CONTINUOUS` | Continuously restart sequence conversion after each trigger launch. |
 
- The <b>Calibration</b> features can be used to automatically calibrate or
- fine-tune the ADC before use.
+@section adc_arch Module Architecture
 
- ## Driver consideration ##
- The ADC Driver provides access to all features, but not all need to be
- configured to use the ADC.
- The user application can use the default for most settings, changing only
- what is necessary. For example, if Compare or Average features are not used,
- the user does not need to configure them.
+The ADC module uses a two-layer software structure:
 
- The Driver uses structures for configuration. Each structure contains members
- that are specific to its respective functionality. There is a \b converter
- structure, a hardware \b compare structure, a hardware \b average structure
- and a \b calibration structure. Each struct has a corresponding
- <tt>InitStruct()</tt> method that can be used to initialize the members to
- reset values, so the user can change only the values that are specific to the
- application.
+@verbatim
+┌──────────────────────────────────────────────┐
+│              Application Code                │
+│         (calls ADC_DRV_* functions)          │
+├──────────────────────────────────────────────┤
+│           ADC Driver Layer                   │
+│  ● Configuration structure helpers           │
+│  ● Converter / sequence / watchdog APIs      │
+│  ● Runtime control, polling, and FIFO reads  │
+├──────────────────────────────────────────────┤
+│         ADC HW Access Layer                  │
+│  ● Inline register access helpers            │
+│  ● Timing / trigger / DMA configuration      │
+│  ● Sequence, interrupt, and flag control     │
+├──────────────────────────────────────────────┤
+│           ADC Peripheral Hardware            │
+│  ● CTRL / CFG / STS / FIFO / CHSEL           │
+│  ● Watchdog threshold and interrupt logic    │
+└──────────────────────────────────────────────┘
+@endverbatim
 
- The Driver also includes support for configuring the Trigger Latching and Arbitration Unit
- controlled from a separate hardware module - System Integration Module (SIM).
+@subsection adc_arch_driver Driver Layer (`adc_driver.h` / `adc_driver.c`)
+Application code should call the `ADC_DRV_*` APIs. The driver converts
+instance numbers into base addresses, applies configuration structures, and
+provides higher-level runtime helpers such as polling, FIFO access, and flag
+management.
 
+@subsection adc_arch_hw HW Access Layer (`adc_hw_access.h`)
+The hardware access layer exposes low-level inline helpers that directly read
+or write ADC registers. These helpers are grouped by converter control,
+hardware compare, sequence configuration, interrupt/flag management, and FIFO
+runtime operations.
 
- ## Interrupt handling ##
- The ADC Driver in YTM32 SDK does not use interrupts internally. These can be
- defined by the user application.
- There are two ways to add an ADC interrupt:
-  1. Using the weak symbols defined by start-up code. If the methods
-      <tt>ADC<b>x</b>_IRQHandler(void)</tt> (x denotes instance number) are not
-      defined, the linker uses a default ISR. An error will be generated if
-      methods with the same name are defined multiple times. This method works
-      regardless of the placement of the interrupt vector table (Flash or RAM).
-  2. Using the Interrupt Manager's <tt>INT_SYS_InstallHandler()</tt> method. This can
-      be used to dynamically change the ISR at run-time. This method works
-      only if the interrupt vector table is located in RAM (YTM32 SDK behavior). To get
-      the ADC instance's interrupt number, use <tt>ADC_DRV_GetInterruptNumber()</tt>.
+@section adc_config Configuration Parameters
 
- ## Clocking and pin configuration ##
- The ADC Driver does not handle clock setup (from PCC) or any kind of pin
- configuration (done by PORT module). This is handled by the Clock Manager and
- PORT module, respectively. The driver assumes that correct clock
- configurations have been made, so it is the user's responsibility to set up
- clocking and pin configurations correctly.
+@subsection adc_config_converter adc_converter_config_t Fields
+| Field | Type | Description | Default |
+|------|------|-------------|---------|
+| `clockDivider` | `adc_clk_divide_t` | ADC input clock divider. | `ADC_DEFAULT_CLOCK_DIVIDER` |
+| `startTime` | `uint8_t` | Startup delay in ADC clock cycles. | `ADC_DEFAULT_START_TIME` |
+| `sampleTime` | `uint8_t` | Primary sample time in ADC clock cycles. | `ADC_DEFAULT_SAMPLE_TIME` |
+| `overrunMode` | `bool` | Overwrite FIFO data on overrun when enabled. | `false` |
+| `autoOffEnable` | `bool` | Automatically power down the converter between conversions. | `false` |
+| `waitEnable` | `bool` | Stall conversion when the result FIFO is full. | `false` |
+| `triggerSource` | `uint8_t` | Hardware trigger source selector. | `0` |
+| `trigger` | `adc_trigger_t` | Software/hardware trigger mode selection. | Software-trigger default |
+| `align` | `adc_align_t` | Result alignment in the FIFO/register view. | Right-aligned default |
+| `resolution` | `adc_resolution_t` | Conversion result width. | `ADC_RESOLUTION_12BIT` |
+| `dmaWaterMark` | `uint8_t` | FIFO watermark level used by DMA requests. | `1` |
+| `dmaEnable` | `bool` | Enable DMA requests from the result FIFO. | `false` |
+| `sequenceConfig` | `adc_sequence_config_t` | Normal conversion sequence settings. | Single-channel loop sequence |
+| `injectConfig` | `adc_inject_config_t` | Injected conversion settings on supported devices. | Disabled |
+| `compareConfig` / `adcCompareCnt` | `adc_compare_config_t` / `uint8_t` | Analog watchdog settings. | Disabled |
 
- ## Triggering a conversion ##
- There are two separate ways for triggering an ADC conversion from a control channel:
- 1. Software triggering
-     Only conversion from first control channel may be triggered from software - must enabled at converter configuration
-     Initiated by writing a valid input channel ID to the first control channel - use ADC_DRV_ConfigChan().
- 2. Hardware triggering
-     Conversion from any control channel may be hardware triggered - however for first control channel it must be enabled
-     at converter configuration.
+@subsection adc_config_sequence adc_sequence_config_t Fields
+| Field | Type | Description |
+|------|------|-------------|
+| `channels[]` | `adc_inputchannel_t[]` | Ordered list of input channels for the normal sequence. |
+| `totalChannels` | `uint8_t` | Number of active sequence entries. |
+| `sequenceMode` | `adc_sequence_mode_t` | Step, loop, or continuous scan behavior. |
+| `sequenceIntEnable` | `bool` | Enable end-of-sequence interrupt generation. |
+| `convIntEnable` | `bool` | Enable end-of-conversion interrupt generation. |
+| `ovrunIntEnable` | `bool` | Enable FIFO overrun interrupt generation. |
+| `sampIntEnable` | `bool` | Enable sample-end interrupt generation. |
+| `readyIntEnable` | `bool` | Enable ADC-ready interrupt generation. |
 
- ## Integration guideline ##
+@subsection adc_config_compare adc_compare_config_t Fields
+| Field | Type | Description |
+|------|------|-------------|
+| `compareEnable` | `bool` | Enable analog watchdog monitoring. |
+| `compareAllChannelEnable` | `bool` | Apply watchdog monitoring to all channels when supported. |
+| `compChalSel` | `adc_inputchannel_t` | Input channel monitored by the watchdog. |
+| `compHigh` | `uint16_t` | Upper threshold (always expressed in 12-bit scale). |
+| `compLow` | `uint16_t` | Lower threshold (always expressed in 12-bit scale). |
+| `compIntEnable` | `bool` | Enable watchdog interrupt reporting. |
+| `effectiveMode` | `adc_awg_effective_mode_t` | Select inside-window or outside-window match behavior. |
 
- ### Compilation units ###
+@subsection adc_config_features Device Feature Macros
+| Macro | Description |
+|------|-------------|
+| `FEATURE_ADC_SUPPORT_INJECTION_MODE` | Indicates whether injected conversions are available. |
+| `FEATURE_ADC_WDG_CHANNEL_COUNT` | Number of watchdog channels implemented by the hardware. |
+| `FEATURE_ADC_SUPPORT_SECOND_SMP` | Indicates whether the converter exposes a second sample-time field. |
+| `FEATURE_ADC_SUPPORT_LOW_POWER_KEEP` | Indicates whether low-power keep control is available. |
+| `FEATURE_ADC_MAX_NUM_EXT_CHANS` | Maximum number of external analog input channels. |
 
- The following files need to be compiled in the project:
- \verbatim
- ${SDK_PATH}\platform\drivers\src\adc_driver.c
- \endverbatim
+@section adc_usage Usage Patterns
 
- ### Include path ###
+@subsection adc_usage_basic Pattern 1: Basic Single-Channel Conversion
+@code{.c}
+#define INST_ADC (0U)
 
- The following paths need to be added to the include path of the toolchain:
- \verbatim
- ${SDK_PATH}\platform\drivers\inc\
- \endverbatim
+adc_converter_config_t converterConfig;
 
- ### Compile symbols ###
+ADC_DRV_InitConverterStruct(&converterConfig);
+converterConfig.sequenceConfig.channels[0] = ADC_INPUTCHAN_EXT0;
+converterConfig.sequenceConfig.totalChannels = 1U;
+converterConfig.sequenceConfig.sequenceMode = ADC_CONV_LOOP;
 
- No special symbols are required for this component
+ADC_DRV_ConfigConverter(INST_ADC, &converterConfig);
+ADC_DRV_Enable(INST_ADC);
+ADC_DRV_Start(INST_ADC);
+ADC_DRV_WaitConvDone(INST_ADC);
 
- ### Dependencies ###
- \ref clock_manager
+uint16_t sample = ADC_DRV_ReadFIFO(INST_ADC);
 
- */
+ADC_DRV_Stop(INST_ADC);
+ADC_DRV_Disable(INST_ADC);
+@endcode
+
+@subsection adc_usage_watchdog Pattern 2: Analog Watchdog Monitoring
+@code{.c}
+#define INST_ADC (0U)
+
+adc_compare_config_t compareConfig;
+
+ADC_DRV_InitHwCompareStruct(&compareConfig);
+compareConfig.compareEnable = true;
+compareConfig.compChalSel = ADC_INPUTCHAN_EXT0;
+compareConfig.compLow = 0x0200U;
+compareConfig.compHigh = 0x0C00U;
+compareConfig.compIntEnable = true;
+compareConfig.effectiveMode = ADC_AWG_EFFECTIVE_OUTSIDE;
+
+ADC_DRV_ConfigHwCompare(INST_ADC, &compareConfig);
+
+if (ADC_DRV_GetWatchdogFlag(INST_ADC))
+{
+    ADC_DRV_ClearWdFlagCmd(INST_ADC);
+}
+@endcode
+
+@subsection adc_usage_sequence Pattern 3: Sequence Conversion with FIFO Readout
+@code{.c}
+#define INST_ADC (0U)
+
+adc_sequence_config_t sequenceConfig;
+
+ADC_DRV_InitSequenceStruct(&sequenceConfig);
+sequenceConfig.channels[0] = ADC_INPUTCHAN_EXT0;
+sequenceConfig.channels[1] = ADC_INPUTCHAN_EXT1;
+sequenceConfig.totalChannels = 2U;
+sequenceConfig.sequenceMode = ADC_CONV_LOOP;
+sequenceConfig.sequenceIntEnable = true;
+
+ADC_DRV_ConfigSequence(INST_ADC, &sequenceConfig);
+ADC_DRV_Start(INST_ADC);
+ADC_DRV_WaitSequenceDone(INST_ADC);
+
+uint32_t taggedResult = ADC_DRV_ReadSeqtagAndData(INST_ADC);
+ADC_DRV_ClearEoseqFlagCmd(INST_ADC);
+@endcode
+
+@subsection adc_usage_dma Pattern 4: DMA-Oriented Converter Setup
+@code{.c}
+#define INST_ADC (0U)
+
+adc_converter_config_t converterConfig;
+
+ADC_DRV_InitConverterStruct(&converterConfig);
+converterConfig.dmaEnable = true;
+converterConfig.dmaWaterMark = 4U;
+converterConfig.waitEnable = true;
+
+ADC_DRV_ConfigConverter(INST_ADC, &converterConfig);
+@endcode
+
+@section adc_api API Quick Reference
+
+@subsection adc_api_converter Converter Configuration
+| Function | Description |
+|------|-------------|
+| `ADC_DRV_InitConverterStruct()` | Fill the converter configuration structure with safe defaults. |
+| `ADC_DRV_ConfigConverter()` | Apply top-level converter, sequence, DMA, and watchdog settings. |
+| `ADC_DRV_GetConverterConfig()` | Read back the active converter configuration. |
+
+@subsection adc_api_compare Hardware Compare
+| Function | Description |
+|------|-------------|
+| `ADC_DRV_InitHwCompareStruct()` | Fill the analog watchdog configuration structure with defaults. |
+| `ADC_DRV_ConfigHwCompare()` | Apply a single watchdog configuration. |
+| `ADC_DRV_ConfigHwCompareGroup()` | Apply a watchdog configuration array on devices with multiple channels. |
+| `ADC_DRV_GetHwCompareConfig()` | Read back watchdog configuration data. |
+
+@subsection adc_api_sequence Sequence Configuration
+| Function | Description |
+|------|-------------|
+| `ADC_DRV_InitSequenceStruct()` | Fill the sequence configuration structure with default values. |
+| `ADC_DRV_ConfigSequence()` | Program the normal conversion sequence. |
+| `ADC_DRV_GetSequenceConfig()` | Read back the normal conversion sequence state. |
+| `ADC_DRV_ConfigInject()` | Program the injected conversion sequence on supported devices. |
+| `ADC_DRV_GetInjectConfig()` | Read back the injected conversion sequence state. |
+
+@subsection adc_api_runtime Runtime Control and Status
+| Function | Description |
+|------|-------------|
+| `ADC_DRV_Reset()` | Restore the converter to its reset-style runtime state. |
+| `ADC_DRV_Enable()` | Enable the ADC hardware. |
+| `ADC_DRV_Disable()` | Disable the ADC hardware and abort active work. |
+| `ADC_DRV_Start()` | Launch or arm conversion according to the trigger mode. |
+| `ADC_DRV_Stop()` | Stop the current conversion activity. |
+| `ADC_DRV_WaitConvDone()` | Poll until the current conversion is no longer active. |
+| `ADC_DRV_WaitSequenceDone()` | Poll until the configured sequence completes. |
+| `ADC_DRV_ReadFIFO()` | Read one conversion result from the FIFO. |
+| `ADC_DRV_ReadSeqtagAndData()` | Read a tagged FIFO entry that includes sequence metadata. |
+
+@subsection adc_api_flags Flag and Interrupt Utilities
+| Function | Description |
+|------|-------------|
+| `ADC_DRV_GetConvCompleteFlag()` | Report the conversion-complete flag state. |
+| `ADC_DRV_GetEndOfConversionFlag()` | Report the end-of-conversion flag state. |
+| `ADC_DRV_GetFullOfConversionFlag()` | Report whether the result FIFO is full. |
+| `ADC_DRV_GetOvrRunOfConversionFlag()` | Report whether a FIFO overrun occurred. |
+| `ADC_DRV_GetWatchdogFlag()` | Report watchdog threshold events. |
+| `ADC_DRV_GetEndOfSequenceFlag()` | Report end-of-sequence status. |
+| `ADC_DRV_GetReadyFlag()` | Report ADC-ready status. |
+| `ADC_DRV_GetSampEndFlag()` | Report sample-end status. |
+| `ADC_DRV_GetInterruptNumber()` | Return the IRQ number associated with an ADC instance. |
+| `ADC_DRV_ClearWdFlagCmd()` | Clear the watchdog flag. |
+| `ADC_DRV_ClearReadyFlagCmd()` | Clear the ready flag. |
+| `ADC_DRV_ClearSampEndFlagCmd()` | Clear the sample-end flag. |
+| `ADC_DRV_ClearOvrFlagCmd()` | Clear the overrun flag. |
+| `ADC_DRV_ClearEoseqFlagCmd()` | Clear the end-of-sequence flag. |
+| `ADC_DRV_ClearEocFlagCmd()` | Clear the end-of-conversion flag. |
+
+@section adc_notes Important Notes
+
+@subsection adc_notes_clock Clock and Pin Dependencies
+The ADC driver does not enable clocks or configure I/O pins. The ADC peripheral
+clock and the selected analog input pins must be configured before calling the
+driver APIs. See @ref clock_manager and the PORT/pin-mux configuration flow
+used by the application.
+
+@subsection adc_notes_sequence Sequence Reconfiguration
+`ADC_DRV_ConfigSequence()` and `ADC_DRV_ConfigInject()` stop the ADC before
+rewriting sequence registers. Reconfiguring a live sequence therefore aborts
+the active conversion in progress.
+
+@subsection adc_notes_watchdog Watchdog Threshold Encoding
+The watchdog low/high thresholds are programmed in the hardware watchdog
+threshold registers using the ADC's 12-bit scaling convention. Keep this in
+mind when using lower conversion resolutions.
+
+@subsection adc_notes_fifo FIFO and Flag Handling
+- Read FIFO results often enough to avoid `OVR` overrun conditions.
+- Clear sticky status flags with the dedicated `ADC_DRV_Clear*FlagCmd()`
+  helpers before re-entering the same polling loop.
+- When `waitEnable` is set, conversions may stall until FIFO space becomes
+  available.
+
+@subsection adc_notes_device Device Variations
+Some APIs and structure fields are compiled only when their matching feature
+macros are enabled. Review the device-specific feature header before relying on
+injected conversion support, multiple watchdog channels, or alternate sample
+timing fields.
+
+@section adc_integration Integration Guide
+
+@subsection adc_integration_units Compilation Units
+Compile the following source file into the project:
+
+@verbatim
+${SDK_PATH}/platform/drivers/src/adc/adc_driver.c
+@endverbatim
+
+@subsection adc_integration_include Include Path
+Add the public driver include directory to the compiler include search path:
+
+@verbatim
+${SDK_PATH}/platform/drivers/inc/
+@endverbatim
+
+@subsection adc_integration_symbols Compile Symbols
+No module-specific compile symbols are required beyond the device selection
+macros already used by the SDK.
+
+@subsection adc_integration_deps Dependencies
+- @ref clock_manager
+- Device feature headers pulled in through `device_registers.h`
+
+*/

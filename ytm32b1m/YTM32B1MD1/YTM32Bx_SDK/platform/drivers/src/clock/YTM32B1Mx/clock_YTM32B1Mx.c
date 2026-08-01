@@ -8,6 +8,14 @@
 /*!
  * @file clock_YTM32B1Mx.c
  * @version 1.4.1
+ *
+ * @brief Clock Manager — YTM32B1Mx device-specific implementation.
+ *
+ * This file implements the application-level Clock Manager functions for the
+ * YTM32B1Mx device family, including system clock initialization, peripheral
+ * clock (IPC) configuration, CMU monitoring, and frequency query. It wraps
+ * the low-level hardware access layers (scu_hw_access.h, ipc_hw_access.h,
+ * cmu_hw_access.h, cfmu_hw_access.h).
  */
 
 /*!
@@ -35,21 +43,23 @@
 
 static clock_manager_state_t g_clockState;
 
-/* FXOSC clock frequency */
-static uint32_t g_fxoscClkFreq;                         /* FXOSC clock */
+/*! @brief FXOSC clock frequency (Hz), updated during initialization. */
+static uint32_t g_fxoscClkFreq;
 #if defined(FEATURE_SCU_SUPPORT_SXOSC) && (FEATURE_SCU_SUPPORT_SXOSC == 1)
-/* SXOSC clock frequency */
-static uint32_t g_sxoscClkFreq;                         /* FXOSC clock */
+/*! @brief SXOSC clock frequency (Hz), updated during initialization. */
+static uint32_t g_sxoscClkFreq;
 #endif
 
-/*! @brief Clock name mappings
- *         Constant array storing the mappings between clock names and peripheral clock control indexes.
- *         If there is no peripheral clock control index for a clock name, then the corresponding value is
- *         IPC_INVALID_INDEX.
+/*! @brief Clock name to IPC control register index mappings.
+ *
+ * Maps each clock_names_t value to its peripheral clock control register
+ * index. Entries with value IPC_INVALID_INDEX indicate no IPC mapping.
  */
 const uint16_t clockNameMappings[] = IPC_CLOCK_NAME_MAPPINGS; /*PRQA S 1504*/
 /*!
- * @brief SCU CMU channel definition.
+ * @brief SCU CMU channel index enumeration.
+ *
+ * Maps CMU monitoring channels to their hardware channel indices.
  */
 typedef enum
 {
@@ -64,8 +74,7 @@ typedef enum
 #endif /* FEATURE_SCU_SUPPORT_PLL */
 } scu_cmu_channel_t;
 /*!
- * @brief SCU system clock type.
- * Implements scu_system_clock_type_t_Class
+ * @brief SCU system clock type — identifies each stage in the clock tree.
  */
 typedef enum
 {
@@ -101,15 +110,9 @@ static void CLOCK_SYS_DisableClkOut(void);
  * Code
  ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : CLOCK_DRV_Init
- * Description   : This function sets the system to target configuration, it
- * only sets the clock modules registers for clock mode change, but not send
- * notifications to drivers.
- *
- * Implements CLOCK_DRV_Init_Activity
- * END**************************************************************************/
+/*!
+ * @brief Initialize system and peripheral clocks from configuration structure.
+ */
 status_t CLOCK_DRV_Init(clock_user_config_t const * config)
 {
     status_t result = STATUS_SUCCESS;
@@ -129,12 +132,9 @@ status_t CLOCK_DRV_Init(clock_user_config_t const * config)
     return result;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : CLOCK_SYS_DisableCmu
- * Description   : This function disables the CMU module
- *
- * END**************************************************************************/
+/*!
+ * @brief Disable the CMU module.
+ */
 static void CLOCK_SYS_DisableCmu(void)
 {
 #if defined(FEATURE_SOC_HAS_SEPARATE_CMU_AND_CLKOUT) && (FEATURE_SOC_HAS_SEPARATE_CMU_AND_CLKOUT == 0)
@@ -148,12 +148,9 @@ static void CLOCK_SYS_DisableCmu(void)
 #endif
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : CLOCK_SYS_ConfigureClkOut
- * Description   : This function configures the clock out
- *
- * END**************************************************************************/
+/*!
+ * @brief Configure the clock output (CLKOUT).
+ */
 static void CLOCK_SYS_ConfigureClkOut(const scu_config_t * scuConfig)
 {
 #if defined(FEATURE_SOC_HAS_SEPARATE_CMU_AND_CLKOUT) && (FEATURE_SOC_HAS_SEPARATE_CMU_AND_CLKOUT == 0)
@@ -174,12 +171,9 @@ static void CLOCK_SYS_ConfigureClkOut(const scu_config_t * scuConfig)
 #endif
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : CLOCK_SYS_DisableClkOut
- * Description   : This function disables the clock out
- *
- * END**************************************************************************/
+/*!
+ * @brief Disable the clock output (CLKOUT).
+ */
 static void CLOCK_SYS_DisableClkOut(void)
 {
 #if defined(FEATURE_SOC_HAS_SEPARATE_CMU_AND_CLKOUT) && (FEATURE_SOC_HAS_SEPARATE_CMU_AND_CLKOUT == 0)
@@ -189,12 +183,9 @@ static void CLOCK_SYS_DisableClkOut(void)
 #endif
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : CLOCK_SYS_SetScuConfiguration
- * Description   : This function configures the SCU blocks
- *
- * END**************************************************************************/
+/*!
+ * @brief Configure the SCU (system clock, oscillators, PLL, CMU).
+ */
 static status_t CLOCK_SYS_SetScuConfiguration(const scu_config_t * scuConfig,
                                               const cmu_config_t * cmuConfig)
 {
@@ -400,12 +391,9 @@ static status_t CLOCK_SYS_SetScuConfiguration(const scu_config_t * scuConfig,
     return retVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : CLOCK_SYS_SetDefaultCmuChannelConfiguration
- * Description   : This function configures the default SCU CMU blocks
- *
- * END**************************************************************************/
+/*!
+ * @brief Configure a CMU channel with default ±25% thresholds.
+ */
 static inline void CLOCK_SYS_SetDefaultCmuChannelConfiguration(uint32_t channelFreq, scu_cmu_channel_t  channel)
 {
 #if defined(CMU_ALWAYS_ON)
@@ -443,12 +431,9 @@ static inline void CLOCK_SYS_SetDefaultCmuChannelConfiguration(uint32_t channelF
 #endif /* CMU_CONFIG_ALWAYS_ON */
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : CLOCK_SYS_SetCmuChannelConfiguration
- * Description   : This function configures the SCU CMU blocks
- *
- * END**************************************************************************/
+/*!
+ * @brief Configure a CMU channel from user-provided settings.
+ */
 static inline void CLOCK_SYS_SetCmuChannelConfiguration(const cmu_ch_config_t * cmuChConfig,
                                                         const scu_cmu_channel_t channel)
 {
@@ -478,10 +463,9 @@ static inline void CLOCK_SYS_SetCmuChannelConfiguration(const cmu_ch_config_t * 
     }
 }
 
-/*FUNCTION**********************************************************************
- * Function Name : CLOCK_SYS_ConfigureTemporarySystemClock
- * Description   : Configures and transitions to a temporary system clock source: FIRC
- * END**************************************************************************/
+/*!
+ * @brief Switch the system clock to the specified source and wait for completion.
+ */
 static status_t CLOCK_SYS_ConfigureSystemClock(scu_system_clock_src_t clkSrc)
 {
     status_t status = STATUS_SCU_CLK_SWITCH_TIMEOUT;
@@ -498,10 +482,9 @@ static status_t CLOCK_SYS_ConfigureSystemClock(scu_system_clock_src_t clkSrc)
     return status;
 }
 #if defined(FEATURE_SCU_SUPPORT_PLL) && (FEATURE_SCU_SUPPORT_PLL)
-/*FUNCTION**********************************************************************
- * Function Name : CLOCK_SCU_WaitPllLock
- * Description   : Wait PLL lock
- * END**************************************************************************/
+/*!
+ * @brief Wait for PLL lock with periodic toggle recovery.
+ */
 static status_t CLOCK_SCU_WaitPllLock(void)
 {
     status_t status = STATUS_SCU_PLL_LOCK_TIMEOUT;
@@ -530,10 +513,9 @@ static status_t CLOCK_SCU_WaitPllLock(void)
     return status;
 }
 #endif /* FEATURE_SCU_SUPPORT_PLL */
-/*FUNCTION**********************************************************************
- * Function Name : CLOCK_SCU_WaitDividerStable
- * Description   : Wait system divider stable
- * END**************************************************************************/
+/*!
+ * @brief Wait for system clock dividers to become stable.
+ */
 static status_t CLOCK_SCU_WaitDividerStable(void)
 {
     status_t status = STATUS_SCU_DIVIDER_SWITCH_TIMEOUT;
@@ -550,10 +532,9 @@ static status_t CLOCK_SCU_WaitDividerStable(void)
 }
 
 
-/*FUNCTION**********************************************************************
- * Function Name : CLOCK_SYS_WaitFXSOCValid
- * Description   : Wait FXOSC clock valid
- * END**************************************************************************/
+/*!
+ * @brief Wait for FXOSC to become valid, performing gain sweep.
+ */
 status_t CLOCK_SYS_WaitFXOSCValid(void)
 {
     uint32_t timeoutLoopCnt;
@@ -590,22 +571,18 @@ status_t CLOCK_SYS_WaitFXOSCValid(void)
     SCU->FXOSC_CTRL = regValue;
     return status;
 }
-/*FUNCTION**********************************************************************
- * Function Name : CLOCK_Get IPC ctrl register
- * Description   : Get IPC base address of given clock name
- * END**************************************************************************/
+/*!
+ * @brief Get the IPC control register pointer for a clock name.
+ */
 static inline volatile uint32_t *CLOCK_GetIpcCtrlReg(clock_names_t clockName)
 {
     uint32_t idx = clockNameMappings[clockName];
     return &(IPC->CTRL[idx]);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : CLOCK_SYS_SetIpcConfiguration
- * Description   : This function configures the IPC block
- *
- * END**************************************************************************/
+/*!
+ * @brief Configure all IPC peripheral clocks from the configuration array.
+ */
 static void CLOCK_SYS_SetIpcConfiguration(const ipc_config_t * peripheralClockConfig)
 {
     DEV_ASSERT(peripheralClockConfig != NULL);
@@ -629,13 +606,9 @@ static void CLOCK_SYS_SetIpcConfiguration(const ipc_config_t * peripheralClockCo
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : CLOCK_DRV_ResetModule
- * Description   : This function reset module by clock names
- *
- * Implements CLOCK_DRV_ResetModule_Activity
- * END**************************************************************************/
+/*!
+ * @brief Assert and de-assert software reset for a peripheral module.
+ */
 void CLOCK_DRV_ResetModule(clock_names_t clockName)
 {
     volatile uint32_t *ipcCtrlReg;
@@ -643,13 +616,9 @@ void CLOCK_DRV_ResetModule(clock_names_t clockName)
     /* reset module */
     IPC_ResetModule(ipcCtrlReg);
 }
-/*FUNCTION**********************************************************************
- *
- * Function Name : CLOCK_DRV_ResetModule
- * Description   : This function reset module by clock names
- *
- * Implements CLOCK_DRV_ResetModule_Activity
- * END**************************************************************************/
+/*!
+ * @brief Configure an individual peripheral clock gate, source, and divider.
+ */
 void CLOCK_DRV_SetModuleClock(clock_names_t clockName, bool clockGate, uint32_t clkSrc, uint32_t divider)
 {
     volatile uint32_t *ipcCtrlReg;
@@ -660,13 +629,9 @@ void CLOCK_DRV_SetModuleClock(clock_names_t clockName, bool clockGate, uint32_t 
 }
 
 #if FEATURE_SCU_SUPPORT_PLL
-/*FUNCTION**********************************************************************
- *
- * Function Name : CLOCK_DRV_GetPllFreq
- * Description   : This function returns the frequency of a given clock
- *
- * Implements CLOCK_DRV_GetPllFreq_Activity
- * END**************************************************************************/
+/*!
+ * @brief Get the current PLL output frequency.
+ */
 status_t CLOCK_DRV_GetPllFreq(uint32_t * frequency)
 {
     status_t status = STATUS_SUCCESS;
@@ -695,13 +660,9 @@ status_t CLOCK_DRV_GetPllFreq(uint32_t * frequency)
 }
 #endif /* FEATURE_SCU_SUPPORT_PLL */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : CLOCK_DRV_GetFreq
- * Description   : This function returns the frequency of a given clock
- *
- * Implements CLOCK_DRV_GetFreq_Activity
- * END**************************************************************************/
+/*!
+ * @brief Get the clock frequency for a named clock.
+ */
 status_t CLOCK_DRV_GetFreq(clock_names_t clockName, uint32_t * frequency)
 {
     status_t status = STATUS_SUCCESS;
@@ -836,15 +797,9 @@ status_t CLOCK_DRV_GetFreq(clock_names_t clockName, uint32_t * frequency)
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : CLOCK_SYS_Init
- * Description   : Install pre-defined clock configurations.
- * This function installs the pre-defined clock configuration table to the
- * clock manager.
- *
- * Implements CLOCK_SYS_Init_Activity
- *END**************************************************************************/
+/*!
+ * @brief Install pre-defined clock configurations and callback table.
+ */
 status_t CLOCK_SYS_Init(clock_manager_user_config_t const **clockConfigsPtr,
                               uint8_t configsNumber,
                               clock_manager_callback_user_config_t **callbacksPtr,
@@ -867,16 +822,9 @@ status_t CLOCK_SYS_Init(clock_manager_user_config_t const **clockConfigsPtr,
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : CLOCK_SYS_UpdateConfiguration
- * Description   : Send notification and change system clock configuration.
- * This function sends the notification to all callback functions, if all
- * callbacks return OK or forceful policy is used, this function will change
- * system clock configuration. The function should be called only on run mode.
- *
- * Implements CLOCK_SYS_UpdateConfiguration_Activity
- *END**************************************************************************/
+/*!
+ * @brief Switch to a pre-defined clock configuration by index.
+ */
 status_t CLOCK_SYS_UpdateConfiguration(uint8_t targetConfigIndex,
                                                    clock_manager_policy_t policy)
 {
@@ -983,25 +931,17 @@ status_t CLOCK_SYS_UpdateConfiguration(uint8_t targetConfigIndex,
     return ret;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : CLOCK_SYS_GetCurrentConfiguration
- * Description   : Get current clock configuration index.
- *
- * Implements CLOCK_SYS_GetCurrentConfiguration_Activity
- *END**************************************************************************/
+/*!
+ * @brief Get the index of the currently active clock configuration.
+ */
 uint8_t CLOCK_SYS_GetCurrentConfiguration(void)
 {
     return g_clockState.curConfigIndex;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : CLOCK_SYS_GetErrorCallback
- * Description   : Get the callback which returns error in last clock switch.
- *
- * Implements CLOCK_SYS_GetErrorCallback_Activity
- *END**************************************************************************/
+/*!
+ * @brief Get the callback that returned error during the last clock switch.
+ */
 clock_manager_callback_user_config_t* CLOCK_SYS_GetErrorCallback(void)
 {
     clock_manager_callback_user_config_t *retValue;
@@ -1018,38 +958,26 @@ clock_manager_callback_user_config_t* CLOCK_SYS_GetErrorCallback(void)
     return retValue;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : CLOCK_SYS_GetFreq
- * Description   : Wrapper over CLOCK_DRV_GetFreq function. It's part of the old API.
- *
- * Implements CLOCK_SYS_GetFreq_Activity
- *END**************************************************************************/
+/*!
+ * @brief Get clock frequency (legacy wrapper over CLOCK_DRV_GetFreq).
+ */
 status_t CLOCK_SYS_GetFreq(clock_names_t clockName, uint32_t *frequency)
 {
     return CLOCK_DRV_GetFreq(clockName,frequency);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : CLOCK_SYS_SetConfiguration
- * Description   : Wrapper over CLOCK_DRV_Init function. It's part of the old API.
- *
- * Implements CLOCK_SYS_SetConfiguration_Activity
- *END**************************************************************************/
+/*!
+ * @brief Apply a clock configuration directly (legacy wrapper over CLOCK_DRV_Init).
+ */
 status_t CLOCK_SYS_SetConfiguration(clock_manager_user_config_t const * config)
 {
     return CLOCK_DRV_Init(config);
 }
 
 #if defined(FEATURE_SOC_HAS_SEPARATE_CMU_AND_CLKOUT) && (FEATURE_SOC_HAS_SEPARATE_CMU_AND_CLKOUT == 1)
-/*FUNCTION**********************************************************************
- *
- * Function Name : CLOCK_SYS_MeasureClkFreq
- * Description   : Measure clock frequency.
- *
- * Implements CLOCK_SYS_MeasureClkFreq_Activity
- *END**************************************************************************/
+/*!
+ * @brief Measure the frequency of a specified clock source via CFMU.
+ */
 status_t CLOCK_SYS_MeasureClkFreq(scu_clkout_src_t measuredClkSrc, uint8_t measuredClkDivider, uint32_t * const measuredClkFreq)
 {
     status_t status = STATUS_SUCCESS;

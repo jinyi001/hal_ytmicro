@@ -8,6 +8,7 @@
 /*!
  * @file startup.h
  * @version 1.4.1
+ * @brief Shared startup declarations for platform/devices.
  */
 
 #ifndef STARTUP_H
@@ -16,16 +17,32 @@
 #include <stdint.h>
 #include "device_registers.h"
 
+/*!
+ * @addtogroup devices_startup
+ * @brief Shared startup helpers used during early RAM initialization.
+ * @details
+ * This header exposes toolchain-specific section-boundary symbols and declares
+ * the `init_data_bss()` routine used by the shared startup flow.
+ * @{
+ */
+
 /*******************************************************************************
  * API
  ******************************************************************************/
 
 /*!
- * @brief define symbols that specific start and end addres of some basic sections. 
+ * @name Linker Section Symbol Access
+ * @brief Toolchain-specific macros and symbol declarations used during startup.
+ *
+ * These definitions expose the start and end addresses of linker-managed
+ * sections such as the interrupt vector table, initialized data, BSS, custom
+ * data, and RAM-resident code.
+ * @{
  */
+
 #if (defined(YTM32B1M_SERIES) || defined(YTM32B1L_SERIES) || defined(YTM32Z1L_SERIES) || \
      defined(YTM32B1H_SERIES) || defined(YTM32Z1M_SERIES) || defined(YTM32Z1DS_SERIES))
-    #if (defined(__ICCARM__))     
+    #if (defined(__ICCARM__))
         #define INTERRUPTS_SECTION_START               __section_begin(".intvec")
         #define INTERRUPTS_SECTION_END                 __section_end(".intvec")
         #define BSS_SECTION_START                      __section_begin(".bss")
@@ -52,7 +69,7 @@
         #define CUSTOMSECTION_SECTION_END              (uint32_t *)__CUSTOM_SECTION_END
         #define CODE_RAM_SECTION_START                 (uint32_t *)__CODE_RAM_START
         #define CODE_RAM_SECTION_END                   (uint32_t *)__CODE_RAM_END
-        
+
         extern uint32_t __VECTOR_ROM_START;
         extern uint32_t __VECTOR_ROM_END;
         extern uint32_t __BSS_START;
@@ -76,7 +93,7 @@
         #define CODE_RAM_SECTION_END                   ((uint32_t *)&__code_ram_end__)
         #define ARRAY_RAM_START                        ((uint32_t *)&__array_ram_start__)
         #define ARRAY_RAM_END                          ((uint32_t *)&__array_ram_end__)
-        
+
         extern uint32_t __interrupts_start__;
         extern uint32_t __interrupts_end__;
         extern uint32_t __bss_start__;
@@ -92,6 +109,11 @@
     #endif
 #endif
 
+/*! @} */ /* End of Linker Section Symbol Access */
+
+/*!
+ * @brief Declare the IAR section handles used by `init_data_bss()`.
+ */
 #if (defined(__ICCARM__))
     #pragma section = ".data"
     #pragma section = ".data_init"
@@ -106,16 +128,25 @@
 #endif
 
 /*!
- * @brief Make necessary initializations for RAM.
+ * @name Startup Initialization API
+ * @brief Shared RAM and vector-table initialization entry point.
+ * @{
+ */
+
+/*!
+ * @brief Initialize RAM-resident sections during early startup.
  *
- * - Copy initialized data from ROM to RAM.
- * - Clear the zero-initialized data section.
- * - Copy the vector table from ROM to RAM. This could be an option.  
+ * Copies initialized data and RAM-resident code sections from ROM to RAM,
+ * clears the zero-initialized section, and relocates the interrupt vector
+ * table when the linker configuration requires it.
  */
 void init_data_bss(void);
+
+/*! @} */ /* End of Startup Initialization API */
+
+/*! @} */ /* End of devices_startup */
 
 #endif /* STARTUP_H*/
 /*******************************************************************************
  * EOF
  ******************************************************************************/
-

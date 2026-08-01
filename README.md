@@ -6,6 +6,8 @@
 
 This repository contains an unpacked snapshot of the original vendor-provided YTMicro HAL SDK. It is kept as a source snapshot for the YTM32 Zephyr integration.
 
+The exact upstream package and imported hotfixes are recorded in [VENDOR_SNAPSHOT.md](VENDOR_SNAPSHOT.md).
+
 ## Do not modify the HAL snapshot
 
 Do not modify, refactor, or add application code to the files under `ytm32b1m/`. Treat this repository as read-only vendor input.

@@ -73,13 +73,13 @@ int main(void)
     /* USER CODE END 1 */
     Board_Init();
     /* USER CODE BEGIN 2 */
-    PRINTF("Build %s %s\n", __DATE__, __TIME__);
-    PRINTF("EWDG Demo!\r\n");
-    PRINTF("In this mode, PTE7 is connected to EWDG_OUT_b and PTE13 is connected to EWDG_IN.\n");
-    PRINTF("Only when EWDG_IN high, EWDG can feed dog.\n");
 
     if (REGFILE->DR[7] == 0)
     {
+        PRINTF("Build %s %s\n", __DATE__, __TIME__);
+        PRINTF("EWDG Demo!\r\n");
+        PRINTF("In this mode, PTE7 is connected to EWDG_OUT_b and PTE13 is connected to EWDG_IN.\n");
+        PRINTF("Only when EWDG_IN high, EWDG can feed dog.\n");
         /* Install interrupt handler for EWDG */
         INT_SYS_InstallHandler(EWDG0_IRQn, &EWDG_Isr, (isr_t *)NULL);
         /* Enable EWDG interrupt */

@@ -8,6 +8,17 @@
 /*!
  * @file acmp_hw_access.h
  * @version 1.4.1
+ *
+ * @brief ACMP Hardware Access Layer.
+ *
+ * This header provides low-level register access helpers for the Analog
+ * Comparator peripheral. Functions are grouped by responsibility so the driver
+ * layer can configure comparator core behavior, input routing, interrupts,
+ * DAC settings, filter timing, and continuous scan mode without duplicating
+ * register manipulation code.
+ *
+ * @note This is an internal layer used by `acmp_driver.h/c`. Application code
+ *       should use the public `ACMP_DRV_*` APIs instead of these helpers.
  */
 
 #ifndef ACMP_HW_ACCESS_H
@@ -18,10 +29,27 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/*!
+ * @addtogroup acmp_hw_access ACMP Hardware Access
+ * @ingroup acmp
+ * @brief Low-level register access helpers for the ACMP peripheral.
+ * @{
+ */
+
 #if defined(__cplusplus)
 extern "C" {
 #endif
 
+/*******************************************************************************
+ * Comparator Core Control
+ ******************************************************************************/
+
+/*!
+ * @brief Read the current comparator output level.
+ *
+ * @param[in] baseAddr  Pointer to the ACMP peripheral base address.
+ * @return `true` when the comparator output is high, or `false` otherwise.
+ */
 static inline bool ACMP_GetOutput(const ACMP_Type *const baseAddr)
 {
     return ((baseAddr->STS >> ACMP_STS_OUT_SHIFT) & 0x1U) != 0U;
@@ -310,7 +338,7 @@ static inline void ACMP_SetSampleMode(ACMP_Type *const baseAddr, acmp_sample_mod
  */
 static inline uint8_t ACMP_GetSampleMode(ACMP_Type *const baseAddr)
 {
-    return (uint8_t)(baseAddr->CTRL & ~ACMP_CTRL_MODE_MASK) >> ACMP_CTRL_MODE_SHIFT;
+    return (uint8_t)((baseAddr->CTRL & ACMP_CTRL_MODE_MASK) >> ACMP_CTRL_MODE_SHIFT);
 }
 #else
 /*!
@@ -448,7 +476,7 @@ static inline void ACMP_SetDacEnState(ACMP_Type *const baseAddr, bool val)
  */
 static inline bool ACMP_GetDacOutEnState(const ACMP_Type *const baseAddr)
 {
-    return (((baseAddr->DAC) >> ACMP_DAC_OUTEN_SHIFT) & ACMP_DAC_OUTEN_MASK) != 0U;
+    return (((baseAddr->DAC) >> ACMP_DAC_OUTEN_SHIFT) & ACMP_DAC_OUTEN_MASK) == 0U;
 }
 
 /*!
@@ -560,9 +588,29 @@ static inline void ACMP_SetNegativePortInputChannel(ACMP_Type *const baseAddr, a
 }
 
 #if FEATURE_ACMP_HAS_FILTER_BYPASS
+/*！
+ * @brief Set the filter enable state
+ * @param[in] baseAddr - acmp base pointer
+ * @param[in] enable - filter enable state
+ *  true - filter is enabled
+ *  false - filter is disabled
+ * @return - void
+ */
 static inline void ACMP_SetFilterEnState(ACMP_Type *const baseAddr, bool enable)
 {
     baseAddr->FILT |= ACMP_FILT_BP(enable ? 0U : 1U);
+}
+
+/*！
+ * @brief Get the filter enable state
+ * @param[in] baseAddr - acmp base pointer
+ * @return - filter enable state
+ *  true - filter is enabled
+ *  false - filter is disabled
+ */
+static inline bool ACMP_GetFilterEnState(const ACMP_Type *const baseAddr)
+{
+    return ((baseAddr->FILT & ACMP_FILT_BP_MASK) >> ACMP_FILT_BP_SHIFT) == 0U;
 }
 #endif
 
@@ -623,7 +671,7 @@ static inline void ACMP_SetFilterClockSrc(ACMP_Type *const baseAddr, uint8_t sel
 {
 #if FEATURE_ACMP_HAS_FILTER_CLK_SRC_IN_CTRL_REG
     baseAddr->CTRL &= ~ACMP_CTRL_FILTCLK_MASK;
-    baseAddr->CTRL |= (uint32_t)sel << ACMP_CTRL_FILTCLK_SHIFT;
+    baseAddr->CTRL |= (sel ? 0U : 1U) << ACMP_CTRL_FILTCLK_SHIFT;
 #else
     baseAddr->FILT &= ~(ACMP_FILT_CLKSRC_MASK);
     baseAddr->FILT |= ACMP_FILT_CLKSRC(sel);
@@ -703,8 +751,7 @@ static inline void ACMP_SetContinuousModeEnState(ACMP_Type *const baseAddr, bool
 {
 #if FEATURE_ACMP_HAS_CONTINUOUS_MODE_IN_CTRL_REG
     baseAddr->CTRL &= ~ACMP_CTRL_MODE_MASK;
-    baseAddr->CTRL |= ACMP_CTRL_MODE(0x3);
-    (void)val;
+    baseAddr->CTRL |= ACMP_CTRL_MODE(0x3U & (val ? 0x3U : 0U));
 #else
     baseAddr->CONT &= ~ACMP_CONT_EN_MASK;
     baseAddr->CONT |= ACMP_CONT_EN(val ? 1U : 0U);
@@ -834,9 +881,10 @@ static inline acmp_ch_list_t ACMP_GetLastComparisonResult(const ACMP_Type *const
 static inline void ACMP_SetExpectation(ACMP_Type *const baseAddr, acmp_ch_list_t val)
 {
 #if FEATURE_ACMP_HAS_EXP_REG
-    baseAddr->EXP |= val;
+    baseAddr->EXP &= ~((uint32_t)0xFFU);
+    baseAddr->EXP = val;
 #else
-    baseAddr->STS |= ((uint32_t)val << ACMP_STS_CH_OUT_SHIFT) & ACMP_STS_CH_OUT_MASK;
+    baseAddr->STS = ((uint32_t)val << ACMP_STS_CH_OUT_SHIFT) & ACMP_STS_CH_OUT_MASK;
 #endif
 }
 

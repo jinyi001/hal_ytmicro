@@ -7,7 +7,12 @@
 
 /*!
  * @file spi_master_driver.h
- * @version 1.4.1
+ * @brief SPI master mode driver API declarations.
+ *
+ * Provides initialization, bus configuration, and data transfer
+ * functions for operating the SPI peripheral in master mode. Supports
+ * polling, interrupt-driven (blocking and non-blocking), and DMA-based
+ * transfer mechanisms.
  */
 
 #ifndef SPI_MASTER_DRIVER_H
@@ -16,8 +21,7 @@
 #include "spi_shared_function.h"
 
 /*!
- * @defgroup spi_driver SPI driver
- * @ingroup spi
+ * @addtogroup spi
  * @brief Serial Peripheral Interface Peripheral Driver
  * @{
  */
@@ -28,11 +32,11 @@
  ******************************************************************************/
 
 /*!
- * @brief Data structure containing information about a device on the SPI bus.
+ * @brief SPI master mode configuration structure.
  *
- * The user must populate these members to set up the SPI master and
- * properly communicate with the SPI device.
- * Implements : spi_master_config_t_Class
+ * Contains all user-configurable parameters for master mode operation.
+ * Pass this structure to SPI_DRV_MasterInit() or
+ * SPI_DRV_MasterConfigureBus() to configure the SPI bus.
  */
 typedef struct
 {
@@ -64,239 +68,164 @@ extern "C" {
 #endif
 
 /*!
- * @name Initialization and shutdown
+ * @name Initialization and De-initialization
  * @{
  */
 
 /*!
- * @brief Return default configuration for SPI master
+ * @brief Fill the master configuration structure with default values.
  *
- * Initializes a structured provided by user with the configuration
- * of an interrupt based SPI transfer. Source clock for SPI is configured to 
- * 8MHz. If the applications uses other frequency is necessary to update spiSrcClk field.
+ * Populates all fields of the spi_master_config_t structure with safe
+ * defaults: 50 kbps baud rate, 8-bit frames, PCS0, interrupt mode.
  *
- @param spiConfig Pointer to configuration structure which is filled with default configuration 
+ * @param[out] spiConfig  Pointer to the configuration structure to fill.
+ *
+ * @note The default source clock is assumed to be 8 MHz. Update the
+ *       bitsPerSec field if using a different clock frequency.
  */
-
 void SPI_DRV_MasterGetDefaultConfig(spi_master_config_t *spiConfig);
 
 /*!
- * @brief Initializes a SPI instance for interrupt driven master mode operation.
+ * @brief Initialize the SPI instance in master mode.
  *
- * This function uses an interrupt-driven method for transferring data.
- * In this function, the term "spiConfig" is used to indicate the SPI device for which the SPI
- * master is communicating.
- * This function initializes the run-time state structure to track the ongoing
- * transfers, un-gates the clock to the SPI module, resets the SPI module,
- * configures the IRQ state structure, enables the module-level interrupt to the core, and
- * enables the SPI module.
- * This is an example to set up the spi_master_state_t and call the
- * SPI_DRV_MasterInit function by passing in these parameters:
-   @code
-    spi_master_state_t spiMasterState;  <- the user  allocates memory for this structure
-    spi_master_config_t spiConfig;  Can declare more configs for use in transfer functions
-    spiConfig.bitsPerSec = 500000;
-    spiConfig.whichPcs = SPI_PCS0;
-    spiConfig.pcsPolarity = SPI_ACTIVE_LOW;
-    spiConfig.isPcsContinuous = false;
-    spiConfig.bitCount = 16;
-    spiConfig.clkPhase = SPI_CLOCK_PHASE_1ST_EDGE;
-    spiConfig.clkPolarity = SPI_ACTIVE_HIGH;
-    spiConfig.lsbFirst= false;
-    spiConfig.transferType = SPI_USING_INTERRUPTS;
-    SPI_DRV_MasterInit(masterInstance, &spiMasterState, &spiConfig);
-   @endcode
+ * Resets the SPI module, configures it for master operation based on
+ * the provided configuration, enables interrupts, and activates the
+ * module. The runtime state structure is initialized for transfer
+ * tracking.
  *
- * @param[in] instance The instance number of the SPI peripheral.
- * @param[in] spiState The pointer to the SPI master driver state structure. The user
- *  passes the memory for this run-time state structure. The SPI master driver
- *  populates the members. This run-time state structure keeps track of the
- *  transfer in progress.
- * @param[in] spiConfig The data structure containing information about a device on the SPI bus
- * @return operation status
- *        - An error code :   Operation failure was occurred.
- *        - STATUS_SUCCESS:   Operation was successful.
+ * @param[in] instance   SPI peripheral instance number.
+ * @param[in] spiState   Pointer to the runtime state structure
+ *                       (user-allocated, driver-populated).
+ * @param[in] spiConfig  Pointer to the master configuration.
+ * @return STATUS_SUCCESS on success, error code on failure.
+ *
+ * @pre The SPI peripheral clock must be enabled via clock_manager.
+ * @post The SPI module is enabled and ready for transfers.
  */
 status_t SPI_DRV_MasterInit(uint32_t instance, spi_state_t *spiState,
                             const spi_master_config_t *spiConfig);
 
 /*!
- * @brief Shuts down a SPI instance.
+ * @brief De-initialize the SPI master instance.
  *
- * This function resets the SPI peripheral, gates its clock, and disables the interrupt to
- * the core.  It first checks to see if a transfer is in progress and if so returns an error
- * status.
+ * Resets the SPI module, disables its interrupt, destroys the
+ * semaphore, and clears the state pointer. Must not be called while
+ * a transfer is in progress.
  *
- * @param[in] instance The instance number of the SPI peripheral.
- * @return operation status
- *         - STATUS_SUCCESS:   The transfer has completed successfully.
- *         - STATUS_BUSY:      The transfer is still in progress.
- *         - STATUS_ERROR:     If driver is error and needs to clean error.
+ * @param[in] instance  SPI peripheral instance number.
+ * @return STATUS_SUCCESS on success.
+ *
+ * @pre No transfer should be in progress.
+ * @post The SPI module is disabled and its state is cleared.
  */
 status_t SPI_DRV_MasterDeinit(uint32_t instance);
-
-/*!
- * @brief Configures the SPI master mode bus timing delay options.
- *
- * This function involves the SPI module's delay options to
- * "fine tune" some of the signal timings and match the timing needs of a slower peripheral device.
- * This is an optional function that can be called after the SPI module has been initialized for
- * master mode. The timings are adjusted in terms of cycles of the baud rate clock.
- * The bus timing delays that can be adjusted are listed below:
- *
- * SCK to PCS Delay: Adjustable delay option between the last edge of SCK to the de-assertion
- *                   of the PCS signal.
- *
- * PCS to SCK Delay: Adjustable delay option between the assertion of the PCS signal to the
- *                   first SCK edge.
- *
- * Delay between Transfers: Adjustable delay option between the de-assertion of the PCS signal for
- *                          a frame to the assertion of the PCS signal for the next frame.
- *
- * @param[in] instance The instance number of the SPI peripheral.
- * @param[in] delayBetwenTransfers Minimum delay between 2 transfers in clock cycles
- * @param[in] delaySCKtoPCS Minimum delay between SCK and PCS in clock cycles
- * @param[in] delayPCStoSCK Minimum delay between PCS and SCK in clock cycles
- * @return operation status
- *         - STATUS_SUCCESS:   The transfer has completed successfully.
- *         - STATUS_ERROR:     If driver is error and needs to clean error.
- */
-status_t SPI_DRV_MasterSetDelay(uint32_t instance, uint32_t delayBetwenTransfers,
-                                uint32_t delaySCKtoPCS, uint32_t delayPCStoSCK);
-
 
 /*@}*/
 
 /*!
- * @name Bus configuration
+ * @name Bus Configuration
  * @{
  */
 
 /*!
- * @brief Configures the SPI port physical parameters to access a device on the bus when the LSPI
- *        instance is configured for interrupt operation.
+ * @brief Reconfigure the SPI bus parameters at runtime.
  *
- * In this function, the term "spiConfig" is used to indicate the SPI device for which the SPI
- * master is communicating. This is an optional function as the spiConfig parameters are
- * normally configured in the initialization function or the transfer functions, where these various
- * functions would call the configure bus function.
- * This is an example to set up the spi_master_config_t structure
- * to call the SPI_DRV_MasterConfigureBus function by passing in these parameters:
-   @code
-    spi_master_config_t spiConfig1;   You can also declare spiConfig2, spiConfig3, etc
-    spiConfig1.bitsPerSec = 500000;
-    spiConfig1.whichPcs = SPI_PCS0;
-    spiConfig1.pcsPolarity = SPI_ACTIVE_LOW;
-    spiConfig1.isPcsContinuous = false;
-    spiConfig1.bitCount = 16;
-    spiConfig1.clkPhase = SPI_CLOCK_PHASE_1ST_EDGE;
-    spiConfig1.clkPolarity = SPI_ACTIVE_HIGH;
-    spiConfig1.lsbFirst= false;
-    spiConfig.transferType = SPI_USING_INTERRUPTS;
-   @endcode
+ * Applies a new bus configuration (baud rate, clock polarity/phase,
+ * PCS, frame size, etc.) without requiring de-init and re-init. The
+ * module is temporarily disabled during reconfiguration.
  *
- * @param[in] instance The instance number of the SPI peripheral.
- * @param[in] spiConfig Pointer to the spiConfig structure. This structure contains the settings
- *  for the SPI bus configuration.  The SPI device parameters are the desired baud rate (in
- *  bits-per-sec), bits-per-frame, chip select attributes, clock attributes, and data shift
- *  direction.
- * @param[in] calculatedBaudRate The calculated baud rate passed back to the user to determine
- *  if the calculated baud rate is close enough to meet the needs. The baud rate never exceeds
- *  the desired baud rate.
- * @return operation status
- *         - STATUS_SUCCESS:   The transfer has completed successfully.
- *         - STATUS_ERROR:     If driver is error and needs to clean error.
+ * @param[in]  instance          SPI peripheral instance number.
+ * @param[in]  spiConfig         Pointer to the new configuration.
+ * @param[out] calculatedBaudRate Pointer to store the actual calculated
+ *                               baud rate (may be NULL if not needed).
+ * @return STATUS_SUCCESS on success, STATUS_ERROR on failure.
  */
 status_t SPI_DRV_MasterConfigureBus(uint32_t instance,
                                     const spi_master_config_t *spiConfig,
                                     uint32_t *calculatedBaudRate);
 
 /*!
-* @brief Select the chip to communicate with.
-*
-* The main purpose of this function is to set the PCS and the appropriate polarity.
-* @param[in] instance SPI instance
-* @param[in] whichPcs selected chip
-* @param[in] polarity chip select line polarity
-* @return operation status
-*         - STATUS_SUCCESS:  The transfer has completed successfully.
-*         - STATUS_ERROR:    If driver is error and needs to clean error.
-*/
+ * @brief Configure SPI master timing delays.
+ *
+ * Adjusts the SCK-to-PCS, PCS-to-SCK, and between-transfer delays
+ * in units of baud rate clock cycles. The module is temporarily
+ * disabled during configuration.
+ *
+ * @param[in] instance              SPI peripheral instance number.
+ * @param[in] delayBetwenTransfers  Minimum delay between transfers (clock cycles).
+ * @param[in] delaySCKtoPCS         SCK-to-PCS delay (clock cycles).
+ * @param[in] delayPCStoSCK         PCS-to-SCK delay (clock cycles).
+ * @return STATUS_SUCCESS on success, STATUS_ERROR if module is busy.
+ *
+ * @note Default delays are set automatically during init. Call this
+ *       function only if non-default timing is required.
+ */
+status_t SPI_DRV_MasterSetDelay(uint32_t instance, uint32_t delayBetwenTransfers,
+                                uint32_t delaySCKtoPCS, uint32_t delayPCStoSCK);
+
+/*!
+ * @brief Select the active chip select signal and its polarity.
+ *
+ * Temporarily disables the module, updates the PCS selection and
+ * polarity, then re-enables the module.
+ *
+ * @param[in] instance  SPI peripheral instance number.
+ * @param[in] whichPcs  Chip select signal to activate.
+ * @param[in] polarity  Active-high or active-low polarity.
+ * @return STATUS_SUCCESS on success, STATUS_ERROR on failure.
+ */
 status_t SPI_DRV_SetPcs(uint32_t instance, spi_which_pcs_t whichPcs, spi_signal_polarity_t polarity);
 
 /*@}*/
 
 /*!
- * @name Polling transfers
+ * @name Polling Transfer
  * @{
  */
 
 /*!
- * @brief Performs an interrupt driven Polling SPI master mode transfer.
+ * @brief Perform a polling (busy-wait) full-duplex master transfer.
  *
- * This function simultaneously sends and receives data on the SPI bus, as SPI is naturally
- * a full-duplex bus. The function does not return until the transfer is complete.
- * This function allows the user to optionally pass in a SPI configuration structure which
- * allows the user to change the SPI bus attributes in conjunction with initiating a SPI transfer.
- * The difference between passing in the SPI configuration structure here as opposed to the
- * configure bus function is that the configure bus function returns the calculated baud rate where
- * this function does not. The user can also call the configure bus function prior to the transfer
- * in which case the user would simply pass in a NULL to the transfer function's device structure
- * parameter.
- * Depending on frame size sendBuffer and receiveBuffer must be aligned like this:
- * -1 byte if frame size <= 8 bits 
- * -2 bytes if 8 bits < frame size <= 16 bits 
- * -4 bytes if 16 bits < frame size   
+ * Sends and receives data by polling status flags directly, without
+ * using interrupts. The function blocks until all data is transferred.
+ * This is the simplest transfer mode but consumes CPU during the
+ * entire transfer.
  *
- * @param[in] instance The instance number of the SPI peripheral.
- * @param[in] sendBuffer The pointer to the data buffer of the data to send. You may pass NULL for this
- *  parameter and  bytes with a value of 0 (zero) is sent.
- * @param[in] receiveBuffer Pointer to the buffer where the received bytes are stored. If you pass NULL
- *  for this parameter, the received bytes are ignored.
- * @param[in] transferByteCount The number of bytes to send and receive which is equal to size of send or receive buffers
- * @return operation status
- *         - STATUS_SUCCESS:   The transfer was successful.
- *         - STATUS_BUSY:      Cannot perform transfer because a transfer is already in progress.
+ * @param[in]  instance          SPI peripheral instance number.
+ * @param[in]  sendBuffer        Pointer to TX data (NULL to send zeros).
+ * @param[out] receiveBuffer     Pointer to RX buffer (NULL to discard).
+ * @param[in]  transferByteCount Number of bytes to transfer.
+ * @return STATUS_SUCCESS on success, STATUS_BUSY if module is busy.
+ *
+ * @note The transferByteCount must be a multiple of bytes-per-frame.
  */
 status_t SPI_DRV_MasterTransferPolling(uint32_t instance,
                                        const uint8_t *sendBuffer,
                                        uint8_t *receiveBuffer,
                                        uint16_t transferByteCount);
+
+/*@}*/
+
 /*!
- * @name Blocking transfers
+ * @name Blocking Transfer
  * @{
  */
 
 /*!
- * @brief Performs an interrupt driven blocking SPI master mode transfer.
+ * @brief Perform an interrupt-driven blocking full-duplex master transfer.
  *
- * This function simultaneously sends and receives data on the SPI bus, as SPI is naturally
- * a full-duplex bus. The function does not return until the transfer is complete.
- * This function allows the user to optionally pass in a SPI configuration structure which
- * allows the user to change the SPI bus attributes in conjunction with initiating a SPI transfer.
- * The difference between passing in the SPI configuration structure here as opposed to the
- * configure bus function is that the configure bus function returns the calculated baud rate where
- * this function does not. The user can also call the configure bus function prior to the transfer
- * in which case the user would simply pass in a NULL to the transfer function's device structure
- * parameter.
- * Depending on frame size sendBuffer and receiveBuffer must be aligned like this:
- * -1 byte if frame size <= 8 bits 
- * -2 bytes if 8 bits < frame size <= 16 bits 
- * -4 bytes if 16 bits < frame size   
+ * Initiates a transfer using interrupts and blocks until completion
+ * or timeout. Uses a semaphore internally for synchronization.
  *
- * @param[in] instance The instance number of the SPI peripheral.
- * @param[in] sendBuffer The pointer to the data buffer of the data to send. You may pass NULL for this
- *  parameter and  bytes with a value of 0 (zero) is sent.
- * @param[in] receiveBuffer Pointer to the buffer where the received bytes are stored. If you pass NULL
- *  for this parameter, the received bytes are ignored.
- * @param[in] transferByteCount The number of bytes to send and receive which is equal to size of send or receive buffers
- * @param[in] timeout A timeout for the transfer in milliseconds. If the transfer takes longer than
- *  this amount of time, the transfer is aborted and a STATUS_TIMEOUT error
- *  returned.
- * @return operation status
- *         - STATUS_SUCCESS:   The transfer was successful.
- *         - STATUS_BUSY:      Cannot perform transfer because a transfer is already in progress.
- *         - STATUS_TIMEOUT:   The transfer timed out and was aborted.
+ * @param[in]  instance          SPI peripheral instance number.
+ * @param[in]  sendBuffer        Pointer to TX data (NULL to send zeros).
+ * @param[out] receiveBuffer     Pointer to RX buffer (NULL to discard).
+ * @param[in]  transferByteCount Number of bytes to transfer.
+ * @param[in]  timeout           Timeout in milliseconds.
+ * @return STATUS_SUCCESS on success, STATUS_BUSY if already
+ *         transferring, STATUS_TIMEOUT if timed out.
+ *
+ * @note The transferByteCount must be a multiple of bytes-per-frame.
  */
 status_t SPI_DRV_MasterTransferBlocking(uint32_t instance,
                                         const uint8_t *sendBuffer,
@@ -307,38 +236,25 @@ status_t SPI_DRV_MasterTransferBlocking(uint32_t instance,
 /*@}*/
 
 /*!
- * @name Non-blocking transfers
+ * @name Non-blocking Transfer
  * @{
  */
 
 /*!
- * @brief Performs an interrupt driven non-blocking SPI master mode transfer.
+ * @brief Start a non-blocking full-duplex master transfer.
  *
- * This function simultaneously sends and receives data on the SPI bus, as SPI is naturally
- * a full-duplex bus. The function returns immediately after initiating the transfer. The user
- * needs to check whether the transfer is complete using the SPI_DRV_MasterGetTransferStatus
- * function.
- * This function allows the user to optionally pass in a SPI configuration structure which
- * allows the user to change the SPI bus attributes in conjunction with initiating a SPI transfer.
- * The difference between passing in the SPI configuration structure here as opposed to the
- * configure bus function is that the configure bus function returns the calculated baud rate where
- * this function does not. The user can also call the configure bus function prior to the transfer
- * in which case the user would simply pass in a NULL to the transfer function's device structure
- * parameter.
- * Depending on frame size sendBuffer and receiveBuffer must be aligned like this:
- * -1 byte if frame size <= 8 bits 
- * -2 bytes if 8 bits < frame size <= 16 bits 
- * -4 bytes if 16 bits < frame size
+ * Initiates a transfer using interrupts or DMA (depending on
+ * transferType) and returns immediately. Use
+ * SPI_DRV_MasterGetTransferStatus() to poll for completion, or
+ * register a callback via the configuration structure.
  *
- * @param[in] instance The instance number of the SPI peripheral.
- * @param[in] sendBuffer The pointer to the data buffer of the data to send. You may pass NULL for this
- *  parameter and  bytes with a value of 0 (zero) is sent.
- * @param[in] receiveBuffer Pointer to the buffer where the received bytes are stored. If you pass NULL
- *  for this parameter, the received bytes are ignored.
- * @param[in] transferByteCount The number of bytes to send and receive which is equal to size of send or receive buffers
- * @return operation status
- *         - STATUS_SUCCESS:     The transfer was successful.
- *         - STATUS_BUSY         Cannot perform transfer because a transfer is already in progress
+ * @param[in]  instance          SPI peripheral instance number.
+ * @param[in]  sendBuffer        Pointer to TX data (NULL to send zeros).
+ * @param[out] receiveBuffer     Pointer to RX buffer (NULL to discard).
+ * @param[in]  transferByteCount Number of bytes to transfer.
+ * @return STATUS_SUCCESS on success, STATUS_BUSY if already transferring.
+ *
+ * @note The transferByteCount must be a multiple of bytes-per-frame.
  */
 status_t SPI_DRV_MasterTransfer(uint32_t instance,
                                 const uint8_t *sendBuffer,
@@ -346,32 +262,27 @@ status_t SPI_DRV_MasterTransfer(uint32_t instance,
                                 uint16_t transferByteCount);
 
 /*!
- * @brief Returns whether the previous interrupt driven transfer is completed.
+ * @brief Query the status of an ongoing non-blocking master transfer.
  *
- * When performing an a-sync (non-blocking) transfer, the user can call this function to ascertain
- * the state of the current transfer: in progress (or busy) or complete (success).
- * In addition, if the transfer is still in progress, the user can get the number of words that
- * have been transferred up to now.
+ * Returns whether the transfer is still in progress or has completed,
+ * and optionally reports the number of bytes remaining to receive.
  *
- * @param[in] instance The instance number of the SPI peripheral.
- * @param[in] bytesRemained Pointer to a value that is filled in with the number of bytes that must be received.
- * @return operation status
- *         - STATUS_SUCCESS       The transfer has completed successfully.
- *         - STATUS_BUSY          The transfer is still in progress. framesTransferred is filled
- *         with the number of words that have been transferred so far.
+ * @param[in]  instance       SPI peripheral instance number.
+ * @param[out] bytesRemained  Pointer to store remaining byte count
+ *                            (may be NULL).
+ * @return STATUS_SUCCESS if complete, STATUS_BUSY if in progress,
+ *         STATUS_ERROR if an error occurred.
  */
 status_t SPI_DRV_MasterGetTransferStatus(uint32_t instance, uint32_t *bytesRemained);
 
 /*!
- * @brief Terminates an interrupt driven asynchronous transfer early.
+ * @brief Abort an in-progress non-blocking master transfer.
  *
- * During an a-sync (non-blocking) transfer, the user has the option to terminate the transfer early
- * if the transfer is still in progress.
+ * Stops the current transfer, disables interrupts/DMA, flushes
+ * FIFOs, and resets the transfer state.
  *
- * @param[in] instance The instance number of the SPI peripheral.
- * @return operation status
- *         - STATUS_SUCCESS                       The transfer was successful.
- *         - SPI_STATUS_NO_TRANSFER_IN_PROGRESS   No transfer is currently in progress.
+ * @param[in] instance  SPI peripheral instance number.
+ * @return STATUS_SUCCESS.
  */
 status_t SPI_DRV_MasterAbortTransfer(uint32_t instance);
 

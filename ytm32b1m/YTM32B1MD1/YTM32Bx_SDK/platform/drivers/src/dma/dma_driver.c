@@ -12,8 +12,8 @@
 
  /*!
  * @page misra_violations MISRA-C:2012 violations list
- * 
- * PRQA S 2985 Rule 2.2 : This operation is redundant. The value of the result is 
+ *
+ * PRQA S 2985 Rule 2.2 : This operation is redundant. The value of the result is
  *                        always that of the left-hand operand.
  *
  */
@@ -22,10 +22,6 @@
 #include "clock_manager.h"
 #include "interrupt_manager.h"
 #include <stdint.h>
-
-/*******************************************************************************
- * Variables
- ******************************************************************************/
 
 
 /*! @brief Array of base addresses for DMA instances. */
@@ -53,9 +49,7 @@ static const clock_names_t s_dmaClockNames[DMA_INSTANCE_COUNT] = FEATURE_DMA_CLO
 /*! @brief DMA global structure to maintain DMA state */
 static dma_state_t *s_virtEdmaState;
 
-/*******************************************************************************
- * Prototypes
- ******************************************************************************/
+
 static void DMA_DRV_ClearIntStatus(uint8_t virtualChannel);
 
 static bool DMA_DRV_GetIntStatus(uint8_t virtualChannel);
@@ -70,16 +64,10 @@ static bool DMA_DRV_ValidTransferSize(dma_transfer_size_t size);
 
 #endif
 
-/*******************************************************************************
- * Code
- ******************************************************************************/
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_Init
- * Description   : Initializes the DMA module.
- *
- * Implements    : DMA_DRV_Init_Activity
- *END**************************************************************************/
+
+/*!
+ * @brief Initializes the DMA module.
+ */
 status_t DMA_DRV_Init(dma_state_t *dmaState,
                       const dma_user_config_t *userConfig,
                       dma_chn_state_t *const chnStateArray[],
@@ -134,16 +122,16 @@ status_t DMA_DRV_Init(dma_state_t *dmaState,
 
         /* Set 'Halt on error' configuration */
         DMA_SetHaltOnErrorCmd(dmaRegBase, userConfig->haltOnError);
+#ifdef FEATURE_DMAMUX_AVAILABLE
+        /* Initialize all DMAMUX instances */
+        DMAMUX_Init(dmaRegBase);
+#endif
 
 #if (defined(FEATURE_DMA_SUPPORT_ECC_ERROR_CHECK) && FEATURE_DMA_SUPPORT_ECC_ERROR_CHECK == 1)
         DMA_SetEccErrorCheckCmd(dmaRegBase, userConfig->eccErrorEnable);
 #endif /* FEATURE_DMA_SUPPORT_ECC_ERROR_CHECK */
     }
 
-#ifdef FEATURE_DMAMUX_AVAILABLE
-    /* Initialize all DMAMUX instances */
-    DMAMUX_Init(dmaRegBase);
-#endif
 
     /* Initialize the channels based on configuration list */
     if ((chnStateArray != NULL) && (chnConfigArray != NULL))
@@ -171,7 +159,7 @@ status_t DMA_DRV_Init(dma_state_t *dmaState,
                 .callback=NULL,
                 .callbackParam=NULL,
             };
-    
+
             s_virtEdmaState->maxChannelForChLinkState = true;
             /* Dummy channel to clear extra request */
             chnInitStatus = DMA_DRV_ChannelInit(&s_dmaDummyConfigState,&dma_dummy_config);
@@ -192,13 +180,9 @@ status_t DMA_DRV_Init(dma_state_t *dmaState,
     return dmaStatus;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_Deinit
- * Description   : Deinitialize DMA.
- *
- * Implements    : DMA_DRV_Deinit_Activity
- *END**************************************************************************/
+/*!
+ * @brief Deinitializes the DMA module.
+ */
 status_t DMA_DRV_Deinit(void)
 {
     uint32_t index = 0U;
@@ -242,13 +226,9 @@ status_t DMA_DRV_Deinit(void)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_ChannelInit
- * Description   : Initialize DMA channel.
- *
- * Implements    : DMA_DRV_ChannelInit_Activity
- *END**************************************************************************/
+/*!
+ * @brief Initializes a DMA channel.
+ */
 status_t DMA_DRV_ChannelInit(dma_chn_state_t *dmaChannelState,
                              const dma_channel_config_t *dmaChannelConfig)
 {
@@ -272,7 +252,7 @@ status_t DMA_DRV_ChannelInit(dma_chn_state_t *dmaChannelState,
 
     /* Get virtual channel value */
     uint8_t virtualChannel = dmaChannelConfig->virtChnConfig;
-    
+
     /* Get channel interrupt index */
     IRQn_Type irqNumber;
 
@@ -288,7 +268,7 @@ status_t DMA_DRV_ChannelInit(dma_chn_state_t *dmaChannelState,
 
 #if defined FEATURE_DMA_HAS_ERROR_IRQ
     /* Enable the error interrupts for DMA channel. */
-    irqNumber = s_dmaErrIrqId[dmaChannel];
+    irqNumber = s_dmaErrIrqId[dmaInstance];
     INT_SYS_EnableIRQ(irqNumber);
 #endif
 
@@ -320,13 +300,9 @@ status_t DMA_DRV_ChannelInit(dma_chn_state_t *dmaChannelState,
     return retStatus;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_InstallCallback
- * Description   : Register callback function and parameter.
- *
- * Implements    : DMA_DRV_InstallCallback_Activity
- *END**************************************************************************/
+/*!
+ * @brief Registers a callback function and parameter.
+ */
 status_t DMA_DRV_InstallCallback(uint8_t virtualChannel,
                                  dma_callback_t callback,
                                  void *parameter)
@@ -346,13 +322,9 @@ status_t DMA_DRV_InstallCallback(uint8_t virtualChannel,
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_ReleaseChannel
- * Description   : Free DMA channel's hardware and software resource.
- *
- * Implements    : DMA_DRV_ReleaseChannel_Activity
- *END**************************************************************************/
+/*!
+ * @brief Frees the DMA channel's hardware and software resources.
+ */
 status_t DMA_DRV_ReleaseChannel(uint8_t virtualChannel)
 {
     /* Check that virtual channel number is valid */
@@ -397,12 +369,9 @@ status_t DMA_DRV_ReleaseChannel(uint8_t virtualChannel)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_ClearIntStatus
- * Description   : Clear done and interrupt retStatus.
- *
- *END**************************************************************************/
+/*!
+ * @brief Clears the done and interrupt status flags.
+ */
 static void DMA_DRV_ClearIntStatus(uint8_t virtualChannel)
 {
     /* Get DMA instance from virtual channel */
@@ -416,12 +385,9 @@ static void DMA_DRV_ClearIntStatus(uint8_t virtualChannel)
     DMA_ClearIntStatusFlag(dmaRegBase, dmaChannel);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_GetIntStatus
- * Description   : Clear done and interrupt retStatus.
- *
- *END**************************************************************************/
+/*!
+ * @brief Gets the interrupt status flag for a DMA channel.
+ */
 static bool DMA_DRV_GetIntStatus(uint8_t virtualChannel)
 {
     /* Get DMA instance from virtual channel */
@@ -434,22 +400,17 @@ static bool DMA_DRV_GetIntStatus(uint8_t virtualChannel)
     return DMA_GetIntStatusFlag(dmaRegBase, dmaChannel);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_ClearSoftwareCTS
- * Description   : Clear the software cts structure.
- *
- *END**************************************************************************/
+/*!
+ * @brief Clears the software CTS structure.
+ */
 static void DMA_DRV_ClearSoftwareCTS(dma_software_cts_t *scts)
 {
     DMA_DRV_ClearStructure((uint8_t *) scts, sizeof(dma_software_cts_t));
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_IRQHandler
- * Description   : DMA IRQ handler.
- *END**************************************************************************/
+/*!
+ * @brief DMA IRQ handler.
+ */
 void DMA_DRV_IRQHandler(uint8_t virtualChannel)
 {
     const dma_chn_state_t *chnState = s_virtEdmaState->virtChnState[virtualChannel];
@@ -466,11 +427,9 @@ void DMA_DRV_IRQHandler(uint8_t virtualChannel)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_ErrorIRQHandler
- * Description   : DMA error IRQ handler
- *END**************************************************************************/
+/*!
+ * @brief DMA error IRQ handler.
+ */
 void DMA_DRV_ErrorIRQHandler(uint8_t virtualChannel)
 {
     /* Get DMA instance from virtual channel */
@@ -495,36 +454,35 @@ void DMA_DRV_ErrorIRQHandler(uint8_t virtualChannel)
 }
 
 #if (defined(FEATURE_DMA_SUPPORT_ECC_ERROR_CHECK) && FEATURE_DMA_SUPPORT_ECC_ERROR_CHECK == 1)
-/*FUNCTION**********************************************************************
+/*!
+ * @brief DMA ECC error IRQ handler.
  *
- * Function Name : DMA_DRV_ECCErrorIRQHandler
- * Description   : DMA ECC error IRQ handler. This function handles ECC errors 
- *                by checking SECCES register, identifies the error channel,
- *                clears the CTS and error flags.
- *END**************************************************************************/
+ * Handles ECC errors by checking SECCES register, identifies the error channel,
+ * clears the CTS and error flags.
+ */
 void DMA_DRV_ECCErrorIRQHandler(uint8_t dmaInstance)
 {
     /* Check that DMA instance is valid */
     DEV_ASSERT(dmaInstance < DMA_INSTANCE_COUNT);
     uint32_t dmaReg;
-    
+
     DMA_Type *dmaRegBase = s_dmaBase[dmaInstance];
-    
+
     /* Check if ECC error flag is set */
     if ((dmaRegBase->SECCES & DMA_SECCES_SECCEF_MASK) != 0U)
     {
         /* Get error channel from SECCECH field */
         uint8_t errorChannel = (uint8_t)((dmaRegBase->SECCES & DMA_SECCES_SECCECH_MASK) >> DMA_SECCES_SECCECH_SHIFT);
-        
+
         /* Convert physical channel to virtual channel */
         uint8_t virtualChannel = (uint8_t)(dmaInstance * FEATURE_DMA_CHANNELS + errorChannel);
-        
+
         /* Disable DMA requests for the error channel */
         DMA_SetDmaRequestCmd(dmaRegBase, errorChannel, false);
-        
+
         /* Clear the CTS registers for error channel */
         DMA_CTSClearReg(dmaRegBase, errorChannel);
-        
+
         /* Update channel state if it exists */
         dma_chn_state_t *chnState = s_virtEdmaState->virtChnState[virtualChannel];
         if (chnState != NULL)
@@ -535,7 +493,7 @@ void DMA_DRV_ECCErrorIRQHandler(uint8_t dmaInstance)
                 chnState->callback(chnState->parameter, chnState->status);
             }
         }
-        
+
         /* Clear ECC error flag */
         dmaRegBase->SECCES = DMA_SECCES_SECCEF_MASK;
         /* Disable ECC error injection  */
@@ -545,13 +503,9 @@ void DMA_DRV_ECCErrorIRQHandler(uint8_t dmaInstance)
     }
 }
 #endif /* FEATURE_DMA_SUPPORT_ECC_ERROR_CHECK */
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_ConfigSingleBlockTransfer
- * Description   : Configures a DMA single block transfer.
- *
- * Implements    : DMA_DRV_ConfigSingleBlockTransfer_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configures a DMA single block transfer.
+ */
 status_t DMA_DRV_ConfigSingleBlockTransfer(uint8_t virtualChannel,
                                            dma_transfer_type_t type,
                                            uint32_t srcAddr,
@@ -664,13 +618,9 @@ status_t DMA_DRV_ConfigSingleBlockTransfer(uint8_t virtualChannel,
     return retStatus;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_ConfigMultiBlockTransfer
- * Description   : Configures a DMA single block transfer.
- *
- * Implements    : DMA_DRV_ConfigMultiBlockTransfer_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configures a DMA multi-block transfer.
+ */
 status_t DMA_DRV_ConfigMultiBlockTransfer(uint8_t virtualChannel,
                                           dma_transfer_type_t type,
                                           uint32_t srcAddr,
@@ -737,13 +687,9 @@ status_t DMA_DRV_ConfigMultiBlockTransfer(uint8_t virtualChannel,
     return retStatus;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_ConfigLoopTransfer
- * Description   : Configures the DMA transfer in a loop.
- *
- * Implements    : DMA_DRV_ConfigLoopTransfer_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configures the DMA transfer in a loop.
+ */
 status_t DMA_DRV_ConfigLoopTransfer(uint8_t virtualChannel,
                                     const dma_transfer_config_t *transferConfig)
 {
@@ -799,13 +745,9 @@ status_t DMA_DRV_ConfigLoopTransfer(uint8_t virtualChannel,
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_ConfigRamReloadTransfer
- * Description   : Configure DMA for ram reload operation
- *
- * Implements    : DMA_DRV_ConfigRamReloadTransfer_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configures the DMA for ram reload operation.
+ */
 status_t DMA_DRV_ConfigRamReloadTransfer(uint8_t virtualChannel,
                                          dma_software_cts_t *scts,
                                          dma_transfer_size_t transferSize,
@@ -946,13 +888,9 @@ status_t DMA_DRV_ConfigRamReloadTransfer(uint8_t virtualChannel,
     return retStatus;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_StartChannel
- * Description   : Starts an DMA channel.
- *
- * Implements    : DMA_DRV_StartChannel_Activity
- *END**************************************************************************/
+/*!
+ * @brief Starts a DMA channel.
+ */
 status_t DMA_DRV_StartChannel(uint8_t virtualChannel)
 {
     /* Check that virtual channel number is valid */
@@ -977,13 +915,9 @@ status_t DMA_DRV_StartChannel(uint8_t virtualChannel)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_StopChannel
- * Description   : Stops an DMA channel.
- *
- * Implements    : DMA_DRV_StopChannel_Activity
- *END**************************************************************************/
+/*!
+ * @brief Stops a DMA channel.
+ */
 status_t DMA_DRV_StopChannel(uint8_t virtualChannel)
 {
     /* Check that virtual channel number is valid */
@@ -1008,14 +942,9 @@ status_t DMA_DRV_StopChannel(uint8_t virtualChannel)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_SetChannelRequestAndTrigger
- * Description   : Sets DMA channel request source in DMAMUX and controls
- *                 the DMA channel periodic triggering.
- *
- * Implements    : DMA_DRV_SetChannelRequestAndTrigger_Activity
- *END**************************************************************************/
+/*!
+ * @brief Sets the DMA channel request source in DMAMUX and controls the DMA channel periodic triggering.
+ */
 status_t DMA_DRV_SetChannelRequestAndTrigger(uint8_t virtualChannel,
                                              uint8_t request)
 {
@@ -1042,20 +971,16 @@ status_t DMA_DRV_SetChannelRequestAndTrigger(uint8_t virtualChannel,
 
     return STATUS_SUCCESS;
 #else
-    (void)virtualChannel;    
+    (void)virtualChannel;
     (void)request;
-    (void)enableTrigger;    
+    (void)enableTrigger;
     return STATUS_UNSUPPORTED;
 #endif
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_ClearCTS
- * Description   : Clears all registers to 0 for the hardware CTS.
- *
- * Implements    : DMA_DRV_ClearCTS_Activity
- *END**************************************************************************/
+/*!
+ * @brief Clears all registers to 0 for the hardware CTS.
+ */
 void DMA_DRV_ClearCTS(uint8_t virtualChannel)
 {
     /* Check that virtual channel number is valid */
@@ -1078,13 +1003,9 @@ void DMA_DRV_ClearCTS(uint8_t virtualChannel)
     DMA_CTSClearReg(dmaRegBase, dmaChannel);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_SetSrcAddr
- * Description   : Configures the source address for the DMA channel.
- *
- * Implements    : DMA_DRV_SetSrcAddr_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configures the source address for the DMA channel.
+ */
 void DMA_DRV_SetSrcAddr(uint8_t virtualChannel,
                         uint32_t address)
 {
@@ -1108,13 +1029,9 @@ void DMA_DRV_SetSrcAddr(uint8_t virtualChannel,
     DMA_CTSSetSrcAddr(dmaRegBase, dmaChannel, address);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_SetSrcOffset
- * Description   : Configures the source address signed offset for the DMA channel.
- *
- * Implements    : DMA_DRV_SetSrcOffset_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configures the source address signed offset for the DMA channel.
+ */
 void DMA_DRV_SetSrcOffset(uint8_t virtualChannel,
                           int16_t offset)
 {
@@ -1138,13 +1055,9 @@ void DMA_DRV_SetSrcOffset(uint8_t virtualChannel,
     DMA_CTSSetSrcOffset(dmaRegBase, dmaChannel, offset);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_SetSrcReadChunkSize
- * Description   : Configures the source read data chunk size (transferred in a read sequence).
- *
- * Implements    : DMA_DRV_SetSrcReadChunkSize_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configures the source read data chunk size (transferred in a read sequence).
+ */
 void DMA_DRV_SetSrcReadChunkSize(uint8_t virtualChannel,
                                  dma_transfer_size_t size)
 {
@@ -1168,13 +1081,9 @@ void DMA_DRV_SetSrcReadChunkSize(uint8_t virtualChannel,
     DMA_CTSSetSrcTransferSize(dmaRegBase, dmaChannel, size);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_SetSrcLastAddrAdjustment
- * Description   : Configures the source address last adjustment.
- *
- * Implements    : DMA_DRV_SetSrcLastAddrAdjustment_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configures the source address last adjustment.
+ */
 void DMA_DRV_SetSrcLastAddrAdjustment(uint8_t virtualChannel,
                                       int32_t adjust)
 {
@@ -1198,13 +1107,9 @@ void DMA_DRV_SetSrcLastAddrAdjustment(uint8_t virtualChannel,
     DMA_CTSSetSrcLastAdjust(dmaRegBase, dmaChannel, adjust);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_SetDestLastAddrAdjustment
- * Description   : Configures the source address last adjustment.
- *
- * Implements    : DMA_DRV_SetDestLastAddrAdjustment_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configures the destination address last adjustment.
+ */
 void DMA_DRV_SetDestLastAddrAdjustment(uint8_t virtualChannel,
                                        int32_t adjust)
 {
@@ -1228,13 +1133,9 @@ void DMA_DRV_SetDestLastAddrAdjustment(uint8_t virtualChannel,
     DMA_CTSSetDestLastAdjust(dmaRegBase, dmaChannel, adjust);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_SetDestAddr
- * Description   : Configures the destination address for the DMA channel.
- *
- * Implements    : DMA_DRV_SetDestAddr_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configures the destination address for the DMA channel.
+ */
 void DMA_DRV_SetDestAddr(uint8_t virtualChannel,
                          uint32_t address)
 {
@@ -1258,13 +1159,9 @@ void DMA_DRV_SetDestAddr(uint8_t virtualChannel,
     DMA_CTSSetDestAddr(dmaRegBase, dmaChannel, address);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_SetDestOffset
- * Description   : Configures the destination address signed offset for the DMA channel.
- *
- * Implements    : DMA_DRV_SetDestOffset_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configures the destination address signed offset for the DMA channel.
+ */
 void DMA_DRV_SetDestOffset(uint8_t virtualChannel,
                            int16_t offset)
 {
@@ -1288,13 +1185,9 @@ void DMA_DRV_SetDestOffset(uint8_t virtualChannel,
     DMA_CTSSetDestOffset(dmaRegBase, dmaChannel, offset);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_SetDestWriteChunkSize
- * Description   : Configures the destination data chunk size (transferred in a write sequence).
- *
- * Implements    : DMA_DRV_SetDestWriteChunkSize_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configures the destination data chunk size (transferred in a write sequence).
+ */
 void DMA_DRV_SetDestWriteChunkSize(uint8_t virtualChannel,
                                    dma_transfer_size_t size)
 {
@@ -1318,13 +1211,9 @@ void DMA_DRV_SetDestWriteChunkSize(uint8_t virtualChannel,
     DMA_CTSSetDestTransferSize(dmaRegBase, dmaChannel, size);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_SetTransferLoopBlockSize
- * Description   : Configures the number of bytes to be transferred in each service request of the channel.
- *
- * Implements    : DMA_DRV_SetTransferLoopBlockSize_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configures the number of bytes to be transferred in each service request of the channel.
+ */
 void DMA_DRV_SetTransferLoopBlockSize(uint8_t virtualChannel,
                                       uint32_t nbytes)
 {
@@ -1348,13 +1237,9 @@ void DMA_DRV_SetTransferLoopBlockSize(uint8_t virtualChannel,
     DMA_CTSSetNbytes(dmaRegBase, dmaChannel, nbytes);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_SetTriggerLoopIterationCount
- * Description   : Configures the number of trigger loop iterations.
- *
- * Implements    : DMA_DRV_SetTriggerLoopIterationCount_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configures the number of trigger loop iterations.
+ */
 void DMA_DRV_SetTriggerLoopIterationCount(uint8_t virtualChannel,
                                           uint32_t majorLoopCount)
 {
@@ -1378,13 +1263,9 @@ void DMA_DRV_SetTriggerLoopIterationCount(uint8_t virtualChannel,
     DMA_CTSSetTriggerCount(dmaRegBase, dmaChannel, majorLoopCount);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_GetRemainingTriggerIterationsCount
- * Description   : Returns the remaining trigger loop iteration count.
- *
- * Implements    : DMA_DRV_GetRemainingTriggerIterationsCount_Activity
- *END**************************************************************************/
+/*!
+ * @brief Returns the remaining trigger loop iteration count.
+ */
 uint32_t DMA_DRV_GetRemainingTriggerIterationsCount(uint8_t virtualChannel)
 {
     /* Check that virtual channel number is valid */
@@ -1409,13 +1290,9 @@ uint32_t DMA_DRV_GetRemainingTriggerIterationsCount(uint8_t virtualChannel)
     return count;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_SetRamReloadLink
- * Description   : Configures the memory address of the next CTS, in ram reload mode.
- *
- * Implements    : DMA_DRV_SetRamReloadLink_Activity
- *END**************************************************************************/
+/*!
+ * @brief Configures the memory address of the next CTS, in ram reload mode.
+ */
 void DMA_DRV_SetRamReloadLink(uint8_t virtualChannel,
                               uint32_t nextCTSAddr)
 {
@@ -1439,13 +1316,9 @@ void DMA_DRV_SetRamReloadLink(uint8_t virtualChannel,
     DMA_CTSSetRamReloadLink(dmaRegBase, dmaChannel, nextCTSAddr);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_DisableRequestsOnTransferComplete
- * Description   : Disables/Enables the DMA request after the trigger loop completes for the CTS.
- *
- * Implements    : DMA_DRV_DisableRequestsOnTransferComplete_Activity
- *END**************************************************************************/
+/*!
+ * @brief Disables/Enables the DMA request after the trigger loop completes for the CTS.
+ */
 void DMA_DRV_DisableRequestsOnTransferComplete(uint8_t virtualChannel,
                                                bool disable)
 {
@@ -1469,13 +1342,9 @@ void DMA_DRV_DisableRequestsOnTransferComplete(uint8_t virtualChannel,
     DMA_CTSSetDisableDmaRequestAfterCTSDoneCmd(dmaRegBase, dmaChannel, disable);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_ConfigureInterrupt
- * Description   : Disables/Enables the channel interrupt requests.
- *
- * Implements    : DMA_DRV_ConfigureInterrupt_Activity
- *END**************************************************************************/
+/*!
+ * @brief Disables/Enables the channel interrupt requests.
+ */
 void DMA_DRV_ConfigureInterrupt(uint8_t virtualChannel,
                                 dma_channel_interrupt_t intSrc,
                                 bool enable)
@@ -1517,13 +1386,9 @@ void DMA_DRV_ConfigureInterrupt(uint8_t virtualChannel,
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_CancelTransfer
- * Description   : Cancels the running transfer for this channel.
- *
- * Implements    : DMA_DRV_CancelTransfer_Activity
- *END**************************************************************************/
+/*!
+ * @brief Cancels the running transfer for this channel.
+ */
 void DMA_DRV_CancelTransfer(bool error)
 {
     /* Check that DMA module is initialized */
@@ -1547,13 +1412,9 @@ void DMA_DRV_CancelTransfer(bool error)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_TriggerSwRequest
- * Description   : Triggers a sw request for the current channel.
- *
- * Implements    : DMA_DRV_TriggerSwRequest_Activity
- *END**************************************************************************/
+/*!
+ * @brief Triggers a software request for the current channel.
+ */
 void DMA_DRV_TriggerSwRequest(uint8_t virtualChannel)
 {
     /* Check that virtual channel number is valid */
@@ -1576,13 +1437,9 @@ void DMA_DRV_TriggerSwRequest(uint8_t virtualChannel)
     DMA_TriggerChannelStart(dmaRegBase, dmaChannel);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_PushConfigToSCTS
- * Description   : Copy the configuration to the software CTS structure.
- *
- * Implements    : DMA_DRV_PushConfigToSCTS_Activity
- *END**************************************************************************/
+/*!
+ * @brief Copies the configuration to the software CTS structure.
+ */
 void DMA_DRV_PushConfigToSCTS(const dma_transfer_config_t *config,
                               dma_software_cts_t *scts)
 {
@@ -1614,13 +1471,9 @@ void DMA_DRV_PushConfigToSCTS(const dma_transfer_config_t *config,
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_PushConfigToReg
- * Description   : Copy the configuration to the CTS registers.
- *
- * Implements    : DMA_DRV_PushConfigToReg_Activity
- *END**************************************************************************/
+/*!
+ * @brief Copies the configuration to the CTS registers.
+ */
 void DMA_DRV_PushConfigToReg(uint8_t virtualChannel,
                              const dma_transfer_config_t *cts)
 {
@@ -1702,12 +1555,9 @@ void DMA_DRV_PushConfigToReg(uint8_t virtualChannel,
 
 #if defined (CUSTOM_DEVASSERT) || defined (DEV_ERROR_DETECT)
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_ValidTransferSize
- * Description   : Check if the transfer size value is legal (0/1/2/4/5).
- *
- *END**************************************************************************/
+/*!
+ * @brief Checks if the transfer size value is legal (0/1/2/4/5).
+ */
 static bool DMA_DRV_ValidTransferSize(dma_transfer_size_t size)
 {
     bool isValid;
@@ -1739,13 +1589,9 @@ static bool DMA_DRV_ValidTransferSize(dma_transfer_size_t size)
 
 #endif
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_GetChannelStatus
- * Description   : Returns the DMA channel retStatus.
- *
- * Implements    : DMA_DRV_GetChannelStatus_Activity
- *END**************************************************************************/
+/*!
+ * @brief Returns the DMA channel status.
+ */
 dma_chn_status_t DMA_DRV_GetChannelStatus(uint8_t virtualChannel)
 {
     /* Check that virtual channel number is valid */
@@ -1762,13 +1608,9 @@ dma_chn_status_t DMA_DRV_GetChannelStatus(uint8_t virtualChannel)
     return chnState->status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_GetDmaRegBaseAddr
- * Description   : Returns the DMA register base address.
- *
- * Implements    : DMA_DRV_GetDmaRegBaseAddr
- *END**************************************************************************/
+/*!
+ * @brief Returns the DMA register base address.
+ */
 DMA_Type *DMA_DRV_GetDmaRegBaseAddr(uint32_t instance)
 {
     /* Check that instance is valid */
@@ -1777,19 +1619,16 @@ DMA_Type *DMA_DRV_GetDmaRegBaseAddr(uint32_t instance)
     return s_dmaBase[instance];
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : DMA_DRV_ClearStructure
- * Description   : Clears all bytes at the passed structure pointer.
- *
- *END**************************************************************************/
-static void DMA_DRV_ClearStructure(uint8_t *structPtr, size_t size)  
-{  
-    for (size_t i = 0; i < size; i++)  
-    {  
-        structPtr[i] = 0;  
-    }  
-}  
+/*!
+ * @brief Clears all bytes at the passed structure pointer.
+ */
+static void DMA_DRV_ClearStructure(uint8_t *structPtr, size_t size)
+{
+    for (size_t i = 0; i < size; i++)
+    {
+        structPtr[i] = 0;
+    }
+}
 
 /*******************************************************************************
  * EOF

@@ -1096,9 +1096,6 @@ typedef enum
 #define FEATURE_LINFlexD_HAS_STA_IRQ             (0)
 /* @brief LINFlexD no different memory map */
 #define FEATURE_LINFlexD_HAS_DIFFERENT_MEM_MAP   (0)
-/* @brief LINFlexD no RX TX error INT lines */
-#define FEATURE_LINFlexD_RX_TX_ERR_INT_LINES     (0)
-
 /* SENT module features */
 
 /* @brief SENT interrupt sources */

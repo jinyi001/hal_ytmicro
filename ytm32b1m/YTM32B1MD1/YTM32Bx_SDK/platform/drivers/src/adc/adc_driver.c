@@ -8,6 +8,12 @@
 /*!
  * @file adc_driver.c
  * @version 1.4.1
+ *
+ * @brief ADC Driver - implementation of the public ADC_DRV_* API.
+ *
+ * This file implements the application-level ADC driver functions declared in
+ * adc_driver.h. Each function resolves the ADC instance base address and then
+ * coordinates the lower-level register helpers from adc_hw_access.h.
  */
 
 #include <stddef.h>
@@ -24,20 +30,16 @@
  * Variables
  ******************************************************************************/
 
-/* Table of base addresses for ADC instances. */
+/*! @brief Table of base addresses for ADC instances. */
 static ADC_Type *const s_adcBase[ADC_INSTANCE_COUNT] = ADC_BASE_PTRS;
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_InitConverterStruct
- * Description   : This function initializes the members of the adc_converter_config_t
- * structure to default values (Reference Manual resets). This function should be called
- * on a structure before using it to configure the converter (ADC_DRV_ConfigConverter), otherwise all members
- * must be written (initialized) by the caller. This function insures that all members are written
- * with safe values, so the user can modify only the desired members.
- *
- * Implements : ADC_DRV_InitConverterStruct_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Converter Configuration
+ ******************************************************************************/
+
+/*!
+ * @brief Fill a converter configuration structure with default values.
+ */
 void ADC_DRV_InitConverterStruct(adc_converter_config_t *const config)
 {
     DEV_ASSERT(config != NULL);
@@ -70,6 +72,7 @@ void ADC_DRV_InitConverterStruct(adc_converter_config_t *const config)
     config->sequenceConfig.sampIntEnable = false;
     config->sequenceConfig.readyIntEnable = false;
 
+    config->compIntEnable = false;
 #if defined(FEATURE_ADC_WDG_CHANNEL_COUNT) && (FEATURE_ADC_WDG_CHANNEL_COUNT > 1)
     config->adcCompareCnt = 0;
 #else
@@ -77,20 +80,14 @@ void ADC_DRV_InitConverterStruct(adc_converter_config_t *const config)
     config->compareConfig.compareAllChannelEnable = false;
     config->compareConfig.compHigh = 0xFFF;
     config->compareConfig.compLow = 0x000;
-    config->compareConfig.compIntEnable = false;
 #endif /* FEATURE_ADC_WDG_CHANNEL_COUNT */
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_ConfigConverter
- * Description   : This function configures the ADC converter with the options
- * provided in the configuration structure.
- *
- * Implements : ADC_DRV_ConfigConverter_Activity
- *END**************************************************************************/
-void ADC_DRV_ConfigConverter(const uint32_t instance,
-                             const adc_converter_config_t *const config)
+/*!
+ * @brief Apply a top-level converter configuration to an ADC instance.
+ */
+status_t ADC_DRV_ConfigConverter(const uint32_t instance,
+                                 const adc_converter_config_t *const config)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
     DEV_ASSERT(config != NULL);
@@ -101,44 +98,46 @@ void ADC_DRV_ConfigConverter(const uint32_t instance,
     status_t clk_status = CLOCK_SYS_GetFreq(adc_clocks[instance], &adc_freq);
     DEV_ASSERT(clk_status == STATUS_SUCCESS);
     (void) clk_status;
+    status_t status = STATUS_SUCCESS;
 
     adc_freq = adc_freq / (uint32_t) (1UL + ((uint32_t) (config->clockDivider)));
-    DEV_ASSERT((adc_freq >= ADC_CLOCK_FREQ_MIN_RUNTIME) && (adc_freq <= ADC_CLOCK_FREQ_MAX_RUNTIME));
-    (void) adc_freq;
-
-    ADC_SetClockDivide(base, config->clockDivider);
-    ADC_SetStartTime(base, config->startTime);
-    ADC_SetSampleTime(base, config->sampleTime);
-    ADC_SetOverrunModeFlag(base, config->overrunMode);
-    ADC_SetautoOffEnableFlag(base, config->autoOffEnable);
-    ADC_SetResolution(base, config->resolution);
-    ADC_SetTriggerSource(base, config->triggerSource);
-    ADC_SetTriggerMode(base, config->trigger);
-    ADC_SetWaitEnableFlag(base, config->waitEnable);
-    ADC_SetDMAEnableFlag(base, config->dmaEnable);
-    ADC_SetDMAWatermark(base, config->dmaWaterMark);
-    ADC_DRV_ConfigSequence(instance, &config->sequenceConfig);
+    if((adc_freq >= ADC_CLOCK_FREQ_MIN_RUNTIME) && (adc_freq <= ADC_CLOCK_FREQ_MAX_RUNTIME))
+    {
+        /* Program converter timing, trigger, DMA, and resolution settings. */
+        ADC_SetClockDivide(base, config->clockDivider);
+        ADC_SetStartTime(base, config->startTime);
+        ADC_SetSampleTime(base, config->sampleTime);
+        ADC_SetOverrunModeFlag(base, config->overrunMode);
+        ADC_SetautoOffEnableFlag(base, config->autoOffEnable);
+        ADC_SetResolution(base, config->resolution);
+        ADC_SetTriggerSource(base, config->triggerSource);
+        ADC_SetTriggerMode(base, config->trigger);
+        ADC_SetWaitEnableFlag(base, config->waitEnable);
+        ADC_SetDMAEnableFlag(base, config->dmaEnable);
+        ADC_SetDMAWatermark(base, config->dmaWaterMark);
+        ADC_DRV_ConfigSequence(instance, &config->sequenceConfig);
 #if FEATURE_ADC_SUPPORT_LOW_POWER_KEEP
-    ADC_SetLowPowerEnableFlag(base, false);
+        ADC_SetLowPowerEnableFlag(base, false);
 #endif
 #if defined(FEATURE_ADC_SUPPORT_INJECTION_MODE) && (FEATURE_ADC_SUPPORT_INJECTION_MODE > 0)
-    ADC_DRV_ConfigInject(instance, &config->injectConfig);
+        ADC_DRV_ConfigInject(instance, &config->injectConfig);
 #endif /* FEATURE_ADC_SUPPORT_INJECTION_MODE */
+        ADC_SetAwdIntEnableFlag(base, config->compIntEnable);
 #if defined(FEATURE_ADC_WDG_CHANNEL_COUNT) && (FEATURE_ADC_WDG_CHANNEL_COUNT > 1)
-    ADC_DRV_ConfigHwCompareGroup(instance, config->compareConfig, config->adcCompareCnt);
+        ADC_DRV_ConfigHwCompareGroup(instance, config->compareConfig, config->adcCompareCnt);
 #else
-    ADC_DRV_ConfigHwCompare(instance, &config->compareConfig);
+        ADC_DRV_ConfigHwCompare(instance, &config->compareConfig);
 #endif /* FEATURE_ADC_WDG_CHANNEL_COUNT */
+    }else{
+        /* Confirm ADC clock in range */
+        status = STATUS_InvalidArgument;
+    }
+    return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_GetConverterConfig
- * Description   : This functions returns the current converter configuration in
- * the form of a configuration structure.
- *
- * Implements : ADC_DRV_GetConverterConfig_Activity
- *END**************************************************************************/
+/*!
+ * @brief Read the active converter configuration from hardware.
+ */
 void ADC_DRV_GetConverterConfig(const uint32_t instance,
                                 adc_converter_config_t *const config)
 {
@@ -163,14 +162,13 @@ void ADC_DRV_GetConverterConfig(const uint32_t instance,
 #endif /* FEATURE_ADC_WDG_CHANNEL_COUNT */
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_Reset
- * Description   : This function writes all the internal ADC registers with
- * their Reference Manual reset values.
- *
- * Implements : ADC_DRV_Reset_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Conversion Control & Status
+ ******************************************************************************/
+
+/*!
+ * @brief Reset the ADC instance to its runtime default state.
+ */
 void ADC_DRV_Reset(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -178,13 +176,9 @@ void ADC_DRV_Reset(const uint32_t instance)
     ADC_DRV_Disable(instance);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_Enable
- * Description   : This function enable the ADC.
- *
- * Implements : ADC_DRV_Enable_Activity
- *END**************************************************************************/
+/*!
+ * @brief Enable the ADC hardware.
+ */
 void ADC_DRV_Enable(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -194,14 +188,9 @@ void ADC_DRV_Enable(const uint32_t instance)
     ADC_Enable(baseAddr);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_Disable
- * Description   : This function disable ADC and let ADC enter low power mode.
- * Disable ADC will abort all ongoing conversion.
- * 
- * Implements : ADC_DRV_Disable_Activity
- *END**************************************************************************/
+/*!
+ * @brief Disable the ADC hardware and abort any active conversion.
+ */
 void ADC_DRV_Disable(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -215,16 +204,9 @@ void ADC_DRV_Disable(const uint32_t instance)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_Start
- * Description   : This function start the ADC.
- * If software trigger is enabled, ADC will start sequence convert.
- * If hardware trigger is enabled, ADC will wait valid trigger then start 
- * sequence convert.
- *
- * Implements : ADC_DRV_Start_Activity
- *END**************************************************************************/
+/*!
+ * @brief Start or arm ADC conversion processing.
+ */
 void ADC_DRV_Start(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -236,14 +218,9 @@ void ADC_DRV_Start(const uint32_t instance)
     ADC_Start(baseAddr);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_Stop
- * Description   : This function stop the ADC.
- * Stop ADC will abort all ongoing conversion.
- *
- * Implements : ADC_DRV_Stop_Activity
- *END**************************************************************************/
+/*!
+ * @brief Stop the current ADC conversion activity.
+ */
 void ADC_DRV_Stop(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -253,17 +230,13 @@ void ADC_DRV_Stop(const uint32_t instance)
     ADC_Stop(baseAddr);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_InitHwCompareStruct
- * Description   : This function initializes the Hardware Compare configuration
- * structure to default values (Reference Manual resets). This function should be
- * called before configuring the Hardware Compare feature (ADC_DRV_ConfigHwCompare),
- * otherwise all members must be written by the caller. This function insures that all
- * members are written with safe values, so the user can modify the desired members.
- *
- * Implements : ADC_DRV_InitHwCompareStruct_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Hardware Compare Configuration
+ ******************************************************************************/
+
+/*!
+ * @brief Fill a watchdog configuration structure with default values.
+ */
 void ADC_DRV_InitHwCompareStruct(adc_compare_config_t *const config)
 {
     DEV_ASSERT(config != NULL);
@@ -274,14 +247,9 @@ void ADC_DRV_InitHwCompareStruct(adc_compare_config_t *const config)
     config->compLow = 0U;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_ConfigHwCompare
- * Description   : This functions sets the configuration for the Hardware
- * Compare feature using the configuration structure.
- *
- * Implements : ADC_DRV_ConfigHwCompare_Activity
- *END**************************************************************************/
+/*!
+ * @brief Apply a single hardware-compare configuration.
+ */
 void ADC_DRV_ConfigHwCompare(const uint32_t instance,
                              const adc_compare_config_t *const config)
 {
@@ -295,19 +263,13 @@ void ADC_DRV_ConfigHwCompare(const uint32_t instance,
     ADC_SetHwCompareRangeEnableFlag(base, config->compChalSel, wdgChannel);
     ADC_SetHwCompareCompHighValue(base, config->compHigh, wdgChannel);
     ADC_SetHwCompareCompLowValue(base, config->compLow, wdgChannel);
-    ADC_SetAwdIntEnableFlag(base, config->compIntEnable);
     ADC_SetAwdEffectiveMode(base, (config->effectiveMode == ADC_AWG_EFFECTIVE_INSIDE) ? true : false, wdgChannel);
 }
 
 #if defined(FEATURE_ADC_WDG_CHANNEL_COUNT) && (FEATURE_ADC_WDG_CHANNEL_COUNT > 1)
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_ConfigHwCompareGroup
- * Description   : This functions sets the configuration for the Hardware
- * Compare feature using the configuration structure.
- *
- * Implements : ADC_DRV_ConfigHwCompareGroup_Activity
- *END**************************************************************************/
+/*!
+ * @brief Apply a watchdog configuration array.
+ */
 void ADC_DRV_ConfigHwCompareGroup(const uint32_t instance,
                                   adc_compare_config_t *const config, 
                                   uint8_t count)
@@ -316,17 +278,17 @@ void ADC_DRV_ConfigHwCompareGroup(const uint32_t instance,
     if (count != 0u)
     {
         DEV_ASSERT(config != NULL);
-    
+
         ADC_Type *const base = s_adcBase[instance];
         for(uint8_t i = 0; i < count; i ++)
         {
+            /* Program each watchdog channel entry from the caller array. */
             ADC_SetHwCompareEnableFlag(base, config[i].compareEnable, config[i].comWdchIndex);
             ADC_SetHwCompareRangeEnableFlag(base, config[i].compChalSel, config[i].comWdchIndex);
             ADC_SetHwCompareCompHighValue(base, config[i].compHigh, config[i].comWdchIndex);
             ADC_SetHwCompareCompLowValue(base, config[i].compLow, config[i].comWdchIndex);
-            ADC_SetAwdIntEnableFlag(base, config[i].compIntEnable);
-            ADC_SetAwdEffectiveMode(base, (config->effectiveMode == ADC_AWG_EFFECTIVE_INSIDE) ? true : false, config[i].comWdchIndex);
-            /* Only WD0CH has this feature */
+            ADC_SetAwdEffectiveMode(base, (config[i].effectiveMode == ADC_AWG_EFFECTIVE_INSIDE) ? true : false, config[i].comWdchIndex);
+            /* Only watchdog channel 0 supports the all-channel compare mode. */
             if(config[i].comWdchIndex == 0u)
             {
                 ADC_SetHwCompareAllEnableFlag(base, config[i].compareAllChannelEnable);
@@ -336,14 +298,9 @@ void ADC_DRV_ConfigHwCompareGroup(const uint32_t instance,
 }
 #endif /* FEATURE_ADC_WDG_CHANNEL_COUNT */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_GetHwCompareConfig
- * Description   : This function returns the configuration for the Hardware
- * Compare feature.
- *
- * Implements : ADC_DRV_GetHwCompareConfig_Activity
- *END**************************************************************************/
+/*!
+ * @brief Read back the active hardware-compare configuration.
+ */
 void ADC_DRV_GetHwCompareConfig(const uint32_t instance,
                                 adc_compare_config_t *const config)
 {
@@ -358,17 +315,13 @@ void ADC_DRV_GetHwCompareConfig(const uint32_t instance,
     config->compLow = ADC_GetHwCompareCompLowValue(base, wdgChannel);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_InitSequenceStruct
- * Description   : This function initializes the control sequence
- * configuration structure to default values (Reference Manual resets). This function should
- * be called on a structure before using it to configure a sequence (ADC_DRV_ConfigSequence), otherwise
- * all members must be written by the caller. This function insures that all members are written
- * with safe values, so the user can modify only the desired members.
- *
- * Implements : ADC_DRV_InitSequenceStruct_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Sequence Configuration
+ ******************************************************************************/
+
+/*!
+ * @brief Fill a normal-sequence configuration structure with default values.
+ */
 void ADC_DRV_InitSequenceStruct(adc_sequence_config_t *const config)
 {
     DEV_ASSERT(config != NULL);
@@ -380,16 +333,9 @@ void ADC_DRV_InitSequenceStruct(adc_sequence_config_t *const config)
     config->convIntEnable = false;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_ConfigSequence
- * Description   : This function sets a control sequence configuration.
- *
- * Configuring any control sequence while it is actively controlling a conversion
- * (sw or hw triggered) will implicitly abort the on-going conversion.
- *
- * Implements : ADC_DRV_ConfigSequence_Activity
- *END**************************************************************************/
+/*!
+ * @brief Program the normal conversion sequence.
+ */
 void ADC_DRV_ConfigSequence(const uint32_t instance,
                             const adc_sequence_config_t *const config)
 {
@@ -400,13 +346,13 @@ void ADC_DRV_ConfigSequence(const uint32_t instance,
     DEV_ASSERT(ADC_CHSEL_COUNT >= config->totalChannels);
 
     ADC_Type *const base = s_adcBase[instance];
-    /* Stop ADC conversion before re-configuration */
+    /* Abort any active conversion before rewriting sequence registers. */
     ADC_Stop(base);
-    for (i = 0; i < ADC_CHSEL_COUNT; i++)
+    for (i = 0; i < config->totalChannels; i++)
     {
-        ADC_SetSequeceChannel(base, i, config->channels[i]);
+        ADC_SetSequenceChannel(base, i, config->channels[i]);
     }
-    ADC_SetSequeceTotalChannel(base, config->totalChannels);
+    ADC_SetSequenceTotalChannel(base, config->totalChannels);
     ADC_SetSequenceMode(base, config->sequenceMode);
     ADC_SetEocIntEnableFlag(base, config->convIntEnable);
     ADC_SetEoSeqIntEnableFlag(base, config->sequenceIntEnable);
@@ -415,14 +361,9 @@ void ADC_DRV_ConfigSequence(const uint32_t instance,
     ADC_SetReadyIntEnableFlag(base, config->readyIntEnable);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_GetSequenceConfig
- * Description   : This function returns the current configuration for a control
- * sequence.
- *
- * Implements : ADC_DRV_GetSequenceConfig_Activity
- *END**************************************************************************/
+/*!
+ * @brief Read back the normal-sequence configuration.
+ */
 void ADC_DRV_GetSequenceConfig(const uint32_t instance,
                                adc_sequence_config_t *const config)
 {
@@ -433,25 +374,18 @@ void ADC_DRV_GetSequenceConfig(const uint32_t instance,
     ADC_Type *const base = s_adcBase[instance];
     for (i = 0; i < ADC_CHSEL_COUNT; i++)
     {
-        config->channels[i] = ADC_GetSequeceChannel(base, i);
+        config->channels[i] = ADC_GetSequenceChannel(base, i);
     }
-    config->totalChannels = ADC_GetSequeceTotalChannel(base) + 1u;
+    config->totalChannels = ADC_GetSequenceTotalChannel(base);
     config->sequenceMode = ADC_GetSequenceMode(base);
     config->convIntEnable = ADC_GetEocIntEnableFlag(base);
     config->sequenceIntEnable = ADC_GetEoSeqIntEnableFlag(base);
 }
 
 #if defined(FEATURE_ADC_SUPPORT_INJECTION_MODE) && (FEATURE_ADC_SUPPORT_INJECTION_MODE > 0)
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_ConfigInject
- * Description   : This function sets a inject control sequence configuration.
- *
- * Configuring any control sequence while it is actively controlling a conversion
- * (sw or hw triggered) will implicitly abort the on-going conversion.
- *
- * Implements : ADC_DRV_ConfigInject_Activity
- *END**************************************************************************/
+/*!
+ * @brief Program the injected conversion sequence.
+ */
 void ADC_DRV_ConfigInject(const uint32_t instance,
                             const adc_inject_config_t *const config)
 {
@@ -464,7 +398,7 @@ void ADC_DRV_ConfigInject(const uint32_t instance,
         DEV_ASSERT(ADC_INJCH_COUNT >= config->totalChannels);
 
         ADC_Type *const base = s_adcBase[instance];
-        /* Stop ADC conversion before re-configuration */
+        /* Abort any active conversion before rewriting injected-sequence registers. */
         ADC_Stop(base);
         for (i = 0; i < ADC_INJCH_COUNT; i++)
         {
@@ -476,14 +410,9 @@ void ADC_DRV_ConfigInject(const uint32_t instance,
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_GetInjectConfig
- * Description   : This function returns the current configuration for a inject
- * control sequence.
- *
- * Implements : ADC_DRV_GetInjectConfig_Activity
- *END**************************************************************************/
+/*!
+ * @brief Read back the injected conversion sequence configuration.
+ */
 void ADC_DRV_GetInjectConfig(const uint32_t instance,
                                adc_inject_config_t *const config)
 {
@@ -496,23 +425,22 @@ void ADC_DRV_GetInjectConfig(const uint32_t instance,
         ADC_Type *const base = s_adcBase[instance];
         for (i = 0; i < ADC_INJCH_COUNT; i++)
         {
-            config->channels[i] = ADC_GetSequeceChannel(base, i);
+            config->channels[i] = ADC_GetSequenceChannel(base, i);
         }
-        config->totalChannels = ADC_GetInjectTotalChannel(base) + 1;
+        config->totalChannels = ADC_GetInjectTotalChannel(base);
         config->convIntEnable = ADC_GetInjectIntEnableFlag(base);
         config->errorIntEnable = ADC_GetInjectErrIntEnableFlag(base);
     }
 }
 #endif /* FEATURE_ADC_SUPPORT_INJECTION_MODE */
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_WaitConvDone
- * Description   : This functions waits for a conversion to complete by
- * continuously polling the Conversion Active Flag.
- *
- * Implements : ADC_DRV_WaitConvDone_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Conversion Control & Status
+ ******************************************************************************/
+
+/*!
+ * @brief Poll until the current conversion is no longer active.
+ */
 void ADC_DRV_WaitConvDone(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -520,18 +448,13 @@ void ADC_DRV_WaitConvDone(const uint32_t instance)
     ADC_Type *const base = s_adcBase[instance];
     while (ADC_GetConvActiveFlag(base) == true)
     {
-        /* Wait for conversion to finish */
+        /* Wait for the conversion-active flag to clear. */
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_WaitSequenceDone
- * Description   : This functions waits for a sequence conversion to complete by
- * continuously polling the sequence done Flag.
- *
- * Implements : ADC_DRV_WaitSequenceDone_Activity
- *END**************************************************************************/
+/*!
+ * @brief Poll until the configured sequence reports completion.
+ */
 void ADC_DRV_WaitSequenceDone(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -539,19 +462,13 @@ void ADC_DRV_WaitSequenceDone(const uint32_t instance)
     ADC_Type *const base = s_adcBase[instance];
     while (ADC_GetSequenceDoneFlag(base) == false)
     {
-        /* Wait for sequence conversion to finish */
+        /* Wait for the sequence-done flag to assert. */
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_GetConvCompleteFlag
- * Description   : This function returns the state of the Conversion Complete
- * flag for a control channel. This flag is set when a conversion is complete
- * or the condition generated by the Hardware Compare feature is evaluated to true.
- *
- * Implements : ADC_DRV_GetConvCompleteFlag_Activity
- *END**************************************************************************/
+/*!
+ * @brief Get the conversion-complete flag state.
+ */
 bool ADC_DRV_GetConvCompleteFlag(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -561,15 +478,9 @@ bool ADC_DRV_GetConvCompleteFlag(const uint32_t instance)
     return (ADC_GetConvCompleteFlag(base));
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_GetEndOfConversionFlag
- * Description   : This function returns the state of the Conversion Complete
- * flag for a control channel. This flag is set when a conversion is complete
- * or the condition generated by the Hardware Compare feature is evaluated to true.
- *
- * Implements : ADC_DRV_GetEndOfConversionFlag_Activity
- *END**************************************************************************/
+/*!
+ * @brief Get the end-of-conversion flag state.
+ */
 bool ADC_DRV_GetEndOfConversionFlag(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -581,15 +492,9 @@ bool ADC_DRV_GetEndOfConversionFlag(const uint32_t instance)
     return (tmp != 0u) ? true : false;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_GetFullOfConversionFlag
- * Description   : This function returns the state of the Conversion Full
- * flag for a control channel. This flag is set when FIFO storing converted data is full
- * or the condition generated by the Hardware Compare feature is evaluated to true.
- *
- * Implements : ADC_DRV_GetFullOfConversionFlag_Activity
- *END**************************************************************************/
+/*!
+ * @brief Get the result-FIFO full flag state.
+ */
 bool ADC_DRV_GetFullOfConversionFlag(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -601,16 +506,9 @@ bool ADC_DRV_GetFullOfConversionFlag(const uint32_t instance)
     return (tmp != 0u) ? true : false;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_GetOvrRunOfConversionFlag
- * Description   : This function returns the state of the Conversion OverRun
- * flag for a control channel. This flag is set when a new EOC comes
- * while FIFO storing  converted datas is already full
- * or the condition generated by the Hardware Compare feature is evaluated to true.
- *
- * Implements : ADC_DRV_GetOvrRunOfConversionFlag_Activity
- *END**************************************************************************/
+/*!
+ * @brief Get the FIFO overrun flag state.
+ */
 bool ADC_DRV_GetOvrRunOfConversionFlag(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -622,17 +520,15 @@ bool ADC_DRV_GetOvrRunOfConversionFlag(const uint32_t instance)
     return (tmp != 0u) ? true : false;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_GetWatchdogFlag
- * Description   : This function returns the Watchdog flag by hareware when the
- * converted voltage crosses the values programmed in the ADC_TR
- *
- * Implements : ADC_DRV_GetWatchdogFlag_Activity
- *END**************************************************************************/
 #if defined(FEATURE_ADC_WDG_CHANNEL_COUNT) && (FEATURE_ADC_WDG_CHANNEL_COUNT > 1)
+/*!
+ * @brief Get the analog watchdog flag state.
+ */
 bool ADC_DRV_GetWatchdogFlag(const uint32_t instance, const uint8_t wdgChannel)
 #else /* FEATURE_ADC_WDG_CHANNEL_COUNT == 1U */
+/*!
+ * @brief Get the analog watchdog flag state.
+ */
 bool ADC_DRV_GetWatchdogFlag(const uint32_t instance)
 #endif /* FEATURE_ADC_WDG_CHANNEL_COUNT */
 {
@@ -649,15 +545,9 @@ bool ADC_DRV_GetWatchdogFlag(const uint32_t instance)
     return (tmp != 0u) ? true : false;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_GetEndOfSequenceFlag
- * Description   : This function returns the state of the Sequence Conversion Complete
- * flag for a control channel. This flag is at the end of conversion of a sequence
- * or the condition generated by the Hardware Compare feature is evaluated to true.
- *
- * Implements : ADC_DRV_GetEndOfSequenceFlag_Activity
- *END**************************************************************************/
+/*!
+ * @brief Get the end-of-sequence flag state.
+ */
 bool ADC_DRV_GetEndOfSequenceFlag(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -669,14 +559,9 @@ bool ADC_DRV_GetEndOfSequenceFlag(const uint32_t instance)
     return (tmp != 0u) ? true : false;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_GetReadyFlag
- * Description   : This function returns the state of the ADC Ready
- * flag for a control channel.
- *
- * Implements : ADC_DRV_GetReadyFlag_Activity
- *END**************************************************************************/
+/*!
+ * @brief Get the ADC-ready flag state.
+ */
 bool ADC_DRV_GetReadyFlag(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -688,14 +573,9 @@ bool ADC_DRV_GetReadyFlag(const uint32_t instance)
     return (tmp != 0u) ? true : false;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_GetSampEndFlag
- * Description   : This function returns the state of the Sample End
- * flag for a control channel.
- *
- * Implements : ADC_DRV_GetSampEndFlag_Activity
- *END**************************************************************************/
+/*!
+ * @brief Get the sample-end flag state.
+ */
 bool ADC_DRV_GetSampEndFlag(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -707,13 +587,9 @@ bool ADC_DRV_GetSampEndFlag(const uint32_t instance)
     return (tmp != 0u) ? true : false;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_ReadFIFO
- * Description   : This function returns the conversion result from FIFO.
- *
- * Implements : ADC_DRV_ReadFIFO_Activity
- *END**************************************************************************/
+/*!
+ * @brief Read one conversion result from the result FIFO.
+ */
 uint16_t ADC_DRV_ReadFIFO(const uint32_t instance)
 {
     ADC_Type *const base = s_adcBase[instance];
@@ -721,14 +597,9 @@ uint16_t ADC_DRV_ReadFIFO(const uint32_t instance)
     return (ADC_ReadFIFO(base));
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_ReadSeqtagAndData
- * Description   : This function returns the conversion result from FIFO,
- * which is a conbined data consist of Tag and Data of a channel in Sequence.
- *
- * Implements : ADC_DRV_ReadSeqtagAndData_Activity
- *END**************************************************************************/
+/*!
+ * @brief Read one tagged FIFO entry.
+ */
 uint32_t ADC_DRV_ReadSeqtagAndData(const uint32_t instance)
 {
     ADC_Type *const base = s_adcBase[instance];
@@ -736,13 +607,13 @@ uint32_t ADC_DRV_ReadSeqtagAndData(const uint32_t instance)
     return ((uint32_t) base->FIFO);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_GetInterruptNumber
- * Description   : This function returns the interrupt number for the specified ADC instance.
- *
- * Implements : ADC_DRV_GetInterruptNumber_Activity
- *END**************************************************************************/
+/*******************************************************************************
+ * Interrupt & Flag Control
+ ******************************************************************************/
+
+/*!
+ * @brief Return the IRQ number associated with an ADC instance.
+ */
 IRQn_Type ADC_DRV_GetInterruptNumber(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -753,14 +624,9 @@ IRQn_Type ADC_DRV_GetInterruptNumber(const uint32_t instance)
     return irqId;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_ClearReadyFlagCmd
- * Description   : This function is used to clear Eeady flag.
- *
- * Implements    : ADC_DRV_ClearReadyFlagCmd_Activity
- *END**************************************************************************/
-
+/*!
+ * @brief Clear the ADC-ready flag.
+ */
 void ADC_DRV_ClearReadyFlagCmd(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -770,14 +636,9 @@ void ADC_DRV_ClearReadyFlagCmd(const uint32_t instance)
     ADC_ClearReadyFlagCmd(baseAddr);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_ClearSampEndFlagCmd
- * Description   : This function is used to clear Sample End flag.
- *
- * Implements    : ADC_DRV_ClearSampEndFlagCmd_Activity
- *END**************************************************************************/
-
+/*!
+ * @brief Clear the sample-end flag.
+ */
 void ADC_DRV_ClearSampEndFlagCmd(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -787,14 +648,9 @@ void ADC_DRV_ClearSampEndFlagCmd(const uint32_t instance)
     ADC_ClearSampEndFlagCmd(baseAddr);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_ClearWdFlagCmd
- * Description   : This function is used to clear AWD flag.
- *
- * Implements    : ADC_DRV_ClearWdFlagCmd_Activity
- *END**************************************************************************/
-
+/*!
+ * @brief Clear the watchdog event flag.
+ */
 void ADC_DRV_ClearWdFlagCmd(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -803,14 +659,9 @@ void ADC_DRV_ClearWdFlagCmd(const uint32_t instance)
     ADC_ClearWdFlagCmd(baseAddr, 0);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_ClearOvrFlagCmd
- * Description   : This function is used to clear OVR flag.
- *
- * Implements    : ADC_DRV_ClearOvrFlagCmd_Activity
- *END**************************************************************************/
-
+/*!
+ * @brief Clear the FIFO overrun flag.
+ */
 void ADC_DRV_ClearOvrFlagCmd(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -820,14 +671,9 @@ void ADC_DRV_ClearOvrFlagCmd(const uint32_t instance)
     ADC_ClearOvrFlagCmd(baseAddr);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_ClearEoseqFlagCmd
- * Description   : This function is used to clear EOSEQ flag.
- *
- * Implements    : ADC_DRV_ClearEoseqFlagCmd_Activity
- *END**************************************************************************/
-
+/*!
+ * @brief Clear the end-of-sequence flag.
+ */
 void ADC_DRV_ClearEoseqFlagCmd(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);
@@ -837,14 +683,9 @@ void ADC_DRV_ClearEoseqFlagCmd(const uint32_t instance)
     ADC_ClearEoseqFlagCmd(baseAddr);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : ADC_DRV_ClearEocFlagCmd
- * Description   : This function is used to clear EOC flag.
- *
- * Implements    : ADC_DRV_ClearEocFlagCmd_Activity
- *END**************************************************************************/
-
+/*!
+ * @brief Clear the end-of-conversion flag.
+ */
 void ADC_DRV_ClearEocFlagCmd(const uint32_t instance)
 {
     DEV_ASSERT(instance < ADC_INSTANCE_COUNT);

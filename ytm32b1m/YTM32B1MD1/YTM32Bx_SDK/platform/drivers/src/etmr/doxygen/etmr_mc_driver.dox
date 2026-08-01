@@ -1,89 +1,51 @@
 /*!
-    @defgroup etmr_mc_driver eTMR Module Counter Driver (eTMR_MC)
-    @ingroup etmr
-    @details
-    @brief eTMR Module Counter Peripheral Driver.
+@defgroup etmr_mc_driver eTMR Timer/Counter Driver (eTMR_MC)
+@ingroup etmr
+@details
+@brief Timer/Counter mode driver for the eTMR peripheral.
 
-    ## Hardware background ##
-    The eTMR of the YTM32B1L is based on a 16 bits counter and supports: input capture, output compare, PWM and some instances
-    include quadrature decoder.
+## Overview
 
-    ## How to use eTMR driver in your application ##
-    For all operation modes (without Quadrature Decoder mode) the user need to configure etmr_user_config_t. This structure will be used for initialization
-    (eTMR_DRV_Init). The next functions used are specific for each operation mode.
+The MC (Module Counter) sub-module provides basic timer/counter
+functionality. It supports up-counting and center-aligned modes,
+with configurable period and initial counter values.
 
-    ### Counter mode ###
-    For this mode the user needs to configure parameters like: counter mode (up-counting or up-down counting), maximum counter value, initial counter value.
-    All this information is included in the #etmr_timer_param_t structure.
+## Usage Pattern
 
-    ## Integration guideline ##
+@code{.c}
+#define ETMR_INST (0U)
 
-    ### Compilation units ###
+etmr_state_t state;
+etmr_user_config_t config;
+etmr_timer_param_t timerParam;
 
-    The following files need to be compiled in the project:
-    \verbatim
-    ${SDK_PATH}\platform\drivers\src\etmr\etmr_mc_driver.c
-    ${SDK_PATH}\platform\drivers\src\etmr\etmr_common.c
-    ${SDK_PATH}\platform\drivers\src\etmr\etmr_hw_access.c
-    \endverbatim
+/* Step 1: Initialize eTMR common driver */
+eTMR_DRV_GetDefaultConfig(&config);
+eTMR_DRV_Init(ETMR_INST, &config, &state);
 
-    ### Include path ###
+/* Step 2: Configure timer parameters */
+timerParam.mode        = eTMR_MODE_UP_TIMER;
+timerParam.initialValue = 0U;
+timerParam.finalValue   = 0x8000U;
+eTMR_DRV_InitCounter(ETMR_INST, &timerParam);
 
-    The following paths need to be added to the include path of the toolchain:
-    \verbatim
-    ${SDK_PATH}\platform\drivers\inc\
-    ${SDK_PATH}\platform\drivers\src\etmr\
-    \endverbatim
+/* Step 3: Start counting */
+eTMR_DRV_CounterStart(ETMR_INST);
 
-    ### Compile symbols ###
+/* ... application logic ... */
 
-    No special symbols are required for this component
+/* Step 4: Stop and de-initialize */
+eTMR_DRV_CounterStop(ETMR_INST);
+eTMR_DRV_Deinit(ETMR_INST);
+@endcode
 
-    ### Dependencies ###
+## API Quick Reference
 
-    \ref clock_manager
-    \ref interrupt_manager
-
-   Example:
-    @code
-    /* The state structure of instance in the input capture mode */
-    etmr_state_t stateTimer;
-    #define eTMR_TIMER_INSTANCE        1UL
-    /* Timer mode configuration for Timer */
-    etmr_timer_param_t Timer_TimerConfig =
-    {
-        eTMR_MODE_UP_TIMER,              /* Counter mode */
-        0U,                             /* Initial counter value */
-        0x8000U                         /* Final counter value */
-    };
-
-    /* Global configuration of Timer*/
-    etmr_user_config_t  Timer_InitConfig =
-    {
-        {
-            false,                      /* Software trigger state */
-            false,                      /* Hardware trigger 1 state */
-            false,                      /* Hardware trigger 2 state */
-            false,                      /* Hardware trigger 3 state */
-            false,                      /* Maximum loading point state */
-            false,                      /* Min loading point state */
-            eTMR_SYSTEM_CLOCK,           /* Update mode for INVCTRL register */
-            eTMR_SYSTEM_CLOCK,           /* Update mode for SWOCTRL register */
-            eTMR_SYSTEM_CLOCK,           /* Update mode for OUTMASK register */
-            eTMR_SYSTEM_CLOCK,           /* Update mode for INIT register */
-            false,                      /* Auto clear trigger state for hardware trigger */
-            eTMR_UPDATE_NOW,             /* Select synchronization method */
-        },
-        eTMR_MODE_UP_TIMER,              /* Mode of operation for eTMR */
-        eTMR_CLOCK_DIVID_BY_2,           /* eTMR clock pre-scaler */
-        eTMR_CLOCK_SOURCE_SYSTEMCLK,     /* eTMR clock source */
-        eTMR_BDM_MODE_11,                /* eTMR debug mode */
-        false,                          /* Interrupt state */
-        false                           /* Initialization trigger */
-    };
-    eTMR_DRV_Init(eTMR_TIMER_INSTANCE,&Timer_InitConfig, &stateTimer);
-    eTMR_DRV_InitCounter(eTMR_TIMER_INSTANCE, &Timer_TimerConfig);
-    eTMR_DRV_CounterStart(eTMR_TIMER_INSTANCE);
-    @endcode
+| Function | Description |
+|---|---|
+| eTMR_DRV_InitCounter() | Configure counter mode, initial and final values. |
+| eTMR_DRV_CounterStart() | Start the free-running counter. |
+| eTMR_DRV_CounterStop() | Stop the counter. |
+| eTMR_DRV_CounterRead() | Read the current counter value. |
 
 */

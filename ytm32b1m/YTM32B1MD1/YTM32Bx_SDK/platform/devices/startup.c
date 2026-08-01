@@ -8,47 +8,41 @@
 /*!
  * @file startup.c
  * @version 1.4.1
+ * @brief Shared startup implementation for platform/devices.
  */
 
 #include "startup.h"
 
+/*!
+ * @addtogroup devices_startup
+ * @{
+ */
 
 /*******************************************************************************
  * Static Variables
  ******************************************************************************/
+
+/*!
+ * @brief Core-specific VTOR register addresses used for vector-table relocation.
+ */
 static volatile uint32_t * const s_vectors[NUMBER_OF_CORES] = FEATURE_INTERRUPT_INT_VECTORS;
 
 /*******************************************************************************
  * Code
  ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : init_data_bss
- * Description   : Make necessary initializations for RAM.
- * - Copy the vector table from ROM to RAM.
- * - Copy initialized data from ROM to RAM.
- * - Copy code that should reside in RAM from ROM
- * - Clear the zero-initialized data section.
- *
- * Tool Chains:
- *   __GNUC__           : GNU Compiler Collection
- *   __ghs__            : Green Hills ARM Compiler
- *   __ICCARM__         : IAR ARM Compiler
- *   __DCC__            : Wind River Diab Compiler
- *   __ARMCC_VERSION    : ARMC Compiler
- *
- * Implements    : init_data_bss_Activity
- *END**************************************************************************/
+/*!
+ * @brief Initialize RAM sections and relocate the interrupt vector table.
+ */
 void init_data_bss(void)
 {
     uint32_t n;
     uint8_t coreId;
-/* For ARMC we are using the library method of initializing DATA, Custom Section and
- * Code RAM sections so the below variables are not needed */
+/* Arm Compiler initializes DATA, custom sections, and RAM code through its
+ * runtime library, so these local pointers are only required for the other
+ * supported toolchains. */
 #if !defined(__ARMCC_VERSION)
-    /* Declare pointers for various data sections. These pointers
-     * are initialized using values pulled in from the linker file */
+    /* Pointers populated from linker-provided section boundaries. */
     uint32_t * data_ram;
     uint32_t * code_ram;
     uint32_t * bss_start;
@@ -60,7 +54,7 @@ void init_data_bss(void)
     const uint32_t * custom_rom, * custom_rom_end;
     const uint32_t * array_rom, * array_rom_end;
 #endif
-    /* Addresses for VECTOR_TABLE and VECTOR_RAM come from the linker file */
+    /* Linker-provided vector table symbols. */
 
 #if defined(__ARMCC_VERSION)
     #if (__ARMCC_VERSION >= 6000000)
@@ -74,34 +68,36 @@ void init_data_bss(void)
     extern uint32_t __VECTOR_TABLE[];
     extern uint32_t __VECTOR_RAM[];
 #endif
-    /* Get section information from linker files */
+    /* Load section-boundary information from the active toolchain. */
 #if defined(__ICCARM__)
-    /* Data */
+    /* IAR section handles. */
     data_ram        = __section_begin(".data");
     data_rom        = __section_begin(".data_init");
     data_rom_end    = __section_end(".data_init");
 
-    /* CODE RAM */
+    /* IAR RAM-resident code section. */
     #pragma section = "__CODE_ROM"
     #pragma section = "__CODE_RAM"
     code_ram        = __section_begin("__CODE_RAM");
     code_rom        = __section_begin("__CODE_ROM");
     code_rom_end    = __section_end("__CODE_ROM");
 
-    /* BSS */
+    /* IAR zero-initialized section. */
     bss_start       = __section_begin(".bss");
     bss_end         = __section_end(".bss");
 
+    /* IAR custom data section. */
     custom_ram      = __section_begin(".customSection");
     custom_rom      = __section_begin(".customSection_init");
     custom_rom_end  = __section_end(".customSection_init");
 
+    /* IAR array-initialization section. */
     array_ram      = __section_begin(".arraySection");
     array_rom      = __section_begin(".arraySection_init");
     array_rom_end  = __section_end(".arraySection_init");
 
 #elif defined (__ARMCC_VERSION)
-    /* VECTOR TABLE*/
+    /* Arm Compiler vector-table relocation symbols. */
     uint8_t * vector_table_size = (uint8_t *)__RAM_VECTOR_TABLE_SIZE;
     uint32_t * vector_rom    = (uint32_t *)__VECTOR_ROM;
     uint32_t * vector_ram    = (uint32_t *)__VECTOR_RAM;
@@ -124,23 +120,26 @@ void init_data_bss(void)
     extern uint32_t __ARRAY_ROM[];
     extern uint32_t __ARRAY_END[];
 
-    /* Data */
+    /* GNU/GHS/Diab section symbols. */
     data_ram        = (uint32_t *)__DATA_RAM;
     data_rom        = (uint32_t *)__DATA_ROM;
     data_rom_end    = (uint32_t *)__DATA_END;
-    /* CODE RAM */
+
+    /* GNU/GHS/Diab RAM-resident code section. */
     code_ram        = (uint32_t *)__CODE_RAM;
     code_rom        = (uint32_t *)__CODE_ROM;
     code_rom_end    = (uint32_t *)__CODE_END;
-    /* BSS */
+
+    /* GNU/GHS/Diab zero-initialized section. */
     bss_start       = (uint32_t *)__BSS_START;
     bss_end         = (uint32_t *)__BSS_END;
 
-	/* Custom section */
+    /* GNU/GHS/Diab custom data section. */
     custom_ram      = CUSTOMSECTION_SECTION_START;
     custom_rom      = (uint32_t *)__CUSTOM_ROM;
     custom_rom_end  = (uint32_t *)__CUSTOM_END;
 
+    /* GNU/GHS/Diab array-initialization section. */
     array_ram   =   (uint32_t *)__ARRAY_RAM;
     array_rom   =   (uint32_t *)__ARRAY_ROM;
     array_rom_end = (uint32_t *)__ARRAY_END;
@@ -148,7 +147,7 @@ void init_data_bss(void)
 #endif
 
 #if !defined(__ARMCC_VERSION)
-    /* Copy initialized data from ROM to RAM */
+    /* Copy initialized data from ROM into its RAM destination. */
     while (data_rom_end != data_rom)
     {
         *data_ram = *data_rom;
@@ -156,7 +155,7 @@ void init_data_bss(void)
         data_rom++;
     }
 
-    /* Copy functions from ROM to RAM */
+    /* Copy RAM-resident code from ROM into executable RAM. */
     while (code_rom_end != code_rom)
     {
         *code_ram = *code_rom;
@@ -164,14 +163,14 @@ void init_data_bss(void)
         code_rom++;
     }
 
-    /* Clear the zero-initialized data section */
+    /* Clear the zero-initialized section. */
     while(bss_end > bss_start)
     {
         *bss_start = 0;
         bss_start++;
     }
 
-    /* Copy custom section rom to ram */
+    /* Copy the custom data section from ROM into RAM. */
     while(custom_rom_end != custom_rom)
     {
         *custom_ram = *custom_rom;
@@ -179,7 +178,7 @@ void init_data_bss(void)
         custom_ram++;
     }
 
-    /* Copy array rom to ram */
+    /* Copy the array-initialization section from ROM into RAM. */
     while(array_rom_end != array_rom)
     {
         *array_ram = *array_rom;
@@ -189,36 +188,32 @@ void init_data_bss(void)
 #endif
     coreId = (uint8_t)GET_CORE_ID();
 #if defined (__ARMCC_VERSION)
-        /* Copy the vector table from ROM to RAM */
-                /* Workaround */
+        /* Always copy the vector table to the configured RAM destination. */
         for (n = 0; n < (((uint32_t)(vector_table_size))/sizeof(uint32_t)); n++)
         {
             vector_ram[n] = vector_rom[n];
         }
-        /* Point the VTOR to the position of vector table */
+        /* Point VTOR at the relocated vector table. */
          *s_vectors[coreId] = (uint32_t) __VECTOR_RAM;
 #else
-    /* Check if VECTOR_TABLE copy is needed */
+    /* Copy the vector table only when ROM and RAM locations differ. */
     if ((uint32_t)__VECTOR_RAM != (uint32_t)__VECTOR_TABLE)
     {
-        /* Copy the vector table from ROM to RAM */
+        /* Copy the vector table from ROM into RAM. */
         for (n = 0; n < (((uint32_t)__RAM_VECTOR_TABLE_SIZE)/sizeof(uint32_t)); n++)
         {
             __VECTOR_RAM[n] = __VECTOR_TABLE[n];
         }
-        /* Point the VTOR to the position of vector table */
+        /* Point VTOR at the relocated vector table. */
         *s_vectors[coreId] = (uint32_t)__VECTOR_RAM;
     }
     else
     {
-        /* Point the VTOR to the position of vector table */
+        /* Keep VTOR pointed at the original vector table. */
         *s_vectors[coreId] = (uint32_t)__VECTOR_TABLE;
     }
 #endif
 
 }
 
-/*******************************************************************************
- * EOF
- ******************************************************************************/
-
+/*! @} */ /* End of devices_startup */

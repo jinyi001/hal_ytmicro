@@ -8,20 +8,25 @@
 /*!
  * @file etmr_qd_driver.c
  * @version 1.4.1
+ *
+ * @brief eTMR Quadrature Decoder Driver — implementation.
+ *
+ * This file implements the quadrature decoder functions declared in
+ * etmr_qd_driver.h, providing phase-encode and count-and-direction
+ * decoding with configurable input filters and phase polarities.
  */
 
 #include "etmr_qd_driver.h"
 #include "etmr_hw_access.h"
 
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Configure and start quadrature decode mode.
  *
- * Function Name : eTMR_DRV_QuadDecodeStart
- * Description   : Configures the parameters needed and activates quadrature
- *                 decode mode.
- *
- * Implements    : eTMR_DRV_QuadDecodeStart_Activity
- *END**************************************************************************/
+ * @param[in] instance  Instance number of the eTMR module.
+ * @param[in] config    Pointer to the quadrature decoder configuration.
+ * @return Operation status.
+ */
 status_t eTMR_DRV_QuadDecodeStart(uint32_t instance,
                                   const etmr_qd_config_t *config)
 {
@@ -65,13 +70,12 @@ status_t eTMR_DRV_QuadDecodeStart(uint32_t instance,
     return retStatus;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief De-activate quadrature decode mode.
  *
- * Function Name : eTMR_DRV_QuadDecodeStop
- * Description   : De-activates quadrature decoder mode.
- *
- * Implements    : eTMR_DRV_QuadDecodeStop_Activity
- *END**************************************************************************/
+ * @param[in] instance  Instance number of the eTMR module.
+ * @return Operation status.
+ */
 status_t eTMR_DRV_QuadDecodeStop(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -83,14 +87,12 @@ status_t eTMR_DRV_QuadDecodeStop(uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the current quadrature decoder state.
  *
- * Function Name : eTMR_DRV_GetQuadDecodeState
- * Description   : Return the current quadrature decoder state
- *                 (counter value, overflow flag and overflow direction)
- *
- * Implements    : eTMR_DRV_GetQaudDecodeState_Activity
- *END**************************************************************************/
+ * @param[in] instance  Instance number of the eTMR module.
+ * @return The current quadrature decoder state.
+ */
 etmr_qd_state_t eTMR_DRV_GetQuadDecodeState(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -117,14 +119,11 @@ etmr_qd_state_t eTMR_DRV_GetQuadDecodeState(uint32_t instance)
     return state;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Populate a quadrature decoder configuration with default values.
  *
- * Function Name : eTMR_QD_DRV_GetDefaultConfig
- * Description   : This function will get the default configuration values
- *                 in the structure which is used as a common use-case.
- *
- * Implements    : eTMR_QD_DRV_GetDefaultConfig_Activity
- *END**************************************************************************/
+ * @param[out] config  Pointer to the structure to be filled with defaults.
+ */
 void eTMR_DRV_GetQuadDecodeDefaultConfig(etmr_qd_config_t * const config)
 {
     DEV_ASSERT(config != NULL);

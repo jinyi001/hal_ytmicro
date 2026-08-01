@@ -7,7 +7,7 @@
 
 /*!
  * @file spi_master_driver.c
- * @version 1.4.1
+ * @brief SPI master mode driver implementation.
  */
 
 /*!
@@ -35,21 +35,21 @@
 /*******************************************************************************
  * Prototypes
  ******************************************************************************/
-/* This function initialize a new SPI transfer */
+/*! @brief Configure and start a new SPI master transfer (internal). */
 static status_t SPI_DRV_MasterStartTransfer(uint32_t instance,
                                             const uint8_t *sendBuffer,
                                             uint8_t *receiveBuffer,
                                             uint16_t transferByteCount);
 
-/* This function cleans up state structure and hardware after a transfer is complete .*/
+/*! @brief Clean up state and hardware after transfer completion (internal). */
 static void SPI_DRV_MasterCompleteTransfer(uint32_t instance);
 
 #if defined(FEATURE_SPI_HAS_DMA_ENABLE) && (FEATURE_SPI_HAS_DMA_ENABLE > 0U)
 
-/* Callback for DMA transfer done.*/
+/*! @brief DMA TX completion callback (internal). */
 static void SPI_DRV_MasterCompleteDMATransfer(void *parameter, dma_chn_status_t status);
 
-/* Callback for RX DMA channel*/
+/*! @brief DMA RX completion callback (internal). */
 static void SPI_DRV_MasterCompleteRX(void *parameter, dma_chn_status_t status);
 
 #endif /* FEATURE_SPI_HAS_DMA_ENABLE */
@@ -58,15 +58,9 @@ static void SPI_DRV_MasterCompleteRX(void *parameter, dma_chn_status_t status);
  * Code
  ******************************************************************************/
 
-/*FUNCTION**********************************************************************
-*
-* Function Name : SPI_DRV_MasterGetDefaultConfig
-* Description   : Initializes a structured provided by user with the configuration
-* of an interrupt based SPI transfer. Source clock for SPI is configured to
-* 8MHz. If the applications uses other frequency is necessary to update spiSrcClk field.
-* Implements : SPI_DRV_MasterGetDefaultConfig_Activity
-*
-*END**************************************************************************/
+/*!
+ * @brief Fill the master configuration structure with default values.
+ */
 void SPI_DRV_MasterGetDefaultConfig(spi_master_config_t *spiConfig)
 {
     DEV_ASSERT(spiConfig != NULL);
@@ -88,21 +82,9 @@ void SPI_DRV_MasterGetDefaultConfig(spi_master_config_t *spiConfig)
     spiConfig->callbackParam = NULL;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_DRV_MasterInit
- * Description   : Initializes a SPI instance for interrupt driven master mode operation.
- *
- * This function uses an interrupt-driven method for transferring data.
- * In this function, the term "spiConfig" is used to indicate the SPI device for which the SPI
- * master is communicating.
- * This function initializes the run-time state structure to track the ongoing
- * transfers, un-gates the clock to the SPI module, resets the SPI module,
- * configures the IRQ state structure, enables the module-level interrupt to the core, and
- * enables the SPI module.
- * Implements : SPI_DRV_MasterInit_Activity
- *
- *END**************************************************************************/
+/*!
+ * @brief Initialize the SPI instance in master mode.
+ */
 status_t SPI_DRV_MasterInit(uint32_t instance, spi_state_t *spiState, const spi_master_config_t *spiConfig)
 {
     DEV_ASSERT(instance < SPI_INSTANCE_COUNT);
@@ -150,17 +132,9 @@ status_t SPI_DRV_MasterInit(uint32_t instance, spi_state_t *spiState, const spi_
     return errorCode;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_DRV_MasterDeinit
- * Description   : Shuts down a SPI instance.
- *
- * This function resets the SPI peripheral, gates its clock, and disables the interrupt to
- * the core.  It first checks to see if a transfer is in progress and if so returns an error
- * status.
- * Implements : SPI_DRV_MasterDeinit_Activity
- *
- *END**************************************************************************/
+/*!
+ * @brief De-initialize the SPI master instance.
+ */
 status_t SPI_DRV_MasterDeinit(uint32_t instance)
 {
     DEV_ASSERT(instance < SPI_INSTANCE_COUNT);
@@ -186,28 +160,9 @@ status_t SPI_DRV_MasterDeinit(uint32_t instance)
     return errorCode;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_DRV_MasterSetDelay
- * Description   : Configures the SPI master mode bus timing delay options.
- *
- * This function involves the SPI module's delay options to
- * "fine tune" some of the signal timings and match the timing needs of a slower peripheral device.
- * This is an optional function that can be called after the SPI module has been initialized for
- * master mode. The timings are adjusted in terms of cycles of the baud rate clock.
- * The bus timing delays that can be adjusted are listed below:
- *
- * SCK to PCS Delay: Adjustable delay option between the last edge of SCK to the de-assertion
- *                   of the PCS signal.
- *
- * PCS to SCK Delay: Adjustable delay option between the assertion of the PCS signal to the
- *                   first SCK edge.
- *
- * Delay between Transfers: Adjustable delay option between the de-assertion of the PCS signal for
- *                          a frame to the assertion of the PCS signal for the next frame.
- * Implements : SPI_DRV_MasterSetDelay_Activity
- *
- *END**************************************************************************/
+/*!
+ * @brief Configure SPI master timing delays.
+ */
 status_t
 SPI_DRV_MasterSetDelay(uint32_t instance, uint32_t delayBetwenTransfers, uint32_t delaySCKtoPCS, uint32_t delayPCStoSCK)
 {
@@ -231,25 +186,9 @@ SPI_DRV_MasterSetDelay(uint32_t instance, uint32_t delayBetwenTransfers, uint32_
     return errorCode;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_DRV_MasterConfigureBus
- * Description   : Configures the SPI port physical parameters to access a device on the bus when
- *                 the LSPI instance is configured for interrupt operation.
- *
- * In this function, the term "spiConfig" is used to indicate the SPI device for which the SPI
- * master is communicating. This is an optional function as the spiConfig parameters are
- * normally configured in the initialization function or the transfer functions, where these various
- * functions would call the configure bus function.
- * The user can pass in a different spiConfig structure to the transfer function which contains
- * the parameters for the SPI bus to allow for communication to a different SPI device
- * (the transfer function then calls this function). However, the user also has the option to call
- * this function directly especially to get the calculated baud rate, at which point they may pass
- * in NULL for the spiConfig structure in the transfer function (assuming they have called this
- * configure bus function first).
- * Implements : SPI_DRV_MasterConfigureBus_Activity
- *
- *END**************************************************************************/
+/*!
+ * @brief Reconfigure the SPI bus parameters at runtime.
+ */
 status_t
 SPI_DRV_MasterConfigureBus(uint32_t instance, const spi_master_config_t *spiConfig, uint32_t *calculatedBaudRate)
 {
@@ -350,23 +289,9 @@ SPI_DRV_MasterConfigureBus(uint32_t instance, const spi_master_config_t *spiConf
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_DRV_MasterTransferPolling
- * Description   : Performs an interrupt driven blocking SPI master mode transfer.
- *
- * This function simultaneously sends and receives data on the SPI bus, as SPI is naturally
- * a full-duplex bus. The function does not return until the transfer is complete.
- * This function allows the user to optionally pass in a SPI configuration structure which
- * allows the user to change the SPI bus attributes in conjunction with initiating a SPI transfer.
- * The difference between passing in the SPI configuration structure here as opposed to the
- * configure bus function is that the configure bus function returns the calculated baud rate where
- * this function does not. The user can also call the configure bus function prior to the transfer
- * in which case the user would simply pass in a NULL to the transfer function's device structure
- * parameter.
- * Implements : SPI_DRV_MasterTransferPolling_Activity
- *
- *END**************************************************************************/
+/*!
+ * @brief Perform a polling (busy-wait) full-duplex master transfer.
+ */
 status_t SPI_DRV_MasterTransferPolling(uint32_t instance,
                                        const uint8_t *sendBuffer,
                                        uint8_t *receiveBuffer,
@@ -468,23 +393,9 @@ status_t SPI_DRV_MasterTransferPolling(uint32_t instance,
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_DRV_MasterTransferBlocking
- * Description   : Performs an interrupt driven blocking SPI master mode transfer.
- *
- * This function simultaneously sends and receives data on the SPI bus, as SPI is naturally
- * a full-duplex bus. The function does not return until the transfer is complete.
- * This function allows the user to optionally pass in a SPI configuration structure which
- * allows the user to change the SPI bus attributes in conjunction with initiating a SPI transfer.
- * The difference between passing in the SPI configuration structure here as opposed to the
- * configure bus function is that the configure bus function returns the calculated baud rate where
- * this function does not. The user can also call the configure bus function prior to the transfer
- * in which case the user would simply pass in a NULL to the transfer function's device structure
- * parameter.
- * Implements : SPI_DRV_MasterTransferBlocking_Activity
- *
- *END**************************************************************************/
+/*!
+ * @brief Perform an interrupt-driven blocking full-duplex master transfer.
+ */
 status_t SPI_DRV_MasterTransferBlocking(uint32_t instance,
                                         const uint8_t *sendBuffer,
                                         uint8_t *receiveBuffer,
@@ -554,25 +465,9 @@ status_t SPI_DRV_MasterTransferBlocking(uint32_t instance,
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_DRV_MasterTransfer
- * Description   : Performs an interrupt driven non-blocking SPI master mode transfer.
- *
- * This function simultaneously sends and receives data on the SPI bus, as SPI is naturally
- * a full-duplex bus. The function returns immediately after initiating the transfer. The user
- * needs to check whether the transfer is complete using the SPI_DRV_MasterGetTransferStatus
- * function.
- * This function allows the user to optionally pass in a SPI configuration structure which
- * allows the user to change the SPI bus attributes in conjunction with initiating a SPI transfer.
- * The difference between passing in the SPI configuration structure here as opposed to the
- * configure bus function is that the configure bus function returns the calculated baud rate where
- * this function does not. The user can also call the configure bus function prior to the transfer
- * in which case the user would simply pass in a NULL to the transfer function's device structure
- * parameter.
- * Implements : SPI_DRV_MasterTransfer_Activity
- *
- *END**************************************************************************/
+/*!
+ * @brief Start a non-blocking full-duplex master transfer.
+ */
 status_t
 SPI_DRV_MasterTransfer(uint32_t instance, const uint8_t *sendBuffer, uint8_t *receiveBuffer, uint16_t transferByteCount)
 {
@@ -593,18 +488,9 @@ SPI_DRV_MasterTransfer(uint32_t instance, const uint8_t *sendBuffer, uint8_t *re
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_DRV_MasterGetTransferStatus
- * Description   : Returns whether the previous interrupt driven transfer is completed.
- *
- * When performing an a-sync (non-blocking) transfer, the user can call this function to ascertain
- * the state of the current transfer: in progress (or busy) or complete (success).
- * In addition, if the transfer is still in progress, the user can get the number of words that
- * should be receive.
- * Implements : SPI_DRV_MasterGetTransferStatus_Activity
- *
- *END**************************************************************************/
+/*!
+ * @brief Query the status of an ongoing non-blocking master transfer.
+ */
 status_t SPI_DRV_MasterGetTransferStatus(uint32_t instance, uint32_t *bytesRemained)
 {
     DEV_ASSERT(instance < SPI_INSTANCE_COUNT);
@@ -629,15 +515,9 @@ status_t SPI_DRV_MasterGetTransferStatus(uint32_t instance, uint32_t *bytesRemai
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_DRV_MasterAbortTransfer
- * Description   : Terminates an interrupt driven asynchronous transfer early.
- *
- * During an a-sync (non-blocking) transfer, the user has the option to terminate the transfer early
- * if the transfer is still in progress.
- * Implements : SPI_DRV_MasterAbortTransfer_Activity
- *END**************************************************************************/
+/*!
+ * @brief Abort an in-progress non-blocking master transfer.
+ */
 status_t SPI_DRV_MasterAbortTransfer(uint32_t instance)
 {
     DEV_ASSERT(instance < SPI_INSTANCE_COUNT);
@@ -653,15 +533,9 @@ status_t SPI_DRV_MasterAbortTransfer(uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_DRV_SetPcs
- * Description   : Select the chip to communicate with.
- *
- *
- * The main purpose of this function is to set the PCS and the appropriate polarity.
- * Implements : SPI_DRV_SetPcs_Activity
- *END**************************************************************************/
+/*!
+ * @brief Select the active chip select signal and its polarity.
+ */
 status_t SPI_DRV_SetPcs(uint32_t instance, spi_which_pcs_t whichPcs, spi_signal_polarity_t polarity)
 {
     DEV_ASSERT(instance < SPI_INSTANCE_COUNT);
@@ -691,15 +565,9 @@ status_t SPI_DRV_SetPcs(uint32_t instance, spi_which_pcs_t whichPcs, spi_signal_
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : SPI_DRV_MasterStartTransfer
- * Description   : Configure a non-blocking transfer.
- *
- * The number of transferByteCount must be divided by number of bytes/frame.
- * The sendBuffer must be not NULL, but receiveBuffer can be NULL.
- *
- *END**************************************************************************/
+/*!
+ * @brief Configure and start a new SPI master transfer (internal).
+ */
 static status_t SPI_DRV_MasterStartTransfer(uint32_t instance,
                                             const uint8_t *sendBuffer,
                                             uint8_t *receiveBuffer,
@@ -708,7 +576,7 @@ static status_t SPI_DRV_MasterStartTransfer(uint32_t instance,
     DEV_ASSERT(instance < SPI_INSTANCE_COUNT);
     DEV_ASSERT(g_spiStatePtr[instance] != NULL);
     status_t status = STATUS_SUCCESS;
-    /* Instantiate local variable of type dspi_master_state_t and point to global state */
+    /* Instantiate local variable of type spi_state_t and point to global state */
     spi_state_t *spiState = g_spiStatePtr[instance];
     SPI_Type *base = g_spiBase[instance];
 #if defined(FEATURE_SPI_HAS_DMA_ENABLE) && (FEATURE_SPI_HAS_DMA_ENABLE > 0U)
@@ -902,13 +770,11 @@ static status_t SPI_DRV_MasterStartTransfer(uint32_t instance,
 }
 
 /*!
- * @brief Finish up a transfer.
- * Cleans up after a transfer is complete. Interrupts are disabled, and the SPI module
- * is disabled. This is not a public API as it is called from other driver functions.
+ * @brief Clean up state and hardware after transfer completion (internal).
  */
 static void SPI_DRV_MasterCompleteTransfer(uint32_t instance)
 {
-    /* instantiate local variable of type dspi_master_state_t and point to global state */
+    /* Instantiate local variable of type spi_state_t and point to global state */
     spi_state_t *spiState = g_spiStatePtr[instance];
     SPI_Type *base = g_spiBase[instance];
     /* The transfer is complete.*/
@@ -945,8 +811,7 @@ static void SPI_DRV_MasterCompleteTransfer(uint32_t instance)
 #if defined(FEATURE_SPI_HAS_DMA_ENABLE) && (FEATURE_SPI_HAS_DMA_ENABLE > 0U)
 
 /*!
- * @brief Finish up a transfer DMA.
- * The main purpose of this function is to create a function compatible with DMA callback type
+ * @brief DMA TX completion callback (internal).
  */
 static void SPI_DRV_MasterCompleteDMATransfer(void *parameter, dma_chn_status_t status)
 {
@@ -978,8 +843,7 @@ static void SPI_DRV_MasterCompleteDMATransfer(void *parameter, dma_chn_status_t 
 #if defined(FEATURE_SPI_HAS_DMA_ENABLE) && (FEATURE_SPI_HAS_DMA_ENABLE > 0U)
 
 /*!
- * @brief Check if errors are detected on RX channel
- * The main purpose of this function is to check DMA errors on rx channel
+ * @brief DMA RX completion callback (internal).
  */
 static void SPI_DRV_MasterCompleteRX(void *parameter, dma_chn_status_t status)
 {
@@ -1004,12 +868,10 @@ static void SPI_DRV_MasterCompleteRX(void *parameter, dma_chn_status_t status)
 
 /*!
  * @brief Interrupt handler for SPI master mode.
- * This handler uses the buffers stored in the spi_state_t structs to transfer data.
- * This is not a public API as it is called whenever an interrupt occurs.
  */
 void SPI_DRV_MasterIRQHandler(uint32_t instance)
 {
-    /* Instantiate local variable of type dspi_master_state_t and point to global state */
+    /* Instantiate local variable of type spi_state_t and point to global state */
     spi_state_t *spiState = g_spiStatePtr[instance];
     SPI_Type *base = g_spiBase[instance];
      /* Check if TX mask and continuous mode are enabled simultaneously. */

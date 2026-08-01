@@ -56,7 +56,7 @@
 MEMORY
 {
 {{#each @root.level1}}
-    {{this.name}} : ORIGIN = {{this.startAddress}}, LENGTH = {{this.size}}
+    MEMORY_{{this.name}} : ORIGIN = {{this.startAddress}}, LENGTH = {{this.size}}
 {{/each}}
 }
 {{setVar2 'memoryUsed' (createObject)~}}
@@ -66,7 +66,7 @@ SECTIONS
 {{#each @root.sectionList}}
 {{setVar2 'i' (get this @root.sections)~}}
 {{#if @root.i.needCopy}}
-    {{@root.i.name}}_rom {{#if @root.i.align}}ALIGN({{@root.i.align}}){{/if}} ROM_NOCOPY({{@root.i.name}}) :> {{@root.i.parent.name}}
+    {{@root.i.name}}_rom {{#if @root.i.align}}ALIGN({{@root.i.align}}){{/if}} ROM_NOCOPY({{@root.i.name}}) :> MEMORY_{{@root.i.parent.name}}
     {{@root.i.name}}_rom_start = ADDR({{@root.i.name}}_rom);
     {{@root.i.name}}_rom_end = ENDADDR({{@root.i.name}}_rom);
 {{else}}
@@ -118,13 +118,13 @@ SECTIONS
 {{#if @root.i.copyFrom}}
         {{@root.i.name}}_ram_end = .;
 {{/if}}
-    } > {{@root.i.parent.name}}
+    } > MEMORY_{{@root.i.parent.name}}
 {{/if}}
    
 {{/each}}
     {{#each @root.level1}}
-    {{this.name}}_memory_start = ADDR({{this.name}});
-    {{this.name}}_memory_end = ADDR({{this.name}}) + SIZEOF({{this.name}});
-    {{this.name}}_memory_size = SIZEOF({{this.name}});
+    {{this.name}}_memory_start = ADDR(MEMORY_{{this.name}});
+    {{this.name}}_memory_end = ADDR(MEMORY_{{this.name}}) + SIZEOF(MEMORY_{{this.name}});
+    {{this.name}}_memory_size = SIZEOF(MEMORY_{{this.name}});
 {{/each}}
 }

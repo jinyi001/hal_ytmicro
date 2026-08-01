@@ -1,14 +1,305 @@
 /*!
- @defgroup ewdg External Watchdog Monitor (EWDG)
- @brief The YTMicro SDK provides the Peripheral Drivers for the External Watchdog Monitor (EWDG) module.
+@defgroup ewdg
+@ingroup mod_system External Watchdog Monitor (EWDG)
+@brief Independent external safety-output watchdog for the YTMicro SDK.
 
- For safety, a redundant watchdog system, External Watchdog Monitor (EWDG), is
- designed to monitor external circuits, as well as the MCU software flow. This provides a
- back-up mechanism to the internal watchdog that resets the MCU's CPU and peripherals.
+@details
+The EWDG module provides a safety-oriented watchdog that monitors software
+refresh activity and can also observe an external digital input. Unlike the
+internal watchdog, the EWDG does not reset the CPU directly. Instead, it drives
+an independent `EWDG_out` signal so external hardware can reset the board or
+force the system into a safe state.
 
- The EWDG differs from the internal watchdog in that it does not reset the MCU's CPU
- and peripherals. The EWDG if allowed to time-out, provides an independent ``EWDG_out``
- pin that when asserted resets or places an external circuit into a safe mode. The CPU
- resets the EWDG counter that is logically ANDed with an external digital input pin. This
- pin allows an external circuit to influence the reset_out signal.
+The SDK exposes the EWDG through a two-layer design:
+- The **driver layer** (`ewdg_driver.h/.c`) provides instance-based startup,
+  refresh, reset-like restore, input-pin query, and interrupt-mask APIs.
+- The **hardware access layer** (`ewdg_hw_access.h`) provides inline helpers
+  for refresh-key writes, register programming, and reset-value restoration.
+
+@section ewdg_features Key Features
+- Drives an independent external safety-output signal instead of directly
+  resetting the MCU core.
+- Supports windowed refresh with programmable `compareLow` and `compareHigh`
+  boundaries.
+- Supports optional watchdog interrupt generation before software takes
+  additional action.
+- Supports external `EWDG_in` participation with selectable active-high or
+  active-low assertion behavior.
+- Supports programmable clock prescaler and, on supported devices, selectable
+  watchdog clock source.
+- Uses a guarded two-key refresh sequence (`0xA8`, `0x6C`) to reduce the chance
+  of accidental servicing.
+- Provides instance-based public APIs through `EWDG_DRV_*`.
+
+@section ewdg_modes Supported Modes
+
+| Mode / Safety Path | Key Setting or API Path | Description |
+|--------------------|-------------------------|-------------|
+| Basic timeout monitoring | EWDG_DRV_Init() + EWDG_DRV_Refresh() | Software must refresh the watchdog inside the programmed service window. |
+| Windowed refresh | `compareLow` / `compareHigh` | Refresh requests are accepted only inside the valid counter range. |
+| External-input-assisted assertion | `assertLogic != EWDG_IN_ASSERT_DISABLED` | The external `EWDG_in` pin participates in the safety decision. |
+| Interrupt-assisted handling | `interruptEnable = true` | Hardware can signal the shared watchdog interrupt so software can log or enter a safe state. |
+| Optional clock-source selection | `clockSource` (if present) | Selects SIRC or the device-specific alternate source before enabling EWDG. |
+| Reset-like restore | EWDG_DRV_DeInit() | Restores the register block to reset-like values and refreshes the service counter. |
+
+@section ewdg_arch Module Architecture
+
+The EWDG module is organized in a two-layer architecture:
+
+@verbatim
++-----------------------------------------------+
+|               Application Code                |
+|          (calls EWDG_DRV_* functions)         |
++-----------------------------------------------+
+|         EWDG Driver Layer (ewdg_driver.h/c)   |
+|  - Instance-based startup and refresh APIs    |
+|  - Window validation and input-mode query     |
+|  - Resolves base address through EWDG_BASE_PTRS |
++-----------------------------------------------+
+|       EWDG HW Access Layer (ewdg_hw_access.h) |
+|  - Refresh-key write helper                   |
+|  - Raw register access helpers                |
+|  - Reset-like restore helper                  |
++-----------------------------------------------+
+|            EWDG Peripheral Hardware           |
+|        (CTRL, CLK_CTRL, CMPL, CMPH, SERV)     |
++-----------------------------------------------+
+@endverbatim
+
+@subsection ewdg_arch_driver Driver Layer (ewdg_driver.h)
+Application code should normally use the `EWDG_DRV_*` functions. The driver
+accepts a zero-based instance index, validates the requested service window,
+programs the startup registers, and protects refresh and restore sequences from
+interrupt latency.
+
+@subsection ewdg_arch_hw HW Access Layer (ewdg_hw_access.h)
+This internal layer provides direct register helpers for:
+- **Service Sequence** - EWDG_Refresh()
+- **Module State & Control** - EWDG_IsEnabled(), EWDG_SetControl(), EWDG_GetControl()
+- **Window Configuration** - EWDG_SetCompareLow(), EWDG_SetCompareHigh()
+- **Clock Configuration** - EWDG_SetPrescaler(), EWDG_SetClockSource()
+- **Reset & Restore** - EWDG_DeInit()
+
+@section ewdg_config Configuration Parameters
+
+@subsection ewdg_config_struct ewdg_init_config_t Fields
+| Field | Type | Description | Default From EWDG_DRV_GetDefaultConfig() |
+|-------|------|-------------|------------------------------------------|
+| clockSource | ewdg_clock_source_t | Watchdog clock source when the field is available on the device. | EWDG_SIRC_CLOCK |
+| assertLogic | ewdg_in_assert_logic_t | External input-pin assert behavior. | EWDG_IN_ASSERT_ON_LOGIC_ZERO |
+| interruptEnable | bool | Enable EWDG interrupt generation. | false |
+| prescaler | uint8_t | Prescaler field written to `CLK_CTRL`. | 255U |
+| compareLow | uint16_t | Earliest counter value at which a refresh is accepted. | FEATURE_EWDG_CMPL_MIN_VALUE |
+| compareHigh | uint16_t | Latest counter value at which a refresh is accepted. | FEATURE_EWDG_CMPH_MAX_VALUE |
+
+@subsection ewdg_config_assert EWDG Input Assert Modes
+| Value | Description |
+|-------|-------------|
+| EWDG_IN_ASSERT_DISABLED | Disable participation of the external input pin. |
+| EWDG_IN_ASSERT_ON_LOGIC_ZERO | Treat a logic-low level on `EWDG_in` as an assert request. |
+| EWDG_IN_ASSERT_ON_LOGIC_ONE | Treat a logic-high level on `EWDG_in` as an assert request. |
+
+@subsection ewdg_config_features Device Feature Macros
+| Macro / Definition | Description |
+|--------------------|-------------|
+| EWDG_INSTANCE_COUNT | Number of EWDG instances implemented by the device. |
+| EWDG_BASE_PTRS | Base-address table used by the driver layer. |
+| FEATURE_EWDG_KEY_FIRST_BYTE | First refresh key byte written to `SERV`. |
+| FEATURE_EWDG_KEY_SECOND_BYTE | Second refresh key byte written to `SERV`. |
+| FEATURE_EWDG_CMPL_MIN_VALUE | Minimum supported compare-low reset value. |
+| FEATURE_EWDG_CMPH_MAX_VALUE | Maximum supported compare-high value accepted by the driver. |
+| FEATURE_EWDG_SUPPORT_LPO_CLOCK | Indicates whether `EWDG_LPO_CLOCK` is available. |
+| EWDG_CLK_CTRL_CLKSEL_MASK | Indicates that the device exposes the clock-source selector field. |
+
+@section ewdg_usage Usage Patterns
+
+@subsection ewdg_usage_basic Pattern 1: Initialize and Periodically Refresh the Watchdog
+Initialize the EWDG with default settings and service it inside the main loop.
+
+@code{.c}
+#define INST_EWDG (0U)
+
+ewdg_init_config_t ewdgConfig;
+status_t status;
+
+/* Enable the EWDG clock and configure EWDG pins before this call. */
+EWDG_DRV_GetDefaultConfig(&ewdgConfig);
+status = EWDG_DRV_Init(INST_EWDG, &ewdgConfig);
+
+if (status == STATUS_SUCCESS)
+{
+    for (;;)
+    {
+        /* Application work goes here. */
+        EWDG_DRV_Refresh(INST_EWDG);
+    }
+}
+@endcode
+
+@subsection ewdg_usage_window Pattern 2: Program a Custom Refresh Window and External Input Mode
+Use a narrower refresh window and let the external input assert on logic high.
+
+@code{.c}
+#define INST_EWDG (0U)
+
+ewdg_init_config_t ewdgConfig;
+
+EWDG_DRV_GetDefaultConfig(&ewdgConfig);
+#if defined(EWDG_CLK_CTRL_CLKSEL_MASK)
+ewdgConfig.clockSource = EWDG_SIRC_CLOCK;
+#endif
+ewdgConfig.assertLogic = EWDG_IN_ASSERT_ON_LOGIC_ONE;
+ewdgConfig.interruptEnable = true;
+ewdgConfig.prescaler = 128U;
+ewdgConfig.compareLow = 16U;
+ewdgConfig.compareHigh = 254U;
+
+if (EWDG_DRV_Init(INST_EWDG, &ewdgConfig) == STATUS_SUCCESS)
+{
+    for (;;)
+    {
+        /* Refresh only after the counter enters the valid service window. */
+        EWDG_DRV_Refresh(INST_EWDG);
+    }
+}
+@endcode
+
+@subsection ewdg_usage_query Pattern 3: Query Input Behavior and Disable the Interrupt
+Read back the configured input behavior and mask the interrupt if the
+application switches to a polling-only safety strategy.
+
+@code{.c}
+#define INST_EWDG (0U)
+
+ewdg_in_assert_logic_t inputMode;
+
+inputMode = EWDG_DRV_GetInputPinAssertLogic(INST_EWDG);
+if (inputMode != EWDG_IN_ASSERT_DISABLED)
+{
+    EWDG_DRV_DisableInterrupt(INST_EWDG);
+}
+@endcode
+
+@subsection ewdg_usage_restore Pattern 4: Restore Reset-Like Register Values
+Return the register block to its reset-like state during controlled shutdown or
+test cleanup.
+
+@code{.c}
+#define INST_EWDG (0U)
+
+EWDG_DRV_DeInit(INST_EWDG);
+@endcode
+
+@section ewdg_api API Quick Reference
+
+@subsection ewdg_api_driver Driver Layer
+
+@subsubsection ewdg_api_driver_init Initialization & De-initialization
+| Function | Description |
+|----------|-------------|
+| EWDG_DRV_Init() | Validate the startup window, program the registers, and enable EWDG. |
+| EWDG_DRV_GetDefaultConfig() | Populate an `ewdg_init_config_t` structure with default startup values. |
+| EWDG_DRV_DeInit() | Restore the register block to reset-like values. |
+
+@subsubsection ewdg_api_driver_service Watchdog Service
+| Function | Description |
+|----------|-------------|
+| EWDG_DRV_Refresh() | Issue the two-key refresh sequence while interrupts are masked. |
+
+@subsubsection ewdg_api_driver_ctrl Status & Interrupt Control
+| Function | Description |
+|----------|-------------|
+| EWDG_DRV_GetInputPinAssertLogic() | Decode the configured external input-pin behavior. |
+| EWDG_DRV_DisableInterrupt() | Clear the interrupt-enable bit in the control register image. |
+
+@subsection ewdg_api_hw HW Access Layer
+
+@subsubsection ewdg_api_hw_service Service Sequence
+| Function | Description |
+|----------|-------------|
+| EWDG_Refresh() | Write the two watchdog refresh key bytes directly to `SERV`. |
+
+@subsubsection ewdg_api_hw_state Module State & Control
+| Function | Description |
+|----------|-------------|
+| EWDG_IsEnabled() | Read the watchdog enable bit from `CTRL`. |
+| EWDG_SetControl() | Write a raw control-register image. |
+| EWDG_GetControl() | Read the raw control-register image. |
+
+@subsubsection ewdg_api_hw_window Window Configuration
+| Function | Description |
+|----------|-------------|
+| EWDG_SetCompareLow() | Program the lower refresh-window boundary. |
+| EWDG_SetCompareHigh() | Program the upper refresh-window boundary. |
+
+@subsubsection ewdg_api_hw_clock Clock Configuration
+| Function | Description |
+|----------|-------------|
+| EWDG_SetPrescaler() | Program the watchdog clock prescaler field. |
+| EWDG_SetClockSource() | Program the optional clock-source selector. |
+
+@subsubsection ewdg_api_hw_restore Reset & Restore
+| Function | Description |
+|----------|-------------|
+| EWDG_DeInit() | Restore the register block to reset-like values and refresh the counter. |
+
+@section ewdg_notes Important Notes
+
+@subsection ewdg_notes_clock Clock and Pin Dependency
+The EWDG driver does not enable clocks or configure pins internally. Enable the
+peripheral clock and set up the `EWDG_out` / `EWDG_in` pins before calling
+EWDG_DRV_Init().
+
+@subsection ewdg_notes_window Refresh Window Rules
+The driver rejects configurations where `compareHigh <= compareLow` or where
+`compareHigh` exceeds `FEATURE_EWDG_CMPH_MAX_VALUE`. After initialization,
+software must refresh the watchdog only while the internal counter is inside
+the programmed window.
+
+@subsection ewdg_notes_keys Refresh Key Sequence
+Refreshing the watchdog requires two consecutive writes of
+`FEATURE_EWDG_KEY_FIRST_BYTE` and `FEATURE_EWDG_KEY_SECOND_BYTE` to the `SERV`
+register. The driver masks global interrupts around this sequence to reduce the
+chance of timing violations between the writes.
+
+@subsection ewdg_notes_writeonce Startup Register Programming
+The EWDG is intended to be configured once after reset. Calling
+EWDG_DRV_Init() on an already-enabled instance returns `STATUS_ERROR`.
+
+@subsection ewdg_notes_irq Shared Interrupt Vector
+When interrupt mode is enabled, the EWDG uses the shared watchdog interrupt
+vector (`WDOG_EWDG_IRQn` on supported devices). The application must install
+and enable the IRQ handler itself; the driver does not manage the NVIC.
+
+@subsection ewdg_notes_device Device Variations
+Some derivatives expose the optional `CLKSEL` field and support
+`EWDG_LPO_CLOCK`, while others provide only the default SIRC path or a
+different alternate source. Guard clock-source assignments with
+`EWDG_CLK_CTRL_CLKSEL_MASK` or the relevant device feature macro.
+
+@section ewdg_integration Integration Guide
+
+@subsection ewdg_integration_units Compilation Units
+Compile the following file into the application:
+
+@verbatim
+${SDK_PATH}/platform/drivers/src/ewdg/ewdg_driver.c
+@endverbatim
+
+@subsection ewdg_integration_include Include Path
+Add the driver include directory to the toolchain include path:
+
+@verbatim
+${SDK_PATH}/platform/drivers/inc/
+@endverbatim
+
+@subsection ewdg_integration_symbols Compile Symbols
+No special compile symbols are required beyond the active device selection.
+
+@subsection ewdg_integration_deps Dependencies
+The public driver depends on:
+- `device_registers.h` for peripheral instance definitions and register macros
+- `status.h` for `status_t`
+- `interrupt_manager.h` for temporary global interrupt masking during refresh
+  and restore sequences
 */

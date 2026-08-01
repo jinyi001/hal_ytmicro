@@ -8,6 +8,16 @@
 /*!
  * @file lptmr_hw_access.h
  * @version 1.4.1
+ *
+ * @brief lpTMR Hardware Access Layer.
+ *
+ * This header provides the low-level register access helpers used by the
+ * public lpTMR driver. It exposes the reset-state initializer plus inline
+ * accessors for flags, modes, prescaler settings, compare values, and counter
+ * reads.
+ *
+ * @note This is an internal layer. Application code should use the
+ *       `lpTMR_DRV_*` APIs from `lptmr_driver.h`.
  */
 
 #ifndef LPTMR_HW_ACCESS_H
@@ -19,42 +29,55 @@
 #include "device_registers.h"
 #include "lptmr_driver.h"
 
-/*******************************************************************************
- * Definitions
- ******************************************************************************/
-
-/*******************************************************************************
- * API
- ******************************************************************************/
-
 #if defined(__cplusplus)
 extern "C" {
 #endif
 
 /*!
- * @brief Initialize the LPTMR instance to reset values.
+ * @addtogroup lptmr_hw_access lpTMR Hardware Access
+ * @ingroup lptmr
+ * @brief Low-level register access helpers for the lpTMR peripheral.
+ * @{
+ */
+
+/*******************************************************************************
+ * Initialization
+ ******************************************************************************/
+/*!
+ * @name Initialization
+ * @brief Functions for restoring the peripheral to a known default state.
+ * @{
+ */
+
+/*!
+ * @brief Initialize the lpTMR registers to their reset-state values.
  *
- * This function initializes all registers of the LPTMR instance to a known state (the register
- * are written with their reset values from the Reference Manual).
+ * Disables the module and writes the documented reset values for the control,
+ * status, interrupt, prescaler, and compare registers.
  *
- * @param[in] base - LPTMR base pointer
+ * @param[in] base  Pointer to the lpTMR peripheral base address.
  *
+ * @pre `base` must not be `NULL`.
  */
 void lpTMR_Init(lpTMR_Type* const base);
 
+/*! @} */ /* End of Initialization */
+
+/*******************************************************************************
+ * DMA & Interrupt Control
+ ******************************************************************************/
+/*!
+ * @name DMA & Interrupt Control
+ * @brief Functions for enabling and querying DMA requests and compare interrupts.
+ * @{
+ */
+
 #if defined(lpTMR_DIE_DMAEN_MASK)
 /*!
- * @brief Get the DMA Request Enable Flag
+ * @brief Read the DMA request enable state.
  *
- * This function checks whether a DMA Request feature of the LPTMR is enabled.
- * The DMA Request is issued when a Compare Match is asserted. If enabled, the
- * Compare Match/Interrupt Pending flag is cleared when the DMA controller is
- * done.
- *
- * @param[in] base - LPTMR base pointer
- * @return DMA Request enable
- *      - true: enable DMA Request
- *      - false: disable DMA Request
+ * @param[in] base  Pointer to the lpTMR peripheral base address.
+ * @return `true` if compare-match DMA requests are enabled, `false` otherwise.
  */
 static inline bool lpTMR_GetDmaRequest(const lpTMR_Type* const base)
 {
@@ -68,17 +91,12 @@ static inline bool lpTMR_GetDmaRequest(const lpTMR_Type* const base)
 }
 
 /*!
- * @brief Configure the DMA Request Enable Flag state
+ * @brief Enable or disable compare-match DMA requests.
  *
- * This function configures the DMA Request feature of the LPTMR. If enabled,
- * a DMA Request is issued when the Compare Match event occurs. If enabled, the
- * Compare Match/Interrupt Pending flag is cleared when the DMA controller is
- * done.
+ * @param[in] base    Pointer to the lpTMR peripheral base address.
+ * @param[in] enable  `true` to enable DMA requests, `false` to disable them.
  *
- * @param[in] base   - LPTMR base pointer
- * @param[in] enable - The new state of the DMA Request Enable Flag
- *      - true: enable DMA Request
- *      - false: disable DMA Request
+ * @note When enabled, the DMA request is generated on compare match.
  */
 static inline void lpTMR_SetDmaRequest(lpTMR_Type* const base,
                                        bool enable)
@@ -93,56 +111,10 @@ static inline void lpTMR_SetDmaRequest(lpTMR_Type* const base,
 #endif /* lpTMR_DIE_DMAEN_MASK */
 
 /*!
- * @brief Get the Compare Flag state
+ * @brief Read the compare interrupt enable state.
  *
- * This function checks whether a Compare Match event has occurred or if there is
- * an Interrupt Pending.
- *
- * @param[in] base - LPTMR base pointer
- * @return The Compare Flag state
- *      - true: Compare Match/Interrupt Pending asserted
- *      - false: Compare Match/Interrupt Pending not asserted
- */
-static inline bool lpTMR_GetCompareFlag(const lpTMR_Type* const base)
-{
-    DEV_ASSERT(base != NULL);
-
-    uint32_t tmp = base->STS;
-    tmp = (tmp & lpTMR_STS_CCF_MASK) >> lpTMR_STS_CCF_SHIFT;
-
-    return ((tmp == 1u) ? true : false);
-}
-
-/*!
- * @brief Clear the Compare Flag
- *
- * This function clears the Compare Flag/Interrupt Pending state.
- *
- * @param[in] base - LPTMR base pointer
- */
-static inline void lpTMR_ClearCompareFlag(lpTMR_Type* const base)
-{
-    DEV_ASSERT(base != NULL);
-
-    uint32_t tmp = base->STS;
-    tmp |= (lpTMR_STS_CCF_MASK);
-    base->STS = tmp;
-#ifdef ERRATA_ARM_838869
-    /* Read-after-write sequence to guarantee required serialization of memory operations */
-    (void)base->CSR;
-#endif
-}
-
-/*!
- * @brief Get the Interrupt Enable state
- *
- * This function returns the Interrupt Enable state for the LPTMR. If enabled,
- * an interrupt is generated when a Compare Match event occurs.
- *
- * @param[in] base - LPTMR base pointer
- * @return Interrupt Enable state
- *      - true: Interrupt enabled
- *      - false: Interrupt disabled
+ * @param[in] base  Pointer to the lpTMR peripheral base address.
+ * @return `true` if compare interrupts are enabled, `false` otherwise.
  */
 static inline bool lpTMR_GetInterruptEnable(const lpTMR_Type* const base)
 {
@@ -155,15 +127,10 @@ static inline bool lpTMR_GetInterruptEnable(const lpTMR_Type* const base)
 }
 
 /*!
- * @brief Configure the Interrupt Enable state
+ * @brief Enable or disable compare interrupts.
  *
- * This function configures the Interrupt Enable state for the LPTMR. If enabled,
- * an interrupt is generated when a Compare Match event occurs.
- *
- * @param[in] base   - LPTMR base pointer
- * @param[in] enable - The new state for the interrupt
- *          - true: enable Interrupt
- *          - false: disable Interrupt
+ * @param[in] base    Pointer to the lpTMR peripheral base address.
+ * @param[in] enable  `true` to enable compare interrupts, `false` to disable them.
  */
 static inline void lpTMR_SetInterrupt(lpTMR_Type* const base,
                                       bool enable)
@@ -176,17 +143,70 @@ static inline void lpTMR_SetInterrupt(lpTMR_Type* const base,
     base->DIE = tmp;
 }
 
+/*! @} */ /* End of DMA & Interrupt Control */
+
+/*******************************************************************************
+ * Compare Flag Handling
+ ******************************************************************************/
 /*!
- * @brief Get the Pin select for Counter Mode
+ * @name Compare Flag Handling
+ * @brief Functions for reading and clearing the compare-match flag.
+ * @{
+ */
+
+/*!
+ * @brief Read the compare-match flag state.
  *
- * This function returns the configured Input Pin for Pulse Counter Mode.
+ * @param[in] base  Pointer to the lpTMR peripheral base address.
+ * @return `true` if a compare match is pending, `false` otherwise.
+ */
+static inline bool lpTMR_GetCompareFlag(const lpTMR_Type* const base)
+{
+    DEV_ASSERT(base != NULL);
+
+    uint32_t tmp = base->STS;
+    tmp = (tmp & lpTMR_STS_CCF_MASK) >> lpTMR_STS_CCF_SHIFT;
+
+    return ((tmp == 1u) ? true : false);
+}
+
+/*!
+ * @brief Clear the compare-match flag.
  *
- * @param[in] base - LPTMR base pointer
- * @return Input pin selection
- *          - lpTMR_PINSELECT_TMU: count pulses from TMU output
- *          - LPTMR_PINSELECT_ALT1: count pulses from pin alt 1
- *          - lpTMR_PINSELECT_ALT2: count pulses from pin alt 2
- *          - LPTMR_PINSELECT_ALT3: count pulses from pin alt 3
+ * @param[in] base  Pointer to the lpTMR peripheral base address.
+ *
+ * @note On affected cores, the read-after-write sequence preserves the
+ *       required memory-ordering behavior for the erratum workaround.
+ */
+static inline void lpTMR_ClearCompareFlag(lpTMR_Type* const base)
+{
+    DEV_ASSERT(base != NULL);
+
+    uint32_t tmp = base->STS;
+    tmp |= (lpTMR_STS_CCF_MASK);
+    base->STS = tmp;
+#ifdef ERRATA_ARM_838869
+    /* Perform a read-after-write to satisfy the serialization requirement. */
+    (void)base->CSR;
+#endif
+}
+
+/*! @} */ /* End of Compare Flag Handling */
+
+/*******************************************************************************
+ * Pulse Counter Input Configuration
+ ******************************************************************************/
+/*!
+ * @name Pulse Counter Input Configuration
+ * @brief Functions for selecting the pulse source and active edge.
+ * @{
+ */
+
+/*!
+ * @brief Read the selected pulse input source.
+ *
+ * @param[in] base  Pointer to the lpTMR peripheral base address.
+ * @return Active pulse input selection.
  */
 static inline lptmr_pinselect_t lpTMR_GetPinSelect(const lpTMR_Type* const base)
 {
@@ -198,17 +218,12 @@ static inline lptmr_pinselect_t lpTMR_GetPinSelect(const lpTMR_Type* const base)
 }
 
 /*!
- * @brief Configure the Pin selection for Pulse Counter Mode
+ * @brief Program the pulse input source.
  *
- * This function configures the input Pin selection for Pulse Counter Mode.
- * This feature can be configured only when the LPTMR is disabled.
+ * @param[in] base    Pointer to the lpTMR peripheral base address.
+ * @param[in] pinsel  Pulse input source selection.
  *
- * @param[in] base   - LPTMR base pointer
- * @param[in] pinsel - Pin selection
- *          - lpTMR_PINSELECT_TMU: count pulses from TMU output
- *          - LPTMR_PINSELECT_ALT1: count pulses from pin alt 1
- *          - lpTMR_PINSELECT_ALT2: count pulses from pin alt 2
- *          - LPTMR_PINSELECT_ALT3: count pulses from pin alt 3
+ * @note The lpTMR must be disabled before changing the input route.
  */
 static inline void lpTMR_SetPinSelect(lpTMR_Type* const base,
                                       const lptmr_pinselect_t pinsel)
@@ -222,15 +237,10 @@ static inline void lpTMR_SetPinSelect(lpTMR_Type* const base,
 }
 
 /*!
- * @brief Get Pin Polarity for Pulse Counter Mode
+ * @brief Read the active pulse-counting edge.
  *
- * This function returns the configured pin polarity that triggers an increment
- * in Pulse Counter Mode.
- *
- * @param[in] base - LPTMR base pointer
- * @return The pin polarity for Pulse Counter Mode
- *          - lpTMR_PINPOLARITY_RISING: count pulse on Rising Edge
- *          - lpTMR_PINPOLARITY_FALLING: count pulse on Falling Edge
+ * @param[in] base  Pointer to the lpTMR peripheral base address.
+ * @return Active pulse polarity selection.
  */
 static inline lptmr_pinpolarity_t lpTMR_GetPinPolarity(const lpTMR_Type* const base)
 {
@@ -243,15 +253,12 @@ static inline lptmr_pinpolarity_t lpTMR_GetPinPolarity(const lpTMR_Type* const b
 }
 
 /*!
- * @brief Configure Pin Polarity for Pulse Counter Mode
+ * @brief Program the active pulse-counting edge.
  *
- * This function configures the pin polarity that triggers an increment in Pulse
- * Counter Mode. This feature can be configured only when the LPTMR is disabled.
+ * @param[in] base  Pointer to the lpTMR peripheral base address.
+ * @param[in] pol   Edge selection used for pulse counting.
  *
- * @param[in] base - LPTMR base pointer
- * @param[in] pol  - The pin polarity to count in Pulse Counter Mode
- *          - lpTMR_PINPOLARITY_RISING: count pulse on Rising Edge
- *          - lpTMR_PINPOLARITY_FALLING: count pulse on Falling Edge
+ * @note The lpTMR must be disabled before changing the pulse polarity.
  */
 static inline void lpTMR_SetPinPolarity(lpTMR_Type* const base,
                                         const lptmr_pinpolarity_t pol)
@@ -264,16 +271,22 @@ static inline void lpTMR_SetPinPolarity(lpTMR_Type* const base,
     base->CTRL = tmp;
 }
 
+/*! @} */ /* End of Pulse Counter Input Configuration */
+
+/*******************************************************************************
+ * Mode & Run Control
+ ******************************************************************************/
 /*!
- * @brief Get the Free Running state
+ * @name Mode & Run Control
+ * @brief Functions for selecting lpTMR operating mode and enable state.
+ * @{
+ */
+
+/*!
+ * @brief Read the free-running mode enable state.
  *
- * This function checks whether the Free Running feature of the LPTMR is enabled
- * or disabled.
- *
- * @param[in] base - LPTMR base pointer
- * @return Free running mode state
- *          - true: Free Running Mode enabled. Reset counter on 16-bit overflow
- *          - false: Free Running Mode disabled. Reset counter on Compare Match.
+ * @param[in] base  Pointer to the lpTMR peripheral base address.
+ * @return `true` if free-running mode is enabled, `false` otherwise.
  */
 static inline bool lpTMR_GetFreeRunning(const lpTMR_Type* const base)
 {
@@ -286,15 +299,12 @@ static inline bool lpTMR_GetFreeRunning(const lpTMR_Type* const base)
 }
 
 /*!
- * @brief Configure the Free Running state
+ * @brief Enable or disable free-running mode.
  *
- * This function configures the Free Running feature of the LPTMR. This feature
- * can be configured only when the LPTMR is disabled.
+ * @param[in] base    Pointer to the lpTMR peripheral base address.
+ * @param[in] enable  `true` to reset on overflow, `false` to reset on compare match.
  *
- * @param[in] base   - LPTMR base pointer
- * @param[in] enable - The new Free Running state
- *          - true: Free Running Mode enabled. Reset counter on 16-bit overflow
- *          - false: Free Running Mode disabled. Reset counter on Compare Match.
+ * @note The lpTMR must be disabled before changing free-running mode.
  */
 static inline void lpTMR_SetFreeRunning(lpTMR_Type* const base,
                                         const bool enable)
@@ -308,15 +318,10 @@ static inline void lpTMR_SetFreeRunning(lpTMR_Type* const base,
 }
 
 /*!
- * @brief Get current Work Mode
+ * @brief Read the current lpTMR operating mode.
  *
- * This function returns the currently configured Work Mode for the LPTMR.
- *
- *
- * @param[in] base - LPTMR base pointer
- * @return Work Mode
- *          - lpTMR_WORKMODE_TIMER: LPTMR is in Timer Mode
- *          - lpTMR_WORKMODE_PULSECOUNTER: LPTMR is in Pulse Counter Mode
+ * @param[in] base  Pointer to the lpTMR peripheral base address.
+ * @return Current work mode selection.
  */
 static inline lptmr_workmode_t lpTMR_GetWorkMode(const lpTMR_Type* const base)
 {
@@ -329,15 +334,12 @@ static inline lptmr_workmode_t lpTMR_GetWorkMode(const lpTMR_Type* const base)
 }
 
 /*!
- * @brief Configure the Work Mode
+ * @brief Program the lpTMR operating mode.
  *
- * This function configures the LPTMR to either Timer Mode or Pulse Counter
- * Mode. This feature can be configured only when the LPTMR is disabled.
+ * @param[in] base  Pointer to the lpTMR peripheral base address.
+ * @param[in] mode  New work mode selection.
  *
- * @param[in] base - LPTMR base pointer
- * @param[in] mode - New Work Mode
- *          - lpTMR_WORKMODE_TIMER: lpTMR set to Timer Mode
- *          - lpTMR_WORKMODE_PULSECOUNTER: lpTMR set to Pulse Counter Mode
+ * @note The lpTMR must be disabled before changing work mode.
  */
 static inline void lpTMR_SetWorkMode(lpTMR_Type* const base,
                                      const lptmr_workmode_t mode)
@@ -351,14 +353,10 @@ static inline void lpTMR_SetWorkMode(lpTMR_Type* const base,
 }
 
 /*!
- * @brief Get the Enable state.
+ * @brief Read the module enable state.
  *
- * Prior to reconfiguring the LPTMR, it is necessary to disable it.
- *
- * @param[in] base - LPTMR base pointer
- * @return The state of the LPTMR
- *          - true: LPTMR enabled
- *          - false: LPTMR disabled
+ * @param[in] base  Pointer to the lpTMR peripheral base address.
+ * @return `true` if the counter is enabled, `false` otherwise.
  */
 static inline bool lpTMR_GetEnable(const lpTMR_Type* const base)
 {
@@ -371,12 +369,9 @@ static inline bool lpTMR_GetEnable(const lpTMR_Type* const base)
 }
 
 /*!
- * @brief Enable the LPTMR
+ * @brief Enable the lpTMR counter.
  *
- * Enable the LPTMR. Starts the timer/counter.
- *
- *
- * @param[in] base - LPTMR base pointer
+ * @param[in] base  Pointer to the lpTMR peripheral base address.
  */
 static inline void lpTMR_Enable(lpTMR_Type* const base)
 {
@@ -389,11 +384,9 @@ static inline void lpTMR_Enable(lpTMR_Type* const base)
 }
 
 /*!
- * @brief Disable the LPTMR
+ * @brief Disable the lpTMR counter.
  *
- * Disable the LPTMR. Stop the Counter/Timer and allow reconfiguration.
- *
- * @param[in] base - LPTMR base pointer
+ * @param[in] base  Pointer to the lpTMR peripheral base address.
  */
 static inline void lpTMR_Disable(lpTMR_Type* const base)
 {
@@ -405,30 +398,23 @@ static inline void lpTMR_Disable(lpTMR_Type* const base)
     base->CTRL = tmp;
 }
 
+/*! @} */ /* End of Mode & Run Control */
+
+/*******************************************************************************
+ * Prescaler / Clock Configuration
+ ******************************************************************************/
 /*!
- * @brief Get Prescaler/Glitch Filter divider value
+ * @name Prescaler / Clock Configuration
+ * @brief Functions for selecting the timer prescaler, glitch filter, bypass,
+ *        and optional clock source.
+ * @{
+ */
+
+/*!
+ * @brief Read the active prescaler or glitch-filter selection.
  *
- * This function returns the currently configured Prescaler/Glitch Filter divider
- * value.
- *
- * @param[in] base - LPTMR base pointer
- * @return The Prescaler/Glitch filter value
- *          - lpTMR_PRESCALE_2: Timer mode: prescaler 2, Glitch filter mode: invalid
- *          - lpTMR_PRESCALE_4_GLITCHFILTER_2: Timer mode: prescaler 4, Glitch filter mode: 2 clocks
- *          - lpTMR_PRESCALE_8_GLITCHFILTER_4: Timer mode: prescaler 8, Glitch filter mode: 4 clocks
- *          - lpTMR_PRESCALE_16_GLITCHFILTER_8: Timer mode: prescaler 16, Glitch filter mode: 8 clocks
- *          - lpTMR_PRESCALE_32_GLITCHFILTER_16: Timer mode: prescaler 32, Glitch filter mode: 16 clocks
- *          - lpTMR_PRESCALE_64_GLITCHFILTER_32: Timer mode: prescaler 64, Glitch filter mode: 32 clocks
- *          - lpTMR_PRESCALE_128_GLITCHFILTER_64: Timer mode: prescaler 128, Glitch filter mode: 64 clocks
- *          - lpTMR_PRESCALE_256_GLITCHFILTER_128: Timer mode: prescaler 256, Glitch filter mode: 128 clocks
- *          - lpTMR_PRESCALE_512_GLITCHFILTER_256: Timer mode: prescaler 512, Glitch filter mode: 256 clocks
- *          - lpTMR_PRESCALE_1024_GLITCHFILTER_512: Timer mode: prescaler 1024, Glitch filter mode: 512 clocks
- *          - lpTMR_PRESCALE_2048_GLITCHFILTER_1024: Timer mode: prescaler 2048, Glitch filter mode: 1024 clocks
- *          - lpTMR_PRESCALE_4096_GLITCHFILTER_2048: Timer mode: prescaler 4096, Glitch filter mode: 2048 clocks
- *          - lpTMR_PRESCALE_8192_GLITCHFILTER_4096: Timer mode: prescaler 8192, Glitch filter mode: 4096 clocks
- *          - lpTMR_PRESCALE_16384_GLITCHFILTER_8192: Timer mode: prescaler 16384, Glitch filter mode: 8192 clocks
- *          - lpTMR_PRESCALE_32768_GLITCHFILTER_16384: Timer mode: prescaler 32768, Glitch filter mode: 16384 clocks
- *          - lpTMR_PRESCALE_65536_GLITCHFILTER_32768: Timer mode: prescaler 65536, Glitch filter mode: 32768 clocks
+ * @param[in] base  Pointer to the lpTMR peripheral base address.
+ * @return Current prescaler or glitch-filter setting.
  */
 static inline lptmr_prescaler_t lpTMR_GetPrescaler(const lpTMR_Type* const base)
 {
@@ -440,29 +426,12 @@ static inline lptmr_prescaler_t lpTMR_GetPrescaler(const lpTMR_Type* const base)
 }
 
 /*!
- * @brief Configure the Prescaler/Glitch Filter divider value
+ * @brief Program the prescaler or glitch-filter selection.
  *
- * This function configures the value for the Prescaler/Glitch Filter. This
- * feature can be configured only when the LPTMR is disabled.
+ * @param[in] base   Pointer to the lpTMR peripheral base address.
+ * @param[in] presc  New prescaler or glitch-filter setting.
  *
- * @param[in] base  - LPTMR base pointer
- * @param[in] presc - The new Prescaler value
- *          - lpTMR_PRESCALE_2: Timer mode: prescaler 2, Glitch filter mode: invalid
- *          - lpTMR_PRESCALE_4_GLITCHFILTER_2: Timer mode: prescaler 4, Glitch filter mode: 2 clocks
- *          - lpTMR_PRESCALE_8_GLITCHFILTER_4: Timer mode: prescaler 8, Glitch filter mode: 4 clocks
- *          - lpTMR_PRESCALE_16_GLITCHFILTER_8: Timer mode: prescaler 16, Glitch filter mode: 8 clocks
- *          - lpTMR_PRESCALE_32_GLITCHFILTER_16: Timer mode: prescaler 32, Glitch filter mode: 16 clocks
- *          - lpTMR_PRESCALE_64_GLITCHFILTER_32: Timer mode: prescaler 64, Glitch filter mode: 32 clocks
- *          - lpTMR_PRESCALE_128_GLITCHFILTER_64: Timer mode: prescaler 128, Glitch filter mode: 64 clocks
- *          - lpTMR_PRESCALE_256_GLITCHFILTER_128: Timer mode: prescaler 256, Glitch filter mode: 128 clocks
- *          - lpTMR_PRESCALE_512_GLITCHFILTER_256: Timer mode: prescaler 512, Glitch filter mode: 256 clocks
- *          - lpTMR_PRESCALE_1024_GLITCHFILTER_512: Timer mode: prescaler 1024, Glitch filter mode: 512 clocks
- *          - lpTMR_PRESCALE_2048_GLITCHFILTER_1024: Timer mode: prescaler 2048, Glitch filter mode: 1024 clocks
- *          - lpTMR_PRESCALE_4096_GLITCHFILTER_2048: Timer mode: prescaler 4096, Glitch filter mode: 2048 clocks
- *          - lpTMR_PRESCALE_8192_GLITCHFILTER_4096: Timer mode: prescaler 8192, Glitch filter mode: 4096 clocks
- *          - lpTMR_PRESCALE_16384_GLITCHFILTER_8192: Timer mode: prescaler 16384, Glitch filter mode: 8192 clocks
- *          - lpTMR_PRESCALE_32768_GLITCHFILTER_16384: Timer mode: prescaler 32768, Glitch filter mode: 16384 clocks
- *          - lpTMR_PRESCALE_65536_GLITCHFILTER_32768: Timer mode: prescaler 65536, Glitch filter mode: 32768 clocks
+ * @note The lpTMR must be disabled before changing this field.
  */
 static inline void lpTMR_SetPrescaler(lpTMR_Type* const base,
                                       const lptmr_prescaler_t presc)
@@ -474,15 +443,18 @@ static inline void lpTMR_SetPrescaler(lpTMR_Type* const base,
     tmp |= lpTMR_PRS_PRES(presc);
     base->PRS = tmp;
 }
+
 #ifdef FEATURE_lpTMR_HAS_CLOCK_SELECTION
 /*!
- * @brief Configure the clock source for the LPTMR
+ * @brief Program the lpTMR counter clock source.
  *
- * This function configure the clock source for lpTMR. This
- * feature can be configured only when the LPTMR is disabled.
+ * @param[in] base    Pointer to the lpTMR peripheral base address.
+ * @param[in] source  New clock source selection.
+ *
+ * @note The lpTMR must be disabled before changing the clock source.
  */
- static inline void lpTMR_SetClockSource(lpTMR_Type* const base,
-                                         const lptmr_clock_source_t source)
+static inline void lpTMR_SetClockSource(lpTMR_Type* const base,
+                                        const lptmr_clock_source_t source)
 {
     DEV_ASSERT(base != NULL);
 
@@ -494,14 +466,10 @@ static inline void lpTMR_SetPrescaler(lpTMR_Type* const base,
 #endif /* FEATURE_lpTMR_HAS_CLOCK_SELECTION */
 
 /*!
- * @brief Get the Prescaler/Glitch Filter Bypass enable state
+ * @brief Read the prescaler or glitch-filter bypass state.
  *
- * This function checks whether the Prescaler/Glitch Filter Bypass is enabled.
- *
- * @param[in] base - LPTMR base pointer
- * @return The Prescaler Bypass state
- *          - true: Prescaler/Glitch Filter Bypass enabled
- *          - false: Prescaler/Glitch Filter Bypass disabled
+ * @param[in] base  Pointer to the lpTMR peripheral base address.
+ * @return `true` if bypass is enabled, `false` otherwise.
  */
 static inline bool lpTMR_GetBypass(const lpTMR_Type* const base)
 {
@@ -514,15 +482,12 @@ static inline bool lpTMR_GetBypass(const lpTMR_Type* const base)
 }
 
 /*!
- * @brief Configure the Prescaler/Glitch Filter Bypass enable state
+ * @brief Enable or disable prescaler or glitch-filter bypass.
  *
- * This function configures the Prescaler/Glitch filter Bypass. This feature
- * can be configured only when the LPTMR is disabled.
+ * @param[in] base    Pointer to the lpTMR peripheral base address.
+ * @param[in] enable  `true` to bypass the prescaler/filter, `false` to use it.
  *
- * @param[in] base  - LPTMR base pointer
- * @param[in] enable - The new Prescaler/Glitch Filter Bypass state
- *          - true: Prescaler/Glitch Filter Bypass enabled
- *          - false: Prescaler/Glitch Filter Bypass disabled
+ * @note The lpTMR must be disabled before changing bypass state.
  */
 static inline void lpTMR_SetBypass(lpTMR_Type* const base,
                                    const bool enable)
@@ -535,15 +500,22 @@ static inline void lpTMR_SetBypass(lpTMR_Type* const base,
     base->PRS = tmp;
 }
 
+/*! @} */ /* End of Prescaler / Clock Configuration */
 
+/*******************************************************************************
+ * Compare & Counter Access
+ ******************************************************************************/
+/*!
+ * @name Compare & Counter Access
+ * @brief Functions for reading and programming compare and counter registers.
+ * @{
+ */
 
 /*!
- * @brief Get the Compare Value
+ * @brief Read the compare register value.
  *
- * This function returns the current Compare Value.
- *
- * @param[in] base - LPTMR base pointer
- * @return The Compare Value
+ * @param[in] base  Pointer to the lpTMR peripheral base address.
+ * @return Current compare value in raw ticks.
  */
 static inline uint16_t lpTMR_GetCompareValue(const lpTMR_Type* const base)
 {
@@ -555,14 +527,13 @@ static inline uint16_t lpTMR_GetCompareValue(const lpTMR_Type* const base)
 }
 
 /*!
- * @brief Configure the Compare Value
+ * @brief Program the compare register value.
  *
- * This function configures the Compare Value. If set to 0, the Compare Match
- * event and the hardware trigger assert and remain asserted until the timer is
- * disabled.
+ * @param[in] base     Pointer to the lpTMR peripheral base address.
+ * @param[in] compval  New compare value in raw ticks.
  *
- * @param[in] base - LPTMR base pointer
- * @param[in] compval - The new Compare Value
+ * @note A compare value of zero causes the compare event to assert and remain
+ *       asserted until the timer is disabled.
  */
 static inline void lpTMR_SetCompareValue(lpTMR_Type* const base,
                                          const uint16_t compval)
@@ -576,26 +547,28 @@ static inline void lpTMR_SetCompareValue(lpTMR_Type* const base,
 }
 
 /*!
- * @brief Get the current Counter Value
+ * @brief Latch and read the current counter value.
  *
- * This function returns the Counter Value.
- *
- * @param[in] base - LPTMR base pointer
- * @return The Counter Value
+ * @param[in] base  Pointer to the lpTMR peripheral base address.
+ * @return Current counter value in raw ticks.
  */
 static inline uint16_t lpTMR_GetCounterValue(lpTMR_Type* const base)
 {
     DEV_ASSERT(base != NULL);
 
-    /* Write latch value before reading register */
+    /* Latch the counter value before reading the count register. */
     base->LCNT = (0u);
     uint16_t cnr = (uint16_t)base->CNT;
     return cnr;
 }
 
+/*! @} */ /* End of Compare & Counter Access */
+
 #if defined(__cplusplus)
 }
 #endif
+
+/*! @} */
 
 #endif /* LPTMR_HW_ACCESS_H */
 /*******************************************************************************

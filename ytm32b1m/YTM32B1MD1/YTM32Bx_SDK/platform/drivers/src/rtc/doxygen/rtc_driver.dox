@@ -1,254 +1,335 @@
 /*!
+@defgroup rtc
+@ingroup mod_timer Real Time Clock (RTC)
+@brief Calendar timekeeping, alarms, clock output, and periodic interrupt support.
 
-   @defgroup rtc Real Time Clock Driver (RTC)
-   @brief The YTMicro SDK provides the Peripheral Driver for the Real Time Clock (RTC) module of YTMicro SDK devices.
+@details
+The RTC module provides a low-power hardware time base that tracks elapsed
+seconds and exposes helper APIs for converting between the hardware seconds
+counter and human-readable calendar values. The driver also supports alarm
+scheduling, periodic seconds interrupts, time-drift compensation, and optional
+clock-output routing.
 
-   ## Hardware background ##
-   The Real Time Clock Module is a independent timer that keeps track of the exact date and
-   time with no software overhead, with low power usage.
+@section rtc_features Key Features
+- 32-bit RTC seconds counter with calendar conversion helpers.
+- Calendar-based read/write APIs using `rtc_timedate_t`.
+- One-shot and recurring alarm scheduling through `rtc_alarm_config_t`.
+- Periodic seconds interrupt generation from 1 Hz up to 128 Hz.
+- Overflow interrupt callback support.
+- Programmable time compensation for RTC drift correction.
+- Optional RTC clock-output routing to either the selected RTC clock source or
+  the periodic seconds waveform.
+- Support for devices with either shared or dedicated seconds IRQ lines.
 
-   Features of the RTC module include:
-    - 32-bit seconds counter with roll-over protection and 32-bit alarm
-    - 16-bit prescaler with compensation that can correct errors between 0.12 ppm and 3906 ppm
-    - Option to increment prescaler using the LPO (prescaler increments by 32 every clock edge)
-    - Register write protection
-    - Lock register requires POR or software reset to enable write access
-    - Configurable 1, 2, 4, 8, 16, 32, 64 or 128 Hz square wave output with optional interrupt
-    - Alarm interrupt configured by the driver automatically refreshes alarm time configured by the user
-    - User interrupt handlers can be configured for all interrupts
+@section rtc_modes Supported Modes
 
-   ## How to use the RTC driver in your application ##
-   In order to be able to use the RTC in your application, the first thing to do is
-   initializing it with the desired configuration. This is done by calling the <b>RTC_DRV_Init</b>
-   function. One of the arguments passed to this function is the configuration which will be
-   used for the RTC instance, specified by the <b>rtc_init_config_t</b> structure.
+@subsection rtc_modes_seconds Periodic Seconds Interrupt Rates
+| Configuration     | Interrupt Rate |
+|-------------------|----------------|
+| RTC_INT_1HZ       | 1 Hz           |
+| RTC_INT_2HZ       | 2 Hz           |
+| RTC_INT_4HZ       | 4 Hz           |
+| RTC_INT_8HZ       | 8 Hz           |
+| RTC_INT_16HZ      | 16 Hz          |
+| RTC_INT_32HZ      | 32 Hz          |
+| RTC_INT_64HZ      | 64 Hz          |
+| RTC_INT_128HZ     | 128 Hz         |
 
-   The <b>rtc_init_config_t</b> structure allows you to configure the following:
-        -   RTC clock source (32 KHz clock or 1 KHz LPO clock)
-        -   Clock Out pin configuration (Clock OUT pin source)
-        -   Compensation (Interval and value)
-        -   Update enable - this allows updates to Time Counter Enable bit if the Status Register under limited conditions
-        -   Enable non supervisor writes to the registers
+@subsection rtc_modes_clkout Clock-Output Pin Modes
+| Mode                  | Description                                           |
+|-----------------------|-------------------------------------------------------|
+| RTC_CLKOUT_DISABLED   | Disable the RTC clock-output pin.                     |
+| RTC_CLKOUT_SRC_SEC    | Output the periodic seconds interrupt waveform.       |
+| RTC_CLKOUT_SRC_CLKSEL | Output the RTC clock selected by `rtc_clk_source_t`.  |
 
-   The <b>rtc_seconds_int_config_t</b> structure configures the <b>time seconds interrupt</b>. To setup an interrupt every seconds you have to configure the structure mentioned with the following parameters:
-        -   Frequency of the interrupt
-        -   Interrupt Handler
-        -   If needed - interrupt handler parameters
+@subsection rtc_modes_clock Clock Source Selection
+The `rtc_clk_source_t` enumeration is defined in the device feature header and
+varies slightly by device family. Typical options include:
+- `RTC_CLK_SRC_OSC_32KHZ`
+- `RTC_CLK_SRC_RTC_PIN`
+- `RTC_CLK_SRC_SIRC`
+- `RTC_CLK_SRC_IPC`
 
-   An alarm is configured with <b>rtc_alarm_config_t</b> structure, which is described by the following
-   parameters:
-        -   Alarm time in date-time format
-        -   Interval of alarm repeat in seconds
-        -   Number of alarm repeats (use 0 if the alarm is not recursive)
-        -   Repeat forever field (if set, the number of repeats field will be ignored)
-        -   Alarm interrupt enable
-        -   Alarm interrupt handler
-        -   Alarm interrupt handler parameters
+@section rtc_arch Module Architecture
 
-   @note If the alarm interrupt is not enabled, the user must make the updates of the alarm time
-   manually.
+The RTC module is organized in a two-layer structure:
 
-   After the <b>RTC_DRV_Init()</b> function call and, if needed, alarm and other configurations the RTC counter is started by calling <b>RTC_DRV_StartCounter()</b>.
+@verbatim
+┌──────────────────────────────────────────────┐
+│              Application Code                │
+│         (calls RTC_DRV_* functions)          │
+├──────────────────────────────────────────────┤
+│          RTC Driver Layer (rtc_driver.h/c)   │
+│  ● Instance-based public API                 │
+│  ● Calendar conversion and runtime state     │
+│  ● Callback dispatch for alarm/overflow/sec  │
+├──────────────────────────────────────────────┤
+│    RTC HW Access Layer (rtc_hw_access.h/c)   │
+│  ● Direct register programming helpers       │
+│  ● Counter, alarm, compensation, IRQ bits    │
+├──────────────────────────────────────────────┤
+│             RTC Peripheral Hardware          │
+│       (SEC, ALM, CMP, CTRL, INTE, INTF)      │
+└──────────────────────────────────────────────┘
+@endverbatim
 
-   To update desired time date use <b>RTC_DRV_SetTimeDate()</b> function, this method uses a Time and Date structure <b>rtc_timedate_t</b> in a calendar format mode.
+@section rtc_config Configuration Parameters
 
-   To get the current time and date you can call <b>RTC_DRV_GetCurrentTimeDate()</b> function, this method will get the seconds from the Time Seconds Register and
-   will convert into human readable format as <b>rtc_timedate_t</b>.
+@subsection rtc_config_init rtc_init_config_t Fields
+| Field                | Type                    | Description                                                  | Default |
+|----------------------|-------------------------|--------------------------------------------------------------|---------|
+| compensationInterval | uint8_t                 | Compensation interval written to the RTC CMP register.       | 0       |
+| compensation         | int8_t                  | Compensation value applied to the prescaler.                 | 0       |
+| clockSource          | rtc_clk_source_t        | RTC clock source selected from the device feature header.    | First enum value |
+| clockOutConfig       | rtc_clk_out_config_t    | RTC clock-output pin source selection.                       | RTC_CLKOUT_DISABLED |
+| debugEnable          | bool                    | Keep RTC control accessible while debugging.                 | true    |
+| rtcAlarmConfig       | rtc_alarm_config_t *    | Optional alarm configuration retained by the driver.         | Caller-defined |
+| rtcOverflowConfig    | rtc_overflow_config_t * | Optional overflow interrupt configuration retained by driver.| Caller-defined |
+| rtcSecondsConfig     | rtc_seconds_config_t *  | Optional periodic seconds interrupt configuration.           | Caller-defined |
 
-   To check if a structure <b>rtc_timedate_t</b> is properly configured  use <b>RTC_DRV_IsTimeDateCorrectFormat()</b> function that will return true if configuration is valid
-   or false if configuration is invalid.
+@subsection rtc_config_alarm rtc_alarm_config_t Fields
+| Field              | Type             | Description                                              | Default |
+|--------------------|------------------|----------------------------------------------------------|---------|
+| alarmTime          | rtc_timedate_t   | Absolute alarm target in calendar form.                  | Caller-defined |
+| repetitionInterval | uint32_t         | Repeat interval, in seconds, for recurring alarms.       | 0       |
+| numberOfRepeats    | uint32_t         | Remaining repeat count when `repeatForever` is false.    | 0       |
+| repeatForever      | bool             | Keep rescheduling the alarm indefinitely.                | false   |
+| alarmIntEnable     | bool             | Enable the hardware alarm interrupt source.              | false   |
+| rtcAlarmCallback   | void (*)(void *) | Callback invoked from the alarm interrupt path.          | NULL    |
+| callbackParams     | void *           | User context passed to `rtcAlarmCallback`.               | NULL    |
 
-   To set an alarm at a desired date and time use <b>RTC_DRV_ConfigureAlarm()</b> function, this method uses a structure <b>rtc_alarm_config_t</b> with Time, Date and Alarm Handler
-   and will trigger at set time an interrupt set by user.
+@subsection rtc_config_seconds rtc_seconds_config_t Fields
+| Field              | Type                 | Description                                          | Default |
+|--------------------|----------------------|------------------------------------------------------|---------|
+| secondsIntConfig   | rtc_second_int_cfg_t | Periodic seconds interrupt frequency.                | Caller-defined |
+| secondsIntEnable   | bool                 | Enable the periodic seconds interrupt source.        | false   |
+| rtcSecondsCallback | void (*)(void *)     | Callback invoked from the seconds interrupt path.    | NULL    |
+| callbackParams     | void *               | User context passed to `rtcSecondsCallback`.         | NULL    |
 
-   To get the configured  alarm use <b>RTC_DRV_GetAlarmConfig()</b> function, this method will return the Time and Date for alarm in a structure <b>rtc_alarm_config_t</b>.
+@subsection rtc_config_overflow rtc_overflow_config_t Fields
+| Field               | Type             | Description                                          | Default |
+|---------------------|------------------|------------------------------------------------------|---------|
+| overflowIntEnable   | bool             | Enable the overflow interrupt source.                | false   |
+| rtcOverflowCallback | void (*)(void *) | Callback invoked from the overflow interrupt path.   | NULL    |
+| callbackParams      | void *           | User context passed to `rtcOverflowCallback`.        | NULL    |
 
-   To check if an alarm is pending use <b>RTC_DRV_IsAlarmPending()</b> function, this method will return true if alarm is pending or false if no alarm pending.
+@subsection rtc_config_features Device Feature Macros
+| Macro                              | Description                                                  |
+|------------------------------------|--------------------------------------------------------------|
+| FEATURE_RTC_HAS_SEPARATE_SECOND_IRQ| Set to 1 when the device exposes a dedicated seconds IRQ.   |
+| FEATURE_RTC_HAS_OSC                | Indicates support for the RTC 32.768 kHz oscillator source. |
 
-   To configure a seconds interrupt use <b>RTC_DRV_ConfigureSecondsInt()</b> function, this method use structure <b>rtc_seconds_int_config_t</b> to be configured  with a callback function.
+@section rtc_usage Usage Patterns
 
-   After driver configuration the user can use <b>RTC_DRV_StartCounter()</b> function to start the timer and <b>RTC_DRV_StopCounter()</b> function to stop it.
+@subsection rtc_usage_basic Pattern 1: Basic Initialization and Time Start-Up
 
-   To lock access to RTC registers use <b>RTC_DRV_ConfigureRegisterLock()</b> function, this method uses a structure <b>rtc_register_lock_config_t</b> that describes what registers will be locked.
-   Attention all the registers are unlocked only by software reset or power on reset.
+@code{.c}
+#define INST_RTC (0U)
 
-   To check if RTC registers are locked use <b>RTC_DRV_GetRegisterLock()</b> function, this will return a structure <b>rtc_register_lock_config_t</b> with locked registers.
+static const rtc_timedate_t g_startTime =
+{
+    .year = 2026U,
+    .month = 4U,
+    .day = 4U,
+    .hour = 9U,
+    .minutes = 30U,
+    .seconds = 0U
+};
 
-   To convert seconds to a human readable value use <b>RTC_DRV_ConvertSecondsToTimeDate()</b> function, this will return a structure <b>rtc_timedate_t</b> based on the seconds value.
+void RTC_BasicStart(void)
+{
+    rtc_init_config_t rtcConfig;
 
-   To convert a time date to seconds use <b>RTC_DRV_ConvertTimeDateToSeconds()</b> function, this will return seconds value based on time date structure <b>rtc_timedate_t</b>.
+    RTC_DRV_GetDefaultConfig(&rtcConfig);
+    rtcConfig.clockSource = RTC_CLK_SRC_OSC_32KHZ;
+    rtcConfig.clockOutConfig = RTC_CLKOUT_DISABLED;
+    rtcConfig.rtcAlarmConfig = NULL;
+    rtcConfig.rtcOverflowConfig = NULL;
+    rtcConfig.rtcSecondsConfig = NULL;
 
-   To get the time date for next alarm use <b>RTC_DRV_GetNextAlarmTime()</b> function, this will return a structure <b>rtc_timedate_t</b>.
+    (void)RTC_DRV_Init(INST_RTC, &rtcConfig);
+    (void)RTC_DRV_SetTimeDate(INST_RTC, &g_startTime);
+    (void)RTC_DRV_StartCounter(INST_RTC);
+}
+@endcode
 
-   To configure a fault handler for cases as Overflow and Invalid Time use <b>RTC_DRV_ConfigureFaultInt()</b> function, this method will use a structure <b>rtc_interrupt_config_t</b>
-   with a callback function.
+@subsection rtc_usage_seconds Pattern 2: Configure a Periodic Seconds Interrupt
 
-   ### Example ###
+@code{.c}
+#define INST_RTC (0U)
 
-   @code
-   /* Time Seconds interrupt handler */
-   void secondsISR(void)
-   {
-       /* Do Something */
+static void RtcSecondsCallback(void *callbackParam)
+{
+    (void)callbackParam;
+}
 
-   }
+void RTC_EnableSecondsInterrupt(void)
+{
+    rtc_seconds_config_t secondsConfig =
+    {
+        .secondsIntConfig = RTC_INT_1HZ,
+        .secondsIntEnable = true,
+        .rtcSecondsCallback = RtcSecondsCallback,
+        .callbackParams = NULL
+    };
 
-   void rtcAlarmCallback(void)
-   {
-       rtc_timedate_t currentTime;
-       RTC_DRV_GetCurrentTimeDate(0U, &currentTime);
+    RTC_DRV_ConfigureSecondsInt(INST_RTC, &secondsConfig);
+}
+@endcode
 
-       /* Do something with the time and date */
-   }
+@subsection rtc_usage_alarm Pattern 3: Configure a Recurring Alarm
 
-   int main()
-   {
-       /*! rtcTimer1 Time Seconds Interrupt Configuration 0 */
-       rtc_seconds_int_config_t rtcTimer1_SecIntConfig0 =
-       {
-           /*! Time Seconds Interrupt Frequency @ 1 Hz */
-           .secondIntConfig               =    RTC_INT_1HZ,
-           /*! Time Seconds Interrupt is enabled */
-           .secondIntEnable               =    true,
-           /*! Time Seconds Interrupt User Callback */
-           .rtcSecondsCallback            =   secondsISR,
-           /*! Time Seconds Interrupt User Callback Parameters */
-           .secondsCallbackParams         =   NULL
-       };
+@code{.c}
+#define INST_RTC (0U)
 
-       /* rtcTimer1 configuration structure */
-       const rtc_init_config_t rtcTimer1_Config0 =
-       {
-           /* Time compensation interval */
-           .compensationInterval       =   0U,
-           /* Time compensation value */
-           .compensation               =   0,
-           /* RTC Clock Source is 32 KHz crystal */
-           .clockSelect                =   RTC_CLK_SRC_OSC_32KHZ,
-           /* RTC Clock Out is 32 KHz clock */
-           .clockOutConfig             =   RTC_CLKOUT_SRC_32KHZ,
-           /* Update of the TCE bit is not allowed */
-           .updateEnable               =   false,
-           /* Non-supervisor mode write accesses are not supported and generate
-            * a bus error.
-            */
-           .nonSupervisorAccessEnable  =   false
-       };
+static void RtcAlarmCallback(void *callbackParam)
+{
+    (void)callbackParam;
+}
 
-       /* RTC Initial Time and Date */
-       rtc_timedate_t       rtcStartTime =
-       {
-           /* Year */
-           .year       =   2016U,
-           /* Month */
-           .month      =   01U,
-           /* Day */
-           .day        =   01U,
-           /* Hour */
-           .hour       =   00U,
-           /* Minutes */
-           .minutes    =   00U,
-           /* Seconds */
-           .seconds    =   00U
-       };
+void RTC_EnableRecurringAlarm(void)
+{
+    rtc_alarm_config_t alarmConfig =
+    {
+        .alarmTime =
+        {
+            .year = 2026U,
+            .month = 4U,
+            .day = 4U,
+            .hour = 9U,
+            .minutes = 31U,
+            .seconds = 0U
+        },
+        .repetitionInterval = 60U,
+        .numberOfRepeats = 10U,
+        .repeatForever = false,
+        .alarmIntEnable = true,
+        .rtcAlarmCallback = RtcAlarmCallback,
+        .callbackParams = NULL
+    };
 
-       /* rtcTimer1 Alarm configuration 0 */
-       rtc_alarm_config_t   alarmConfig0 =
-       {
-           /* Alarm Date */
-           .alarmTime           =
-               {
-                   /* Year    */
-                   .year       =  2016U,
-                   /* Month   */
-                   .month      =  01U,
-                   /* Day     */
-                   .day        =  01U,
-                   /* Hour    */
-                   .hour       =  00U,
-                   /* Minutes */
-                   .minutes    =  00U,
-                   /* Seconds */
-                   .seconds    =  03U,
-               },
+    (void)RTC_DRV_ConfigureAlarmInt(INST_RTC, &alarmConfig);
+}
+@endcode
 
-           /* Alarm repeat interval */
-           .repetitionInterval  =       3UL,
+@section rtc_api API Quick Reference
 
-           /* Number of alarm repeats */
-           .numberOfRepeats     =       0UL,
+@subsection rtc_api_init Initialization & De-initialization
+| Function                    | Description                                                     |
+|-----------------------------|-----------------------------------------------------------------|
+| RTC_DRV_Init()              | Initialize the RTC instance and store runtime callback state.   |
+| RTC_DRV_Deinit()            | Reset the RTC instance with a software reset.                   |
+| RTC_DRV_GetDefaultConfig()  | Fill the core initialization fields with driver defaults.       |
 
-           /* Repeat alarm forever */
-           .repeatForever       =       true,
+@subsection rtc_api_interrupt_ctrl Interrupt Source Control
+| Function                         | Description                                          |
+|----------------------------------|------------------------------------------------------|
+| RTC_DRV_SetRtcInterrupt()        | Enable one RTC interrupt source in hardware.         |
+| RTC_DRV_ClearRtcInterrupt()      | Disable one RTC interrupt source in hardware.        |
+| RTC_DRV_ClearRtcInterruptFlag()  | Clear one RTC interrupt status flag.                 |
 
-           /* Alarm interrupt disabled */
-           .alarmIntEnable      =       true,
+@subsection rtc_api_time Counter Control and Time Access
+| Function                         | Description                                          |
+|----------------------------------|------------------------------------------------------|
+| RTC_DRV_StartCounter()           | Enable the RTC counter.                              |
+| RTC_DRV_StopCounter()            | Disable the RTC counter.                             |
+| RTC_DRV_GetCurrentTimeDate()     | Read the current RTC time in calendar form.          |
+| RTC_DRV_SetTimeDate()            | Program the RTC time from a calendar value.          |
 
-           /* Alarm interrupt handler */
-           .alarmCallback       =       (void *)rtcAlarmCallback,
+@subsection rtc_api_lock Register Protection
+| Function                         | Description                                          |
+|----------------------------------|------------------------------------------------------|
+| RTC_DRV_LockRegisters()          | Lock the RTC register interface for the instance.    |
 
-           /* Alarm interrupt handler parameters */
-           .callbackParams      =       (void *)NULL
-       };
+@subsection rtc_api_comp Time Compensation
+| Function                              | Description                                       |
+|---------------------------------------|---------------------------------------------------|
+| RTC_DRV_ConfigureTimeCompensation()   | Program RTC compensation interval and value.      |
+| RTC_DRV_GetTimeCompensation()         | Read the active compensation interval and value.  |
 
-           /* Call the init function */
-           RTC_DRV_Init(0UL, &rtcInitConfig);
+@subsection rtc_api_callback Interrupt Callback Configuration
+| Function                         | Description                                           |
+|----------------------------------|-------------------------------------------------------|
+| RTC_DRV_ConfigureOverflowInt()   | Store overflow callback state and enable bit.         |
+| RTC_DRV_ConfigureSecondsInt()    | Configure periodic seconds frequency and callback.    |
 
-           /* Set the time and date */
-           RTC_DRV_SetTimeDate(0UL, &rtcStartTime);
+@subsection rtc_api_alarm Alarm Management
+| Function                         | Description                                           |
+|----------------------------------|-------------------------------------------------------|
+| RTC_DRV_ConfigureAlarmInt()      | Validate and program a one-shot or recurring alarm.   |
+| RTC_DRV_GetAlarmConfig()         | Copy the alarm configuration currently stored.        |
+| RTC_DRV_IsAlarmPending()         | Read the RTC alarm flag.                              |
+| RTC_DRV_GetNextAlarmTime()       | Convert the next recurring alarm time to calendar form. |
 
-           /* Configure RTC Time Seconds Interrupt */
-           RTC_DRV_ConfigureSecondsInt(0UL, &rtcTimer1_SecIntConfig0);
+@subsection rtc_api_convert Conversion & Validation Helpers
+| Function                               | Description                                         |
+|----------------------------------------|-----------------------------------------------------|
+| RTC_DRV_ConvertSecondsToTimeDate()     | Convert RTC seconds to calendar form.               |
+| RTC_DRV_ConvertTimeDateToSeconds()     | Convert calendar form to RTC seconds.               |
+| RTC_DRV_IsYearLeap()                   | Check whether a year is a leap year.                |
+| RTC_DRV_IsTimeDateCorrectFormat()      | Validate an RTC calendar time value.                |
 
-           /* Start RTC counter */
-           RTC_DRV_StartCounter(0UL);
+@subsection rtc_api_irq Internal IRQ Handlers
+| Function                      | Description                                              |
+|-------------------------------|----------------------------------------------------------|
+| RTC_DRV_IRQHandler()          | Handle generic RTC alarm and overflow interrupt work.    |
+| RTC_DRV_SecondsIRQHandler()   | Handle the periodic seconds interrupt.                   |
 
-           /* Configure an alarm every 3 seconds */
-           RTC_DRV_ConfigureAlarm(0UL, &rtcAlarmConfig0);
+@section rtc_notes Important Notes
 
-           while(1);
-   }
-   @endcode
+@subsection rtc_notes_clock Clock and Board Dependencies
+- The RTC clock source is not configured by the driver. The application must
+  select and enable the desired RTC source before calling RTC_DRV_Init().
+- Clock-output pin muxing is also outside the driver. Configure board-level pin
+  routing before expecting a waveform on the RTC clock-output pin.
 
-   ## Important Notes ##
-   <p>
-     - Before using the RTC driver the module clock must be configured
-     @note
-        When using the on chip LPO clock as source input for the RTC, the user needs to make sure that the
-        LPO generates the desired frequency by adjusting the LPO trimming value.\n
-        For more details about LPO trimming please consult the available documentation.
-     - The driver enables the interrupts for the corresponding RTC module, but any interrupt priority
-       must be done by the application
-     - The board specific configurations must be done prior to driver calls; the driver has no influence on the
-       functionality of the clockout pin - they must be configured by application
-     - If Non-supervisor mode write accesses are supported you need to set AIPS
-       to allow usermode access to RTC Memory Space
-   </p>
+@subsection rtc_notes_counter Counter State Requirements
+- Call RTC_DRV_StopCounter() before RTC_DRV_SetTimeDate(); the write is rejected
+  when the counter is still running.
+- After a reset-state initialization flow, the counter remains disabled until
+  RTC_DRV_StartCounter() is called.
+- RTC_DRV_Deinit() returns `STATUS_ERROR` when the counter is already disabled.
 
-    ## Integration guideline ##
+@subsection rtc_notes_alarm Alarm Constraints
+- RTC_DRV_ConfigureAlarmInt() accepts alarm times only when they are valid and
+  strictly later than the current RTC time.
+- Recurring-alarm rescheduling happens in RTC_DRV_IRQHandler(). If the alarm
+  interrupt is not enabled or dispatched, the next alarm time is not refreshed.
+- RTC_DRV_GetNextAlarmTime() is valid only after a recurring alarm has been
+  rescheduled by the interrupt handler.
 
-    ### Compilation units ###
+@subsection rtc_notes_config Initialization Defaults
+- RTC_DRV_GetDefaultConfig() initializes only the core RTC fields. The optional
+  pointer fields (`rtcAlarmConfig`, `rtcOverflowConfig`, `rtcSecondsConfig`)
+  must be set explicitly by the caller before RTC_DRV_Init().
 
-    The following files need to be compiled in the project:
-    \verbatim
-    ${SDK_PATH}\platform\drivers\src\rtc\rtc_driver.c
-    ${SDK_PATH}\platform\drivers\src\rtc\rtc_hw_access.c
-    ${SDK_PATH}\platform\drivers\src\rtc\rtc_irq.c
-    \endverbatim
+@subsection rtc_notes_irq Device IRQ Topology
+- On devices where `FEATURE_RTC_HAS_SEPARATE_SECOND_IRQ == 0`, the generic RTC
+  vector wrapper dispatches both RTC_DRV_IRQHandler() and
+  RTC_DRV_SecondsIRQHandler().
+- On devices with a dedicated seconds IRQ, the seconds callback runs from
+  `RTC_Seconds_IRQHandler()`.
 
-    ### Include path ###
+@section rtc_integration Integration Guide
 
-    The following paths need to be added to the include path of the toolchain:
-    \verbatim
-    ${SDK_PATH}\platform\drivers\inc\
-    \endverbatim
+@subsection rtc_integration_units Compilation Units
+Compile the following files into the project:
+@verbatim
+${SDK_PATH}/platform/drivers/src/rtc/rtc_driver.c
+${SDK_PATH}/platform/drivers/src/rtc/rtc_hw_access.c
+${SDK_PATH}/platform/drivers/src/rtc/rtc_irq.c
+@endverbatim
 
-    ### Compile symbols ###
+@subsection rtc_integration_include Include Paths
+Add the following include path to the toolchain:
+@verbatim
+${SDK_PATH}/platform/drivers/inc/
+@endverbatim
 
-    No special symbols are required for this component
+@subsection rtc_integration_symbols Compile Symbols
+No additional compile symbols are required for this component.
 
-    ### Dependencies ###
-
-    -# \ref clock_manager
-    -# \ref interrupt_manager
+@subsection rtc_integration_deps Dependencies
+- @ref clock_manager
+- @ref interrupt_manager
 */

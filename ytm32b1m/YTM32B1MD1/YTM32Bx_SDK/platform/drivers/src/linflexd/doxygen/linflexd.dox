@@ -1,18 +1,43 @@
 /*!
-@defgroup linflexd_driver LINFlexD Driver (Linflexd)
-@brief This section describes the programming interface of the Peripheral driver for LINFlexD.
-
-# LINFlexD Driver Overview {#LINFLEXDDRIVEROvw}
-
-The LINFlexD Controller is a semiconductor IP block supporting the Local Interconnect Network
-(LIN) protocol for both master and slave applications.
-The LINFlexD manages a high number of LIN messages efficiently with a minimum of CPU load. To
-reduce the CPU loading in master mode, the LINFlexD autonomously handles the LIN messages
-after software has triggered the header transmission, until the next header transmission request in
-transmitter mode or until checksum reception in the receiver mode.
-The LINFlexD supports LIN protocol versions 1.3, 2.0, 2.1, and 2.2, and provides an 8-byte buffer for
-transmission/reception data.
-The LINFlexD also supports a UART mode for UART transfers of 8-bit, 9-bit, or 13-bit data frames.
-Optional DMA support is available for both transmit (Tx) and receive (Rx) data.<br />
-
-*/
+ * @defgroup linflexd_driver
+ * @ingroup mod_communication LINFlexD Driver
+ * @ingroup linflexd
+ * @brief LINFlexD peripheral driver for LIN and UART communication.
+ *
+ * ## Key Features
+ * - Dual-mode operation: LIN mode and UART mode on a shared hardware block
+ * - Full LIN 2.1 / 2.2 / SAE J2602 protocol support
+ * - UART mode with 7/8/15/16-bit word lengths and configurable parity
+ * - Hardware checksum generation and verification
+ * - Master and slave node support
+ * - Hardware ID filters for automatic frame routing (LIN slave mode)
+ * - Blocking, polling, and non-blocking (interrupt/DMA) transfer models
+ * - Idle timeout detection (UART mode)
+ * - Low-power sleep mode with automatic wakeup
+ *
+ * ## Architecture
+ *
+ * The LINFlexD driver is split into three layers:
+ *
+ * | Layer              | Files                                   | Visibility |
+ * |--------------------|-----------------------------------------|------------|
+ * | HW Access          | `linflexd_hw_access.h`                  | Internal   |
+ * | UART Driver        | `linflexd_uart_driver.h / .c`           | Public     |
+ * | LIN Driver         | `linflexd_lin_driver.h / .c`            | Public     |
+ *
+ * The HW access layer provides inline register accessors used by both
+ * the UART and LIN driver layers. Application code should only use the
+ * public driver APIs.
+ *
+ * ## Sub-modules
+ * - @ref linflexd_uart — UART mode driver
+ * - @ref linflexd_lin  — LIN mode driver
+ *
+ * ## Supported Standards
+ * - LIN 2.0 / 2.1 / 2.2
+ * - SAE J2602
+ * - ISO 17987
+ *
+ * @note Only one mode (LIN or UART) can be active on a given LINFlexD
+ *       instance at a time.
+ */

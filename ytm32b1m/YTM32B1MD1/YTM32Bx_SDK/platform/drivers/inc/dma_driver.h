@@ -8,6 +8,28 @@
 /*!
  * @file dma_driver.h
  * @version 1.4.1
+ *
+ * @brief DMA Driver — Public API for Direct Memory Access transfers.
+ *
+ * This header defines the application-level interface for the DMA peripheral.
+ * It wraps the low-level hardware access layer and provides a convenient API
+ * for configuring DMA channels and performing data transfers (memory-to-memory,
+ * peripheral-to-memory, etc.).
+ *
+ * The APIs are organized into the following categories:
+ *   - **Initialization & De-initialization**: Set up or tear down the DMA module.
+ *   - **Channel Management**: Initialize and release individual DMA channels.
+ *   - **Transfer Configuration**: Configure single-block, multi-block, loop, and ram reload transfers.
+ *   - **Channel Control**: Start, stop, and trigger DMA channels.
+ *   - **Source Address Configuration**: Configure source address, offset, and transfer size.
+ *   - **Destination Address Configuration**: Configure destination address, offset, and transfer size.
+ *   - **Transfer Loop Configuration**: Configure transfer loop byte count, trigger loop iterations,
+ *     ram reload linkage, and auto-disable on completion.
+ *   - **Interrupt & Callback**: Enable/disable channel interrupts and register callbacks.
+ *   - **Status**: Query channel status.
+ *
+ * @note The DMA peripheral clock must be enabled (via clock_manager) before
+ *       calling any function in this module.
  */
 
 #ifndef DMA_DRIVER_H
@@ -44,8 +66,16 @@
  */
 #define DMA_ERR_LSB_MASK           1U
 
-/*! @brief DMA channel interrupts.
- * Implements : dma_channel_interrupt_t_Class
+/*!
+ * @brief DMA channel interrupt source selection.
+ *
+ * Selects which interrupt event to enable or disable for a DMA channel.
+ *
+ * | Value                       | Interrupt Trigger                                     |
+ * |-----------------------------|-------------------------------------------------------|
+ * | DMA_CHN_ERR_INT             | Error condition occurred on the channel.               |
+ * | DMA_CHN_HALF_MAJOR_LOOP_INT | Trigger loop count reached the halfway point (TCNT == TCNTRV/2). |
+ * | DMA_CHN_MAJOR_LOOP_INT      | Trigger loop count reached zero (transfer complete).   |
  */
 typedef enum
 {
@@ -55,9 +85,16 @@ typedef enum
 } dma_channel_interrupt_t;
 
 
-/*! @brief DMA modulo configuration
- * DMA source/destination address modulo value when address changes.
- * Implements : dma_modulo_t_Class
+/*!
+ * @brief DMA address modulo configuration.
+ *
+ * Controls the circular buffer size for source or destination addressing.
+ * When modulo is enabled, the upper address bits are frozen so that the
+ * address wraps around within a power-of-2 sized region. The buffer must
+ * be aligned to its size boundary (0-modulo-size address).
+ *
+ * For example, DMA_MODULO_256B restricts the address to a 256-byte aligned
+ * region, allowing only the lower 8 address bits to change.
  */
 typedef enum
 {
@@ -95,9 +132,24 @@ typedef enum
     DMA_MODULO_2GB
 } dma_modulo_t;
 
-/*! @brief DMA transfer configuration
- * Note: in L/Z series DMA_TRANSFER_SIZE_16B and DMA_TRANSFER_SIZE_32B are not supported.
- * Implements : dma_transfer_size_t_Class
+/*!
+ * @brief DMA data transfer size per bus access.
+ *
+ * Determines the number of bytes transferred in a single read or write bus cycle.
+ * Source and destination can have different transfer sizes.
+ *
+ * | Value                  | Size   | Notes                                         |
+ * |------------------------|--------|-----------------------------------------------|
+ * | DMA_TRANSFER_SIZE_1B   | 1 byte | Universal; required for byte-wide peripherals.|
+ * | DMA_TRANSFER_SIZE_2B   | 2 bytes| Address must be 2-byte aligned.               |
+ * | DMA_TRANSFER_SIZE_4B   | 4 bytes| Address must be 4-byte aligned.               |
+ * | DMA_TRANSFER_SIZE_8B   | 8 bytes| Address must be 8-byte aligned.               |
+ * | DMA_TRANSFER_SIZE_16B  | 16 bytes| Not available on L/Z series.                 |
+ * | DMA_TRANSFER_SIZE_32B  | 32 bytes| Not available on L/Z series.                 |
+ * | DMA_TRANSFER_SIZE_64B  | 64 bytes| Address must be 64-byte aligned.             |
+ *
+ * @note On L/Z series devices, DMA_TRANSFER_SIZE_16B and DMA_TRANSFER_SIZE_32B
+ *       are not supported.
  */
 typedef enum
 {
@@ -111,11 +163,16 @@ typedef enum
 } dma_transfer_size_t;
 
 /*!
- * @brief The user configuration structure for the DMA driver.
+ * @brief DMA module user configuration.
  *
- * Use an instance of this structure with the DMA_DRV_Init() function. This allows the user to configure
- * settings of the DMA peripheral with a single function call.
- * Implements : dma_user_config_t_Class
+ * Holds module-level parameters passed to DMA_DRV_Init(). Controls global
+ * DMA behavior that applies to all channels.
+ *
+ * | Field               | Type   | Description                                              |
+ * |---------------------|--------|----------------------------------------------------------|
+ * | haltOnError         | bool   | Halt all channels when any channel reports an error.     |
+ * | eccErrorEnable      | bool   | Enable ECC error detection (device-specific).            |
+ * | maxChannelForChLink | bool   | DMA errata E406002 workaround (device-specific).         |
  */
 typedef struct
 {
@@ -131,11 +188,15 @@ typedef struct
 } dma_user_config_t;
 
 /*!
- * @brief Channel status for DMA channel.
+ * @brief DMA channel status.
  *
- * A structure describing the DMA channel status. The user can get the status by callback parameter
- * or by calling DMA_DRV_getStatus() function.
- * Implements : dma_chn_status_t_Class
+ * Indicates the current state of a DMA channel. Returned by the channel
+ * callback or by DMA_DRV_GetChannelStatus().
+ *
+ * | Value           | Meaning                                |
+ * |-----------------|----------------------------------------|
+ * | DMA_CHN_NORMAL  | Channel is idle or operating normally.  |
+ * | DMA_CHN_ERROR   | An error occurred on this channel.      |
  */
 typedef enum
 {
@@ -144,15 +205,22 @@ typedef enum
 } dma_chn_status_t;
 
 /*!
- * @brief Definition for the DMA channel callback function.
+ * @brief DMA channel callback function prototype.
  *
- * Prototype for the callback function registered in the DMA driver.
- * Implements : dma_callback_t_Class
+ * Callback invoked by the DMA IRQ handler when a channel completes its
+ * transfer or encounters an error. Register via DMA_DRV_InstallCallback().
+ *
+ * @param[in] parameter  User-defined parameter passed during callback registration.
+ * @param[in] status     Channel status indicating normal completion or error.
  */
 typedef void (*dma_callback_t)(void *parameter, dma_chn_status_t status);
 
-/*! @brief Data structure for the DMA channel state.
- * Implements : dma_chn_state_t_Class
+/*!
+ * @brief DMA channel runtime state.
+ *
+ * Internal state structure maintained by the driver for each active channel.
+ * Allocated by the application and passed to DMA_DRV_ChannelInit(). The
+ * memory must remain valid until DMA_DRV_ReleaseChannel() is called.
  */
 typedef struct
 {
@@ -165,11 +233,17 @@ typedef struct
 } dma_chn_state_t;
 
 /*!
- * @brief The user configuration structure for the an DMA driver channel.
+ * @brief DMA channel initialization configuration.
  *
- * Use an instance of this structure with the DMA_DRV_ChannelInit() function. This allows the user to configure
- * settings of the DMA channel with a single function call.
- * Implements : dma_channel_config_t_Class
+ * Passed to DMA_DRV_ChannelInit() to configure a single DMA channel,
+ * including virtual channel number, request source, and callback.
+ *
+ * | Field          | Type                  | Description                                      |
+ * |----------------|-----------------------|--------------------------------------------------|
+ * | virtChnConfig  | uint8_t               | DMA virtual channel number.                      |
+ * | source         | dma_request_source_t  | DMA request source (defined in device features).  |
+ * | callback       | dma_callback_t        | Callback for transfer complete / error events.    |
+ * | callbackParam  | void *                | User parameter forwarded to the callback.         |
  */
 typedef struct
 {
@@ -179,8 +253,13 @@ typedef struct
     void *callbackParam;                    /*!< Parameter passed to the channel callback */
 } dma_channel_config_t;
 
-/*! @brief A type for the DMA transfer.
- * Implements : dma_transfer_type_t_Class
+/*!
+ * @brief DMA transfer direction type.
+ *
+ * Specifies the source and destination type (memory or peripheral) for a
+ * DMA transfer. Affects how the driver configures address offsets: peripheral
+ * addresses use zero offset (fixed register), while memory addresses are
+ * auto-incremented.
  */
 typedef enum
 {
@@ -190,8 +269,18 @@ typedef enum
     DMA_TRANSFER_PERIPH2PERIPH      /*!< Transfer from peripheral to peripheral */
 } dma_transfer_type_t;
 
-/*! @brief Data structure for configuring a discrete memory transfer.
- * Implements : dma_ram_reload_list_t_Class
+/*!
+ * @brief Ram reload (scatter-gather) list entry.
+ *
+ * Describes one memory block in a ram reload transfer chain. An array of
+ * these structures is passed to DMA_DRV_ConfigRamReloadTransfer() for both
+ * source and destination.
+ *
+ * | Field   | Type                 | Description                                   |
+ * |---------|----------------------|-----------------------------------------------|
+ * | address | uint32_t             | Start address of the data buffer.              |
+ * | length  | uint32_t             | Number of bytes in the buffer (ignored if peripheral). |
+ * | type    | dma_transfer_type_t  | Transfer direction (M2M, M2P, P2M, P2P).      |
  */
 typedef struct
 {
@@ -201,13 +290,11 @@ typedef struct
 } dma_ram_reload_list_t;
 
 /*!
- * @brief Runtime state structure for the DMA driver.
+ * @brief DMA module runtime state.
  *
- * This structure holds data that is used by the DMA peripheral driver to manage
- * multi DMA channels.
- * The user passes the memory for this run-time state structure and the DMA
- * driver populates the members.
- * Implements : dma_state_t_Class
+ * Internal state structure that the driver uses to track all virtual channel
+ * allocations. Allocated by the application and passed to DMA_DRV_Init().
+ * The memory must remain valid until DMA_DRV_Deinit() is called.
  */
 typedef struct
 {
@@ -221,8 +308,20 @@ typedef struct
 /*!
  * @brief DMA loop transfer configuration.
  *
- * This structure configures the basic transfer/trigger loop attributes.
- * Implements : dma_loop_transfer_config_t_Class
+ * Configures the transfer loop and trigger loop behavior for loop-mode
+ * transfers. Pass a pointer to this structure in the @c loopTransferConfig
+ * field of dma_transfer_config_t when using DMA_DRV_ConfigLoopTransfer().
+ *
+ * | Field                      | Type     | Description                                                        |
+ * |----------------------------|----------|--------------------------------------------------------------------|
+ * | triggerLoopIterationCount   | uint32_t | Number of trigger loop iterations.                                 |
+ * | srcOffsetEnable             | bool     | Apply transfer loop offset to source address on loop completion.   |
+ * | dstOffsetEnable             | bool     | Apply transfer loop offset to destination address on loop completion. |
+ * | triggerLoopOffset           | int32_t  | Signed offset applied to address after transfer loop completes.    |
+ * | transferLoopChnLinkEnable   | bool     | Enable channel linking on transfer loop completion.                |
+ * | transferLoopChnLinkNumber   | uint8_t  | Channel to link on transfer loop completion.                       |
+ * | triggerLoopChnLinkEnable    | bool     | Enable channel linking on trigger loop completion.                 |
+ * | triggerLoopChnLinkNumber    | uint8_t  | Channel to link on trigger loop completion.                        |
  */
 typedef struct
 {
@@ -242,10 +341,30 @@ typedef struct
 } dma_loop_transfer_config_t;
 
 /*!
- * @brief DMA transfer size configuration.
+ * @brief DMA transfer configuration.
  *
- * This structure configures the basic source/destination transfer attribute.
- * Implements : dma_transfer_config_t_Class
+ * Complete transfer descriptor used by DMA_DRV_PushConfigToReg(),
+ * DMA_DRV_PushConfigToSCTS(), DMA_DRV_ConfigLoopTransfer(), and
+ * DMA_DRV_ConfigRamReloadTransfer(). Defines source/destination addresses,
+ * transfer sizes, offsets, modulo settings, and optional loop configuration.
+ *
+ * | Field                 | Type                           | Description                                         |
+ * |-----------------------|--------------------------------|-----------------------------------------------------|
+ * | srcAddr               | uint32_t                       | Source buffer start address.                         |
+ * | destAddr              | uint32_t                       | Destination buffer start address.                    |
+ * | srcTransferSize       | dma_transfer_size_t            | Bytes per source bus read.                           |
+ * | destTransferSize      | dma_transfer_size_t            | Bytes per destination bus write.                     |
+ * | srcOffset             | int16_t                        | Signed address increment after each source read.     |
+ * | destOffset            | int16_t                        | Signed address increment after each destination write.|
+ * | srcLastAddrAdjust     | int32_t                        | Adjustment to source address after trigger loop completes. |
+ * | destLastAddrAdjust    | int32_t                        | Adjustment to destination address (only when ram reload is disabled). |
+ * | srcModulo             | dma_modulo_t                   | Source circular buffer modulo.                       |
+ * | destModulo            | dma_modulo_t                   | Destination circular buffer modulo.                  |
+ * | transferLoopByteCount | uint32_t                       | Bytes transferred per transfer loop iteration.       |
+ * | ramReloadEnable       | bool                           | Enable ram reload (scatter-gather) mode.             |
+ * | ramReloadNextDescAddr | uint32_t                       | Address of the next CTS descriptor (32-byte aligned).|
+ * | interruptEnable       | bool                           | Enable interrupt on trigger loop completion.         |
+ * | loopTransferConfig    | dma_loop_transfer_config_t *   | Pointer to loop configuration (NULL if unused).      |
  */
 typedef struct
 {
@@ -279,9 +398,12 @@ typedef struct
                                                            enabled from DMA configuration. */
 } dma_transfer_config_t;
 
-/*! @brief DMA CTS
- * DMA CTS structure, reflects DMA CTS configuration registers.
- * Implements : dma_software_cts_t_Class
+/*!
+ * @brief Software CTS (Channel Transfer Structure) descriptor.
+ *
+ * Mirrors the hardware CTS register layout (32 bytes). Used for ram reload
+ * (scatter-gather) transfers where multiple transfer descriptors are chained
+ * in memory. Allocate using the SCTS_SIZE() macro and align with SCTS_ADDR().
  */
 typedef struct
 {
@@ -307,33 +429,32 @@ extern "C" {
 #endif
 
 /*!
-  * @name DMA Peripheral Driver
-  * @{
-  */
+ * @name Initialization & De-initialization
+ * @brief Functions for setting up and tearing down the DMA module.
+ * @{
+ */
 
 /*!
-  * @name DMA peripheral driver module level functions
-  * @{
-  */
-
-/*!
- * @brief Initializes the DMA module.
+ * @brief Initialize the DMA module with user-provided configuration.
  *
- * This function initializes the run-time state structure to provide the DMA channel allocation
- * release, protect, and track the state for channels. This function also resets the DMA modules,
- * initializes the module to user-defined settings and default settings.
- * @param dmaState The pointer to the DMA peripheral driver state structure. The user passes
- * the memory for this run-time state structure and the DMA peripheral driver populates the
- * members. This run-time state structure keeps track of the DMA channels status. The memory must
- * be kept valid before calling the DMA_DRV_DeInit.
- * @param userConfig User configuration structure for DMA peripheral drivers. The user populates the
- * members of this structure and passes the pointer of this structure into the function.
- * @param chnStateArray Array of pointers to run-time state structures for DMA channels;
- * will populate the state structures inside the DMA driver state structure.
- * @param chnConfigArray Array of pointers to channel initialization structures.
- * @param chnCount The number of DMA channels to be initialized.
+ * Resets the DMA peripheral to its default state, then applies the module-level
+ * settings from @a userConfig. Initializes the internal state structure for
+ * virtual channel allocation and optionally configures a set of channels.
  *
- * @return STATUS_ERROR or STATUS_SUCCESS.
+ * @param[in]  dmaState       Pointer to the module runtime state structure.
+ *                            The caller allocates this memory; the driver
+ *                            populates it. Must remain valid until DMA_DRV_Deinit().
+ * @param[in]  userConfig     Pointer to the module configuration (halt-on-error, etc.).
+ * @param[in]  chnStateArray  Array of pointers to per-channel state structures.
+ * @param[in]  chnConfigArray Array of pointers to per-channel configurations.
+ * @param[in]  chnCount       Number of channels to initialize (array length).
+ * @return Execution status.
+ * @retval STATUS_SUCCESS  Initialization completed successfully.
+ * @retval STATUS_ERROR    Invalid parameter or channel allocation failure.
+ *
+ * @pre  The DMA peripheral clock must be enabled via the clock_manager.
+ * @post The DMA module is configured and the specified channels are ready
+ *       for transfer configuration.
  */
 status_t DMA_DRV_Init(dma_state_t *dmaState,
                       const dma_user_config_t *userConfig,
@@ -342,107 +463,119 @@ status_t DMA_DRV_Init(dma_state_t *dmaState,
                       uint32_t chnCount);
 
 /*!
- * @brief De-initializes the DMA module.
+ * @brief De-initialize the DMA module, releasing all resources.
  *
- * This function resets the DMA module to reset state and disables the interrupt to the core.
+ * Resets the DMA peripheral to its default state and releases all channel
+ * state structures. After calling this function the module may be
+ * re-initialized with DMA_DRV_Init().
  *
- * @return STATUS_ERROR or STATUS_SUCCESS.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS  De-initialization completed successfully.
+ * @retval STATUS_ERROR    Module was not initialized.
+ *
+ * @note This function does NOT disable the DMA peripheral clock. The caller
+ *       is responsible for clock management.
  */
 status_t DMA_DRV_Deinit(void);
 
 /*! @} */
 
 /*!
-  * @name DMA peripheral driver channel management functions
-  * @{
-  */
+ * @name Channel Management
+ * @brief Functions for allocating and releasing individual DMA channels.
+ * @{
+ */
 
 /*!
- * @brief Initializes an DMA channel.
+ * @brief Initialize a single DMA channel.
  *
- * This function initializes the run-time state structure for a DMA channel, based on user
- * configuration. It will request the channel, set up the channel priority and install the
- * callback.
+ * Allocates the virtual channel, configures the DMA request source via
+ * DMAMUX (if available), and registers the user callback.
  *
- * @param dmaChannelState Pointer to the DMA channel state structure. The user passes
- * the memory for this run-time state structure and the DMA peripheral driver populates the
- * members. This run-time state structure keeps track of the DMA channel status. The memory must
- * be kept valid before calling the DMA_DRV_ReleaseChannel.
- * @param dmaChannelConfig User configuration structure for DMA channel. The user populates the
- * members of this structure and passes the pointer of this structure into the function.
+ * @param[in]  dmaChannelState   Pointer to per-channel state structure. The
+ *                               caller allocates this; memory must remain valid
+ *                               until DMA_DRV_ReleaseChannel().
+ * @param[in]  dmaChannelConfig  Pointer to channel configuration (virtual channel
+ *                               number, request source, callback).
+ * @return Execution status.
+ * @retval STATUS_SUCCESS  Channel initialized successfully.
+ * @retval STATUS_ERROR    Channel already allocated or invalid parameter.
  *
- * @return STATUS_ERROR or STATUS_SUCCESS.
+ * @pre  DMA_DRV_Init() must have been called.
  */
 status_t DMA_DRV_ChannelInit(dma_chn_state_t *dmaChannelState,
                              const dma_channel_config_t *dmaChannelConfig);
 
 /*!
- * @brief Releases an DMA channel.
+ * @brief Release a DMA channel.
  *
- * This function stops the DMA channel and disables the interrupt of this channel. The channel state
- * structure can be released after this function is called.
+ * Stops any in-progress transfer on the channel, disables the channel
+ * interrupt, and frees the virtual channel for reuse.
  *
- * @param virtualChannel DMA virtual channel number.
- *
- * @return STATUS_ERROR or STATUS_SUCCESS.
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS  Channel released successfully.
+ * @retval STATUS_ERROR    Channel was not initialized.
  */
 status_t DMA_DRV_ReleaseChannel(uint8_t virtualChannel);
 
 /*! @} */
 
 /*!
-  * @name DMA peripheral driver transfer setup functions
-  * @{
-  */
+ * @name Transfer Configuration
+ * @brief Functions for configuring DMA transfer descriptors: single-block,
+ *        multi-block, loop, and ram reload (scatter-gather) modes.
+ * @{
+ */
 
 /*!
- * @brief Copies the channel configuration to the CTS registers.
+ * @brief Copy a transfer configuration to the hardware CTS registers.
  *
- * @param virtualChannel DMA virtual channel number.
- * @param cts Pointer to the channel configuration structure.
+ * Writes all fields from @a cts directly to the channel's hardware CTS
+ * registers. The channel should be stopped before calling this function.
+ *
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @param[in] cts             Pointer to the transfer configuration structure.
  */
 void DMA_DRV_PushConfigToReg(uint8_t virtualChannel,
                              const dma_transfer_config_t *cts);
 
 /*!
- * @brief Copies the channel configuration to the software CTS structure.
+ * @brief Copy a transfer configuration to a software CTS structure.
  *
- * This function copies the properties from the channel configuration to the software CTS structure; the address
- * of the software CTS can be used to enable ram reload operation (pointer to the next CTS).
-
- * @param config Pointer to the channel configuration structure.
- * @param scts Pointer to the software CTS structure.
+ * Populates a software CTS descriptor in memory from the given transfer
+ * configuration. The software CTS address can then be used as the next
+ * descriptor in a ram reload (scatter-gather) chain.
+ *
+ * @param[in]  config  Pointer to the transfer configuration structure.
+ * @param[out] scts    Pointer to the software CTS structure to populate.
  */
 void DMA_DRV_PushConfigToSCTS(const dma_transfer_config_t *config,
                               dma_software_cts_t *scts);
 
 /*!
- * @brief Configures a simple single block data transfer with DMA.
+ * @brief Configure a single-block DMA transfer.
  *
- * This function configures the descriptor for a single block transfer.
- * The function considers contiguous memory blocks, thus it configures the CTS
- * source/destination offset fields to cover the data buffer without gaps,
- * according to "transferSize" parameter (the offset is equal to the number of
- * bytes transferred in a source read/destination write).
+ * Sets up a one-shot transfer of a contiguous data buffer. The source and
+ * destination address offsets are derived automatically from @a transferSize
+ * so that the buffer is traversed without gaps. For peripheral transfers,
+ * the peripheral side uses a zero offset (fixed register address).
  *
- * NOTE: For memory-to-peripheral or peripheral-to-memory transfers, make sure
- * the transfer size is equal to the data buffer size of the peripheral used,
- * otherwise only truncated chunks of data may be transferred (e.g. for a
- * communication IP with an 8-bit data register the transfer size should be 1B,
- * whereas for a 32-bit data register, the transfer size should be 4B). The
- * rationale of this constraint is that, on the peripheral side, the address
- * offset is set to zero, allowing to read/write data from/to the peripheral
- * in a single source read/destination write operation.
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @param[in] type            Transfer direction (M2M, P2M, M2P, P2P).
+ * @param[in] srcAddr         Source start address (register or memory).
+ * @param[in] destAddr        Destination start address (register or memory).
+ * @param[in] transferSize    Bytes per bus access (source and destination share
+ *                            this size). Must match the peripheral data register
+ *                            width for peripheral transfers.
+ * @param[in] dataBufferSize  Total number of bytes to transfer.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS  Transfer configured and started.
+ * @retval STATUS_ERROR    Invalid parameter or channel not initialized.
  *
- * @param virtualChannel DMA virtual channel number.
- * @param type Transfer type (M->M, P->M, M->P, P->P).
- * @param srcAddr A source register address or a source memory address.
- * @param destAddr A destination register address or a destination memory address.
- * @param transferSize The number of bytes to be transferred on every DMA write/read.
- *        Source/Dest share the same write/read size.
- * @param dataBufferSize The total number of bytes to be transferred.
- *
- * @return STATUS_ERROR or STATUS_SUCCESS
+ * @warning For peripheral transfers, @a transferSize must equal the peripheral
+ *          data register width (e.g. 1 byte for an 8-bit UART data register,
+ *          4 bytes for a 32-bit SPI FIFO).
  */
 status_t DMA_DRV_ConfigSingleBlockTransfer(uint8_t virtualChannel,
                                            dma_transfer_type_t type,
@@ -452,36 +585,29 @@ status_t DMA_DRV_ConfigSingleBlockTransfer(uint8_t virtualChannel,
                                            uint32_t dataBufferSize);
 
 /*!
- * @brief Configures a multiple block data transfer with DMA.
+ * @brief Configure a multi-block DMA transfer.
  *
- * This function configures the descriptor for a multi-block transfer.
- * The function considers contiguous memory blocks, thus it configures the CTS
- * source/destination offset fields to cover the data buffer without gaps,
- * according to "transferSize" parameter (the offset is equal to the number of
- * bytes transferred in a source read/destination write). The buffer is divided
- * in multiple block, each block being transferred upon a single DMA request.
+ * Divides a contiguous buffer into multiple equal-sized blocks. Each block
+ * is transferred upon a separate DMA request (one trigger loop iteration per
+ * block). Address offsets are derived from @a transferSize automatically.
  *
- * NOTE: For transfers to/from peripherals, make sure
- * the transfer size is equal to the data buffer size of the peripheral used,
- * otherwise only truncated chunks of data may be transferred (e.g. for a
- * communication IP with an 8-bit data register the transfer size should be 1B,
- * whereas for a 32-bit data register, the transfer size should be 4B). The
- * rationale of this constraint is that, on the peripheral side, the address
- * offset is set to zero, allowing to read/write data from/to the peripheral
- * in a single source read/destination write operation.
+ * @param[in] virtualChannel         DMA virtual channel number.
+ * @param[in] type                   Transfer direction (M2M, P2M, M2P, P2P).
+ * @param[in] srcAddr                Source start address.
+ * @param[in] destAddr               Destination start address.
+ * @param[in] transferSize           Bytes per bus access. Must match the
+ *                                   peripheral data register width for
+ *                                   peripheral transfers.
+ * @param[in] blockSize              Bytes per block (one transfer loop).
+ * @param[in] blockCount             Number of blocks (trigger loop count).
+ * @param[in] disableReqOnCompletion If true, the DMA request is auto-cleared
+ *                                   when all blocks are transferred.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS  Transfer configured and started.
+ * @retval STATUS_ERROR    Invalid parameter or channel not initialized.
  *
- * @param virtualChannel DMA virtual channel number.
- * @param type Transfer type (M->M, P->M, M->P, P->P).
- * @param srcAddr A source register address or a source memory address.
- * @param destAddr A destination register address or a destination memory address.
- * @param transferSize The number of bytes to be transferred on every DMA write/read.
- *        Source/Dest share the same write/read size, one bus transfer byte count.
- * @param blockSize The total number of bytes inside a block, one trigger loop byte count.
- * @param blockCount The total number of data blocks (one block is transferred upon a DMA request).
- * @param disableReqOnCompletion This parameter specifies whether the DMA channel should
- *        be disabled when the transfer is complete (further requests will remain untreated).
- *
- * @return STATUS_ERROR or STATUS_SUCCESS
+ * @warning For peripheral transfers, @a transferSize must equal the peripheral
+ *          data register width.
  */
 status_t DMA_DRV_ConfigMultiBlockTransfer(uint8_t virtualChannel,
                                           dma_transfer_type_t type,
@@ -493,51 +619,55 @@ status_t DMA_DRV_ConfigMultiBlockTransfer(uint8_t virtualChannel,
                                           bool disableReqOnCompletion);
 
 /*!
- * @brief Configures the DMA transfer in loop mode.
+ * @brief Configure a loop-mode DMA transfer.
  *
- * This function configures the DMA transfer in a loop chain. The user passes a block of memory into this
- * function that configures the loop transfer properties (transfer/trigger loop count, address offsets, channel linking).
- * The DMA driver copies the configuration to CTS registers, only when the loop properties are set up correctly
- * and transfer loop mapping is enabled for the DMA module.
+ * Sets up a transfer with extended loop control (transfer loop offsets,
+ * channel linking on loop completion). Requires transfer loop mapping to
+ * be enabled in the DMA module configuration.
  *
- * @param virtualChannel DMA virtual channel number.
- * @param transferConfig Pointer to the transfer configuration structure; this structure defines fields for setting
- * up the basic transfer and also a pointer to a memory structure that defines the loop chain properties (minor/major).
+ * @param[in] virtualChannel   DMA virtual channel number.
+ * @param[in] transferConfig   Pointer to the transfer configuration. The
+ *                             @c loopTransferConfig field must point to a
+ *                             valid dma_loop_transfer_config_t structure.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS  Transfer configured successfully.
+ * @retval STATUS_ERROR    Transfer loop mapping not enabled or invalid parameter.
  *
- * @return STATUS_ERROR or STATUS_SUCCESS
+ * @pre Transfer loop mapping must be enabled (set in dma_user_config_t).
  */
 status_t DMA_DRV_ConfigLoopTransfer(uint8_t virtualChannel,
                                     const dma_transfer_config_t *transferConfig);
 
 /*!
- * @brief Configures the DMA transfer in a ram reload mode.
+ * @brief Configure a ram reload (scatter-gather) DMA transfer chain.
  *
- * This function configures the descriptors into a single-ended chain. The user passes blocks of memory into
- * this function. The interrupt is triggered only when the last memory block is completed. The memory block
- * information is passed with the dma_ram_reload_list_t data structure, which can tell
- * the memory address and length.
- * The DMA driver configures the descriptor for each memory block, transfers the descriptor from the
- * first one to the last one, and stops.
+ * Builds a linked chain of CTS descriptors in memory. Each entry in the
+ * source/destination lists describes one data block. The DMA engine
+ * automatically reloads the next descriptor after completing each block;
+ * an interrupt fires only when the last block completes.
  *
- * @param virtualChannel DMA virtual channel number.
- * @param scts Array of empty software CTS structures. The user must prepare this memory block. We don't need a
- * software CTS structure for the first descriptor, since the configuration is pushed directly to registers.The "scts"
- * buffer must align with 32 bytes; if not, an error occurs in the DMA driver. Thus, the required
- * memory size for "scts" is equal to ctsCount * size_of(dma_software_cts_t) - 1; the driver will take
- * care of the memory alignment if the provided memory buffer is big enough. For proper allocation of the
- * "scts" buffer it is recommended to use SCTS_SIZE macro.
- * @param transferSize The number of bytes to be transferred on every DMA write/read.
- * @param bytesOnEachRequest Bytes to be transferred in each DMA request.
- * @param srcList Data structure storing the address, length and type of transfer (M->M, M->P, P->M, P->P) for
- * the bytes to be transferred for source memory blocks. If the source memory is peripheral, the length
- * is not used.
- * @param destList Data structure storing the address, length and type of transfer (M->M, M->P, P->M, P->P) for
- * the bytes to be transferred for destination memory blocks. In the memory-to-memory transfer mode, the
- * user must ensure that the length of the destination ram reload list is equal to the source
- * ram reload list. If the destination memory is a peripheral register, the length is not used.
- * @param ctsCount The number of CTS memory blocks contained in the ram reload list.
+ * @param[in]  virtualChannel     DMA virtual channel number.
+ * @param[out] scts               Array of software CTS structures. Must be
+ *                                allocated with at least SCTS_SIZE(@a ctsCount)
+ *                                bytes and aligned to 32 bytes via SCTS_ADDR().
+ *                                The first descriptor is pushed directly to
+ *                                hardware registers; the remaining descriptors
+ *                                are stored in this array.
+ * @param[in]  transferSize       Bytes per bus access.
+ * @param[in]  bytesOnEachRequest Bytes transferred per DMA request.
+ * @param[in]  srcList            Source block descriptors (address, length, type).
+ *                                If source is a peripheral, length is ignored.
+ * @param[in]  destList           Destination block descriptors. For M2M transfers,
+ *                                destination lengths must match source lengths.
+ *                                If destination is a peripheral, length is ignored.
+ * @param[in]  ctsCount           Number of blocks in the ram reload chain.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS  Transfer chain configured successfully.
+ * @retval STATUS_ERROR    Alignment error, invalid parameter, or channel not initialized.
  *
- * @return STATUS_ERROR or STATUS_SUCCESS
+ * @pre  DMA_DRV_ChannelInit() must have been called for this channel.
+ * @note The @a scts buffer must be 32-byte aligned. Use the SCTS_SIZE() and
+ *       SCTS_ADDR() macros for correct allocation and alignment.
  */
 status_t DMA_DRV_ConfigRamReloadTransfer(uint8_t virtualChannel,
                                          dma_software_cts_t *scts,
@@ -548,259 +678,304 @@ status_t DMA_DRV_ConfigRamReloadTransfer(uint8_t virtualChannel,
                                          uint8_t ctsCount);
 
 /*!
- * @brief Cancel the running transfer.
+ * @brief Cancel the currently executing DMA transfer.
  *
- * This function cancels the current transfer, optionally signalling an error.
+ * Stops the active transfer after the current read/write sequence completes.
+ * Optionally treats the cancellation as an error condition.
  *
- * @param bool error If true, an error will be logged for the current transfer.
+ * @param[in] error  If true, the cancellation is logged as a channel error.
+ *                   If false, the channel retires normally.
  */
 void DMA_DRV_CancelTransfer(bool error);
 
 /*! @} */
 
 /*!
-  * @name DMA Peripheral driver channel operation functions
-  * @{
-  */
+ * @name Channel Control
+ * @brief Functions for starting, stopping, and triggering DMA channels.
+ * @{
+ */
+
 /*!
- * @brief Starts an DMA channel.
+ * @brief Start a DMA channel by enabling its hardware request.
  *
- * This function enables the DMA channel DMA request.
+ * After the channel is started, it will respond to DMA requests from the
+ * configured request source.
  *
- * @param virtualChannel DMA virtual channel number.
- *
- * @return STATUS_ERROR or STATUS_SUCCESS.
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS  Channel started successfully.
+ * @retval STATUS_ERROR    Channel not initialized.
  */
 status_t DMA_DRV_StartChannel(uint8_t virtualChannel);
 
 /*!
- * @brief Stops the DMA channel.
+ * @brief Stop a DMA channel by disabling its hardware request.
  *
- * This function disables the DMA channel DMA request.
+ * The channel will no longer respond to DMA requests after this call.
+ * Any in-progress transfer loop completes normally before the channel idles.
  *
- * @param virtualChannel DMA virtual channel number.
- *
- * @return STATUS_ERROR or STATUS_SUCCESS.
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS  Channel stopped successfully.
+ * @retval STATUS_ERROR    Channel not initialized.
  */
 status_t DMA_DRV_StopChannel(uint8_t virtualChannel);
 
 /*!
- * @brief Configures the DMA request for the DMA channel.
+ * @brief Configure the DMA request source for a channel.
  *
- * Selects which DMA source is routed to a DMA channel. The DMA sources are defined in the file
- * <MCU>_Features.h
+ * Routes a DMA request source to the specified virtual channel via DMAMUX.
+ * Available request sources are defined in the device-specific features header.
  *
- * @param virtualChannel DMA virtual channel number.
- * @param request DMA request source.
- *
- * @return STATUS_SUCCESS or STATUS_UNSUPPORTED.
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @param[in] request         DMA request source number.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS      Request source configured.
+ * @retval STATUS_UNSUPPORTED  DMAMUX not available on this device.
  */
 status_t DMA_DRV_SetChannelRequestAndTrigger(uint8_t virtualChannel,
                                              uint8_t request);
 
 /*!
- * @brief Clears all registers to 0 for the channel's CTS.
+ * @brief Clear all CTS registers for a channel to zero.
  *
- * @param virtualChannel DMA virtual channel number.
+ * Resets the hardware CTS registers of the specified channel to their default
+ * state (all zeros). Useful before reconfiguring a channel.
+ *
+ * @param[in] virtualChannel  DMA virtual channel number.
  */
 void DMA_DRV_ClearCTS(uint8_t virtualChannel);
 
 /*!
- * @brief Configures the source address for the DMA channel.
+ * @brief Issue a software-triggered DMA request for a channel.
  *
- * @param virtualChannel DMA virtual channel number.
- * @param address The pointer to the source memory address.
- */
-void DMA_DRV_SetSrcAddr(uint8_t virtualChannel, uint32_t address);
-
-/*!
- * @brief Configures the source address signed offset for the DMA channel.
+ * Triggers one transfer loop iteration via software, bypassing the hardware
+ * request source. The channel must have been configured and started.
  *
- * Sign-extended offset applied to the current source address to form the next-state value as each
- * source read is complete.
- *
- * @param virtualChannel DMA virtual channel number.
- * @param offset Signed-offset for source address.
- */
-void DMA_DRV_SetSrcOffset(uint8_t virtualChannel, int16_t offset);
-
-/*!
- * @brief Configures the source data chunk size (transferred in a read sequence).
- *
- * Source data read transfer size (1/2/4/16/32 bytes).
- *
- * @param virtualChannel DMA virtual channel number.
- * @param size Source transfer size.
- */
-void DMA_DRV_SetSrcReadChunkSize(uint8_t virtualChannel,
-                                 dma_transfer_size_t size);
-
-/*!
- * @brief Configures the source address last adjustment.
- *
- * Adjustment value added to the source address at the completion of the major iteration count. This
- * value can be applied to restore the source address to the initial value, or adjust the address to
- * reference the next data structure.
- *
- * @param virtualChannel DMA virtual channel number.
- * @param adjust Adjustment value.
- */
-void DMA_DRV_SetSrcLastAddrAdjustment(uint8_t virtualChannel,
-                                      int32_t adjust);
-
-/*!
- * @brief Configures the destination address for the DMA channel.
- *
- * @param virtualChannel DMA virtual channel number.
- * @param address The pointer to the destination memory address.
- */
-void DMA_DRV_SetDestAddr(uint8_t virtualChannel, uint32_t address);
-
-/*!
- * @brief Configures the destination address signed offset for the DMA channel.
- *
- * Sign-extended offset applied to the current destination address to form the next-state value as each
- * destination write is complete.
- *
- * @param virtualChannel DMA virtual channel number.
- * @param offset signed-offset
- */
-void DMA_DRV_SetDestOffset(uint8_t virtualChannel, int16_t offset);
-
-/*!
- * @brief Configures the destination data chunk size (transferred in a write sequence).
- *
- * Destination data write transfer size (1/2/4/16/32 bytes).
- *
- * @param virtualChannel DMA virtual channel number.
- * @param size Destination transfer size.
- */
-void DMA_DRV_SetDestWriteChunkSize(uint8_t virtualChannel,
-                                   dma_transfer_size_t size);
-
-/*!
- * @brief Configures the destination address last adjustment.
- *
- * Adjustment value added to the destination address at the completion of the major iteration count. This
- * value can be applied to restore the destination address to the initial value, or adjust the address to
- * reference the next data structure.
- *
- * @param virtualChannel DMA virtual channel number.
- * @param adjust Adjustment value.
- */
-void DMA_DRV_SetDestLastAddrAdjustment(uint8_t virtualChannel,
-                                       int32_t adjust);
-
-/*!
- * @brief Configures the number of bytes to be transferred in each service request of the channel.
- *
- * Sets the number of bytes to be transferred each time a request is received (one trigger loop iteration).
- * This number needs to be a multiple of the source/destination transfer size, as the data block will be
- * transferred within multiple read/write sequences (transfer loops).
- *
- * @param virtualChannel DMA virtual channel number.
- * @param nbytes Number of bytes to be transferred in each service request of the channel
- */
-void DMA_DRV_SetTransferLoopBlockSize(uint8_t virtualChannel,
-                                      uint32_t nbytes);
-
-/*!
- * @brief Configures the number of trigger loop iterations.
- *
- * Sets the number of trigger loop iterations; each trigger loop iteration will be served upon a request
- * for the current channel, transferring the data block configured for the transfer loop (BCNT).
- *
- * @param virtualChannel DMA virtual channel number.
- * @param majorLoopCount Number of trigger loop iterations.
- */
-void DMA_DRV_SetTriggerLoopIterationCount(uint8_t virtualChannel,
-                                          uint32_t majorLoopCount);
-
-/*!
- * @brief Returns the remaining trigger loop iteration count.
- *
- * Gets the number transfer loops yet to be triggered (trigger loop iterations).
- *
- * @param virtualChannel DMA virtual channel number.
- * @return number of trigger loop iterations yet to be triggered
- */
-uint32_t DMA_DRV_GetRemainingTriggerIterationsCount(uint8_t virtualChannel);
-
-/*!
- * @brief Configures the memory address of the next CTS, in ram reload mode.
- *
- * This function configures the address of the next CTS to be loaded form memory, when ram reload
- * feature is enabled. This address points to the beginning of a 0-modulo-32 byte region containing
- * the next transfer CTS to be loaded into this channel. The channel reload is performed as the
- * major iteration count completes. The ram reload address must be 0-modulo-32-byte. Otherwise,
- * a configuration error is reported.
- *
- * @param virtualChannel DMA virtual channel number.
- * @param nextCTSAddr The address of the next CTS to be linked to this CTS.
- */
-void DMA_DRV_SetRamReloadLink(uint8_t virtualChannel,
-                              uint32_t nextCTSAddr);
-
-/*!
- * @brief Disables/Enables the DMA request after the trigger loop completes for the CTS.
- *
- * If disabled, the DMA hardware automatically clears the corresponding DMA request when the
- * current trigger loop count reaches zero.
- * If enabled, the DMA hardware does not automatically clear the DMA request when the current
- * trigger loop count reaches zero, if new trigger loop arrives, DMA will start new transfer.
- *
- * @param virtualChannel DMA virtual channel number.
- * @param disable Disable (true)/Enable (false) DMA request after CTS complete.
- */
-void DMA_DRV_DisableRequestsOnTransferComplete(uint8_t virtualChannel,
-                                               bool disable);
-
-/*!
- * @brief Disables/Enables the channel interrupt requests.
- *
- * This function enables/disables error, half trigger loop and complete trigger loop interrupts
- * for the current channel.
- *
- * @param virtualChannel DMA virtual channel number.
- * @param interrupt Interrupt event (error/half trigger loop/complete trigger loop).
- * @param enable Enable (true)/Disable (false) interrupts for the current channel.
- */
-void DMA_DRV_ConfigureInterrupt(uint8_t virtualChannel,
-                                dma_channel_interrupt_t intSrc,
-                                bool enable);
-
-/*!
- * @brief Triggers a software request for the current channel.
- *
- * This function starts a transfer using the current channel (software request).
- *
- * @param virtualChannel DMA virtual channel number.
+ * @param[in] virtualChannel  DMA virtual channel number.
  */
 void DMA_DRV_TriggerSwRequest(uint8_t virtualChannel);
 
 /*! @} */
 
 /*!
-  * @name DMA Peripheral callback and interrupt functions
-  * @{
-  */
+ * @name Source Address Configuration
+ * @brief Functions for configuring the source address, offset, transfer size,
+ *        and last-address adjustment of a DMA channel.
+ * @{
+ */
 
 /*!
- * @brief Registers the callback function and the parameter for DMA channel.
+ * @brief Set the source address for a DMA channel.
  *
- * This function registers the callback function and the parameter into the DMA channel state structure.
- * The callback function is called when the channel is complete or a channel error occurs. The DMA
- * driver passes the channel status to this callback function to indicate whether it is caused by the
- * channel complete event or the channel error event.
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @param[in] address         Source memory or register address.
+ */
+void DMA_DRV_SetSrcAddr(uint8_t virtualChannel, uint32_t address);
+
+/*!
+ * @brief Set the source address signed offset for a DMA channel.
  *
- * To un-register the callback function, set the callback function to "NULL" and call this
- * function.
+ * Sign-extended offset added to the source address after each source read
+ * to form the next read address.
  *
- * @param virtualChannel DMA virtual channel number.
- * @param callback The pointer to the callback function.
- * @param parameter The pointer to the callback function's parameter.
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @param[in] offset          Signed address offset (bytes).
+ */
+void DMA_DRV_SetSrcOffset(uint8_t virtualChannel, int16_t offset);
+
+/*!
+ * @brief Set the source data read chunk size for a DMA channel.
  *
- * @return STATUS_ERROR or STATUS_SUCCESS.
+ * Determines how many bytes are read in a single bus access from the
+ * source (1/2/4/8/16/32/64 bytes).
+ *
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @param[in] size            Source transfer size enumeration.
+ */
+void DMA_DRV_SetSrcReadChunkSize(uint8_t virtualChannel,
+                                 dma_transfer_size_t size);
+
+/*!
+ * @brief Set the source address last adjustment for a DMA channel.
+ *
+ * Signed adjustment value added to the source address when the trigger loop
+ * count completes. Typically used to reset the source address to its initial
+ * value (set to negative total transfer size) for circular operation.
+ *
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @param[in] adjust          Signed adjustment value (bytes).
+ */
+void DMA_DRV_SetSrcLastAddrAdjustment(uint8_t virtualChannel,
+                                      int32_t adjust);
+
+/*! @} */
+
+/*!
+ * @name Destination Address Configuration
+ * @brief Functions for configuring the destination address, offset, transfer
+ *        size, and last-address adjustment of a DMA channel.
+ * @{
+ */
+
+/*!
+ * @brief Set the destination address for a DMA channel.
+ *
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @param[in] address         Destination memory or register address.
+ */
+void DMA_DRV_SetDestAddr(uint8_t virtualChannel, uint32_t address);
+
+/*!
+ * @brief Set the destination address signed offset for a DMA channel.
+ *
+ * Sign-extended offset added to the destination address after each
+ * destination write to form the next write address.
+ *
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @param[in] offset          Signed address offset (bytes).
+ */
+void DMA_DRV_SetDestOffset(uint8_t virtualChannel, int16_t offset);
+
+/*!
+ * @brief Set the destination data write chunk size for a DMA channel.
+ *
+ * Determines how many bytes are written in a single bus access to the
+ * destination (1/2/4/8/16/32/64 bytes).
+ *
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @param[in] size            Destination transfer size enumeration.
+ */
+void DMA_DRV_SetDestWriteChunkSize(uint8_t virtualChannel,
+                                   dma_transfer_size_t size);
+
+/*!
+ * @brief Set the destination address last adjustment for a DMA channel.
+ *
+ * Signed adjustment value added to the destination address when the trigger
+ * loop count completes. Typically used to reset the destination address for
+ * circular operation. Only effective when ram reload is disabled.
+ *
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @param[in] adjust          Signed adjustment value (bytes).
+ */
+void DMA_DRV_SetDestLastAddrAdjustment(uint8_t virtualChannel,
+                                       int32_t adjust);
+
+/*! @} */
+
+/*!
+ * @name Transfer Loop Configuration
+ * @brief Functions for configuring transfer loop byte count, trigger loop
+ *        iterations, ram reload linkage, and auto-disable on completion.
+ * @{
+ */
+
+/*!
+ * @brief Set the transfer loop byte count for a DMA channel.
+ *
+ * Specifies the number of bytes transferred per transfer loop iteration
+ * (one DMA service request). Must be a multiple of the source/destination
+ * transfer size.
+ *
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @param[in] nbytes          Bytes per transfer loop iteration.
+ */
+void DMA_DRV_SetTransferLoopBlockSize(uint8_t virtualChannel,
+                                      uint32_t nbytes);
+
+/*!
+ * @brief Set the trigger loop iteration count for a DMA channel.
+ *
+ * Specifies how many trigger loop iterations (DMA requests) are needed to
+ * complete the full transfer. Each iteration transfers the number of bytes
+ * configured by DMA_DRV_SetTransferLoopBlockSize().
+ *
+ * @param[in] virtualChannel   DMA virtual channel number.
+ * @param[in] majorLoopCount   Number of trigger loop iterations.
+ */
+void DMA_DRV_SetTriggerLoopIterationCount(uint8_t virtualChannel,
+                                          uint32_t majorLoopCount);
+
+/*!
+ * @brief Get the remaining trigger loop iteration count.
+ *
+ * Returns the number of trigger loop iterations still pending for the
+ * specified channel.
+ *
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @return Number of trigger loop iterations remaining.
+ */
+uint32_t DMA_DRV_GetRemainingTriggerIterationsCount(uint8_t virtualChannel);
+
+/*!
+ * @brief Set the ram reload link address for a DMA channel.
+ *
+ * Configures the address of the next CTS descriptor loaded from memory when
+ * the trigger loop completes. The address must be 32-byte aligned
+ * (0-modulo-32); a configuration error is reported otherwise.
+ *
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @param[in] nextCTSAddr     32-byte aligned address of the next CTS descriptor.
+ *
+ * @warning The ram reload address must be aligned to a 32-byte boundary.
+ */
+void DMA_DRV_SetRamReloadLink(uint8_t virtualChannel,
+                              uint32_t nextCTSAddr);
+
+/*!
+ * @brief Enable or disable auto-clear of the DMA request on trigger loop completion.
+ *
+ * When @a disable is true, the DMA hardware automatically clears the channel's
+ * request when the trigger loop count reaches zero, preventing further transfers.
+ * When false, the request remains active and new triggers continue to start
+ * transfers (useful for continuous/circular operation).
+ *
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @param[in] disable         true = auto-clear request on completion;
+ *                            false = keep request active.
+ */
+void DMA_DRV_DisableRequestsOnTransferComplete(uint8_t virtualChannel,
+                                               bool disable);
+
+/*! @} */
+
+/*!
+ * @name Interrupt & Callback
+ * @brief Functions for enabling/disabling channel interrupts and registering
+ *        user callback functions.
+ * @{
+ */
+
+/*!
+ * @brief Enable or disable a channel interrupt source.
+ *
+ * Controls error, half-trigger-loop, and trigger-loop-complete interrupts
+ * for the specified channel.
+ *
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @param[in] intSrc          Interrupt source to configure.
+ * @param[in] enable          true = enable; false = disable.
+ */
+void DMA_DRV_ConfigureInterrupt(uint8_t virtualChannel,
+                                dma_channel_interrupt_t intSrc,
+                                bool enable);
+
+/*!
+ * @brief Register or unregister a callback for a DMA channel.
+ *
+ * The callback is invoked from the DMA IRQ handler when the channel
+ * completes its transfer or encounters an error. Pass NULL as @a callback
+ * to unregister a previously installed callback.
+ *
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @param[in] callback        Pointer to the callback function, or NULL to
+ *                            unregister.
+ * @param[in] parameter       User parameter forwarded to the callback.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS  Callback registered successfully.
+ * @retval STATUS_ERROR    Channel not initialized.
  */
 status_t DMA_DRV_InstallCallback(uint8_t virtualChannel,
                                  dma_callback_t callback,
@@ -809,19 +984,18 @@ status_t DMA_DRV_InstallCallback(uint8_t virtualChannel,
 /*! @} */
 
 /*!
-  * @name DMA Peripheral driver miscellaneous functions
-  * @{
-  */
+ * @name Status
+ * @brief Functions for querying DMA channel status.
+ * @{
+ */
+
 /*!
- * @brief Gets the DMA channel status.
+ * @brief Get the current status of a DMA channel.
  *
- * @param virtualChannel DMA virtual channel number.
- *
- * @return Channel status.
+ * @param[in] virtualChannel  DMA virtual channel number.
+ * @return Channel status (DMA_CHN_NORMAL or DMA_CHN_ERROR).
  */
 dma_chn_status_t DMA_DRV_GetChannelStatus(uint8_t virtualChannel);
-
-/*! @} */
 
 /*! @} */
 

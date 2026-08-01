@@ -1,103 +1,100 @@
-/**
-@defgroup lptmr_driver lpTMR Driver
-@ingroup lptmr
-@brief Low Power Timer Peripheral Driver
-<p>
-The lpTMR is a configurable general-purpose 16-bit counter that has two
-operational modes: Timer and Pulse-Counter.
+/*!
+@addtogroup lptmr
+@brief Instance-based driver API for configuring and operating lpTMR peripherals.
 
-Depending on the configured operational mode, the counter in the lpTMR can
-be incremented using a clock input (Timer mode) or an event counter (external
-events like button presses or internal events from different trigger sources).
+@details
+The `lpTMR_DRV_*` API declared in `lptmr_driver.h` provides the application
+facing layer for the lpTMR peripheral. The driver resolves instance indices to
+base addresses, applies timer or pulse-counter configuration, converts between
+microseconds and hardware ticks, and exposes runtime helpers for compare flags,
+interrupt control, and pin selection.
 
-## Timer Mode ##
-In Timer mode, the lpTMR increments the internal counter from a selectable
-clock source. An optional 16-bit prescaler can be configured.
+@section lptmr_driver_responsibilities Driver Responsibilities
+- Populate default configuration structures for lpTMR instances.
+- Initialize and de-initialize timer or pulse-counter operation by instance.
+- Convert Timer Mode compare values between microseconds and hardware ticks.
+- Validate runtime compare updates and return status codes for reconfiguration failures.
+- Expose compare flag, interrupt, run-state, and pulse-input configuration helpers.
 
-## Pulse-Counter Mode ##
-In Pulse-Counter Mode, the lpTMR counter increments from a selectable
-trigger source, input pin, which can be an external event (like a button
-press) or internal events (like triggers from TMU).
+@section lptmr_driver_categories Driver API Categories
 
-An optional 16-bit glitch-filter can be configured to reject events that have
-a duration below a set period.
+@subsection lptmr_driver_cat_init Initialization & De-initialization
+| Function | Description |
+|----------|-------------|
+| lpTMR_DRV_InitConfigStruct() | Fill `lptmr_config_t` with module defaults. |
+| lpTMR_DRV_Init() | Apply a configuration and optionally start the counter immediately. |
+| lpTMR_DRV_Deinit() | Stop the instance and restore reset-state register values. |
 
-## Initialization prerequisites ##
-Before configuring the lpTMR, the peripheral clock must be enabled
-from the PCC module.
+@subsection lptmr_driver_cat_config Configuration
+| Function | Description |
+|----------|-------------|
+| lpTMR_DRV_SetConfig() | Apply a new timer or pulse-counter configuration. |
+| lpTMR_DRV_GetConfig() | Read back the active runtime configuration in tick units. |
 
-The peripheral clock must not be confused with the counter clock, which is selectable
-within the lpTMR.
+@subsection lptmr_driver_cat_compare Compare Value Access
+| Function | Description |
+|----------|-------------|
+| lpTMR_DRV_SetCompareValueByCount() | Program the compare register directly in ticks. |
+| lpTMR_DRV_GetCompareValueByCount() | Read the compare register in ticks. |
+| lpTMR_DRV_SetCompareValueByUs() | Program the compare period in microseconds for Timer Mode. |
+| lpTMR_DRV_GetCompareValueByUs() | Convert the active Timer Mode period back to microseconds. |
 
-## Driver configuration ##
-The lpTMR driver allows configuring the lpTMR for Pulse-Counter Mode or Timer Mode
-via the general configuration structure.
+@subsection lptmr_driver_cat_runtime Runtime Status & Control
+| Function | Description |
+|----------|-------------|
+| lpTMR_DRV_GetCompareFlag() | Query the compare-match flag state. |
+| lpTMR_DRV_ClearCompareFlag() | Clear the compare-match flag. |
+| lpTMR_DRV_IsRunning() | Check whether the counter is enabled. |
+| lpTMR_DRV_SetInterrupt() | Enable or disable compare interrupts. |
+| lpTMR_DRV_GetCounterValueByCount() | Read the current counter value in ticks. |
+| lpTMR_DRV_StartCounter() | Enable the lpTMR counter. |
+| lpTMR_DRV_StopCounter() | Disable the lpTMR counter. |
 
-Configurable options:
-    - work mode (timer or pulse-counter)
-    - enable interrupts and DMA requests
-    - free running mode (overflow mode of the counter)
-    - compare value (interrupt generation on counter value)
-    - compare value measurement units (counter ticks or microseconds)
-    - input clock selection
-    - prescaler/glitch filter configuration
-    - enable bypass prescaler
-    - pin select (for pulse-counter mode)
-    - input pin and polarity (for pulse-counter mode)
-~~~~~{.c}
-/* lpTMR initialization of config structure */
-lptmr_config_t config = {
-  .workMode = lpTMR_WORKMODE_TIMER,
-  .dmaRequest = false,
-  .interruptEnable = false,
-  .freeRun = false,
-  .compareValue = 1000U,
-  .counterUnits = lpTMR_COUNTER_UNITS_TICKS,
-  .clockSelect = lpTMR_CLOCKSOURCE_SIRCDIV2,
-  .prescaler = lpTMR_PRESCALE_2,
-  .bypassPrescaler = false,
-  .pinSelect = lpTMR_PINSELECT_TMU,
-  .pinPolarity = lpTMR_PINPOLARITY_RISING,
-};
+@subsection lptmr_driver_cat_pin Pulse Counter Pin Configuration
+| Function | Description |
+|----------|-------------|
+| lpTMR_DRV_SetPinConfiguration() | Update pulse source selection and active edge. |
 
-/* Initialize the lpTMR and start the counter in a separate operation */
-status = lpTMR_DRV_Init(0, &config, false);
-/* Start timer counting */
-lpTMR_DRV_StartCounter(0);
-~~~~~
-</p>
-<p>
-## API ##
-Some of the features exposed by the API are targeted specifically for Timer Mode or
-Pulse-Counter Mode. For example, configuring the Compare Value in microseconds makes sense
-only for Timer Mode, so therefor it is restricted for use in Pulse-Counter mode.
+@section lptmr_driver_example Usage Example
+@code{.c}
+#define INST_LPTMR (0U)
 
-For any invalid configuration the functions will either return an error code or trigger DEV_ASSERT (if enabled).
-For more details, please refer to each function description.
-</p>
+lptmr_config_t config;
 
-## Integration guideline ##
+lpTMR_DRV_InitConfigStruct(&config);
+config.workMode = lpTMR_WORKMODE_TIMER;
+config.counterUnits = lpTMR_COUNTER_UNITS_MICROSECONDS;
+config.compareValue = 1000U;
 
-### Compilation units ###
+lpTMR_DRV_Init(INST_LPTMR, &config, true);
 
-The following files need to be compiled in the project:
-\verbatim
-${SDK_PATH}\platform\drivers\src\lptmr_driver.c
-${SDK_PATH}\platform\drivers\src\lptmr_hw_access.c
-\endverbatim
+if (lpTMR_DRV_GetCompareFlag(INST_LPTMR))
+{
+    lpTMR_DRV_ClearCompareFlag(INST_LPTMR);
+}
+@endcode
 
-### Include path ###
+@section lptmr_driver_notes Important Notes
+@warning The lpTMR peripheral clock must be enabled before calling `lpTMR_DRV_Init()` or `lpTMR_DRV_SetConfig()`.
+@warning The microsecond APIs are valid only in Timer Mode. Calling them in Pulse-Counter Mode triggers `DEV_ASSERT` checks.
+@warning Runtime compare updates can fail with `STATUS_ERROR` or `STATUS_TIMEOUT` if the counter state does not allow the new compare value.
+@note `lpTMR_DRV_GetConfig()` always reports the compare value in ticks, regardless of how it was programmed originally.
+@note The driver caches the timer clock frequency during configuration and reuses that value for microsecond conversions.
 
-The following paths need to be added to the include path of the toolchain:
-\verbatim
+@section lptmr_driver_integration Integration Guide
+
+@subsection lptmr_driver_units Compilation Units
+@verbatim
+${SDK_PATH}\platform\drivers\src\lptmr\lptmr_driver.c
+${SDK_PATH}\platform\drivers\src\lptmr\lptmr_hw_access.c
+@endverbatim
+
+@subsection lptmr_driver_include Include Path
+@verbatim
 ${SDK_PATH}\platform\drivers\inc\
-\endverbatim
+${SDK_PATH}\platform\drivers\src\lptmr\
+@endverbatim
 
-### Compile symbols ###
-
-No special symbols are required for this component
-
-### Dependencies ###
-\ref clock_manager
-
+@subsection lptmr_driver_dependencies Dependencies
+- `clock_manager`
 */

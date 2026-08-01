@@ -8,6 +8,23 @@
 /*!
  * @file hcu_hw_access.h
  * @version 1.4.1
+ *
+ * @brief HCU V1 Hardware Access Layer.
+ *
+ * This header provides low-level inline helpers for the HCU V1 registers. The
+ * driver implementation uses these helpers to control status flags, interrupt
+ * enables, engine selection, message framing, FIFO movement, DMA toggles, and
+ * optional HMAC support.
+ *
+ * The helpers are organized into the following categories:
+ *   - Status & Interrupt Control
+ *   - Engine & Context Configuration
+ *   - FIFO Runtime Access
+ *   - DMA, Verification & Reset Control
+ *   - Optional HMAC Control
+ *
+ * @note This is an internal layer used by `hcu_driver.c`. Application code
+ *       should use the public `HCU_DRV_*` APIs from `hcu_driver.h`.
  */
 
 #ifndef HCU_HW_ACCESS_H
@@ -16,65 +33,83 @@
 #include "hcu_driver.h"
 #include "device_registers.h"
 
+/*!
+ * @defgroup hcu_hw_access_v1 HCU V1 Hardware Access
+ * @ingroup hcu_v1
+ * @brief Low-level register helpers for the HCU V1 peripheral.
+ * @{
+ */
+
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
 
-/*! @brief Macro used to enable/disable HCU interrupt request */
+/*! @brief Interrupt line routed to the HCU driver. */
 #define HCU_IRQ_NUMBER            HCU_IRQn
 
-/*! @brief Macro used for checking buffer length */
+/*! @brief Mask used to validate 16-byte aligned payload lengths. */
 #define HCU_BUFF_LEN_CHECK_MASK   0x0FU
 
-/*! @brief Macro used for checking buffer address */
+/*! @brief Mask used to validate 32-bit aligned buffer addresses. */
 #define HCU_BUFF_ADDR_CHECK_MASK   0x03U
 
-/*! @brief Macro used to convert buffer length in bytes to number of 128-bits blocks */
+/*! @brief Convert a byte count into the corresponding 128-bit block count. */
 #define HCU_BUFF_BLOCK_COUNT(x)   ((x) >> 4U)
 
-/*! @brief Macro used for setting output length */
+/*! @brief SHA-256 digest length in bytes. */
 #define HCU_SHA_256_LENGTH        0x20U
 
-/*! @brief Macro used for setting output length */
+/*! @brief SHA-384 digest length in bytes. */
 #define HCU_SHA_384_LENGTH        0x30U
 
-/*! @brief Macro used for setting SHA-256 block size */
+/*! @brief SHA-256 message-block size in bytes. */
 #define HCU_SHA_256_BLOCK_SIZE    0x40U
 
-/*! @brief Macro used for setting SHA-384 block size */
+/*! @brief SHA-384 message-block size in bytes. */
 #define HCU_SHA_384_BLOCK_SIZE    0x80U
 
-/*! @brief HCU engine selection */
+/*!
+ * @brief HCU engine selector.
+ *
+ * Identifies which hardware sub-engine is programmed into the HCU control
+ * register.
+ */
 typedef enum
 {
-    ENG_AES = 1U,
-    ENG_SM4 = 2U,
-    ENG_SHA = 3U
+    ENG_AES = 1U, /*!< AES engine selection. */
+    ENG_SM4 = 2U, /*!< SM4 engine selection. */
+    ENG_SHA = 3U  /*!< SHA engine selection. */
 } hcu_engine_sel_t;
-/*! @brief HCU algorithm selection */
+
+/*!
+ * @brief AES/SM4 algorithm selector written into the hardware control field.
+ */
 typedef enum
 {
-    ALG_AES_ECB = 0U,
-    ALG_AES_CBC = 1U,
-    ALG_AES_CTR = 2U,
-    ALG_AES_CCM = 3U,
-    ALG_AES_CMAC = 4U,
-    ALG_AES_GCM = 5U
+    ALG_AES_ECB = 0U,  /*!< ECB mode selection. */
+    ALG_AES_CBC = 1U,  /*!< CBC mode selection. */
+    ALG_AES_CTR = 2U,  /*!< CTR mode selection. */
+    ALG_AES_CCM = 3U,  /*!< CCM mode selection. */
+    ALG_AES_CMAC = 4U, /*!< CMAC mode selection. */
+    ALG_AES_GCM = 5U   /*!< GCM mode selection. */
 } hcu_alg_aes_mode_t;
-/*! @brief HCU status flag */
+
+/*!
+ * @brief HCU status and interrupt flag positions.
+ */
 typedef enum
 {
-    OPERATION_DONE_FLAG = 0U,
-    AES_MAC_VALID_FLAG = 1U,
-    SHA_HASH_INVALID_FLAG = 2U,
-    OUTPUT_FIFO_EMPTY_FLAG = 8U,
-    OUTPUT_FIFO_FULL_FLAG = 9U,
-    INPUT_FIFO_EMPTY_FLAG = 10U,
-    INPUT_FIFO_FULL_FLAG = 11U,
-    OUTPUT_FIFO_OVERFLOW_FLAG = 12U,    
-    INPUT_FIFO_OVERFLOW_FLAG = 13U,    
-    OUTPUT_FIFO_WATERMARK_FLAG = 14U,
-    INPUT_FIFO_WATERMARK_FLAG = 15U,
+    OPERATION_DONE_FLAG = 0U,      /*!< Operation-done flag position. */
+    AES_MAC_VALID_FLAG = 1U,       /*!< AES MAC valid flag position. */
+    SHA_HASH_INVALID_FLAG = 2U,    /*!< SHA authorize mismatch flag position. */
+    OUTPUT_FIFO_EMPTY_FLAG = 8U,   /*!< Output FIFO empty flag position. */
+    OUTPUT_FIFO_FULL_FLAG = 9U,    /*!< Output FIFO full flag position. */
+    INPUT_FIFO_EMPTY_FLAG = 10U,   /*!< Input FIFO empty flag position. */
+    INPUT_FIFO_FULL_FLAG = 11U,    /*!< Input FIFO full flag position. */
+    OUTPUT_FIFO_OVERFLOW_FLAG = 12U, /*!< Output FIFO overflow flag position. */
+    INPUT_FIFO_OVERFLOW_FLAG = 13U,  /*!< Input FIFO overflow flag position. */
+    OUTPUT_FIFO_WATERMARK_FLAG = 14U, /*!< Output FIFO watermark flag position. */
+    INPUT_FIFO_WATERMARK_FLAG = 15U,  /*!< Input FIFO watermark flag position. */
 } hcu_status_flag_t;
 
 /*******************************************************************************
@@ -85,11 +120,20 @@ typedef enum
 extern "C" {
 #endif
 
+/*******************************************************************************
+ * Status & Interrupt Control
+ ******************************************************************************/
 /*!
- * @brief Get the HCU status flag.
+ * @name Status & Interrupt Control
+ * @brief Helpers for reading HCU status flags and controlling interrupt enables.
+ * @{
+ */
+
+/*!
+ * @brief Read one HCU status flag.
  *
- * @param[in] statusFlag The status flag, of type hcu_status_flag_t
- * @return State of the status flag: asserted (true) or not-asserted (false)
+ * @param[in] statusFlag Status-bit selector.
+ * @return True when the selected flag is asserted.
  */
 static inline bool HCU_GetStatusFlag(hcu_status_flag_t statusFlag)
 {
@@ -97,9 +141,9 @@ static inline bool HCU_GetStatusFlag(hcu_status_flag_t statusFlag)
 }
 
 /*!
- * @brief Clear the HCU status flag.
+ * @brief Clear one HCU status flag.
  *
- * @param[in] statusFlag The status flag, of type hcu_status_flag_t
+ * @param[in] statusFlag Status-bit selector written through the W1C path.
  */
 static inline void HCU_ClearStatusFlag(hcu_status_flag_t statusFlag)
 {
@@ -107,10 +151,10 @@ static inline void HCU_ClearStatusFlag(hcu_status_flag_t statusFlag)
 }
 
 /*!
- * @brief Get the HCU interrupt enable.
+ * @brief Read the enable state of one HCU interrupt source.
  *
- * @param[in] statusFlag The status flag, of type hcu_status_flag_t
- * @return State of the status flag: asserted (true) or not-asserted (false)
+ * @param[in] statusFlag Interrupt-bit selector.
+ * @return True when the corresponding interrupt is enabled.
  */
 static inline bool HCU_GetIntMode(hcu_status_flag_t statusFlag)
 {
@@ -118,9 +162,10 @@ static inline bool HCU_GetIntMode(hcu_status_flag_t statusFlag)
 }
 
 /*!
- * @brief Set the HCU interrupt enable.
+ * @brief Enable or disable one HCU interrupt source.
  *
- * @param[in] statusFlag The status flag, of type hcu_status_flag_t
+ * @param[in] statusFlag Interrupt-bit selector.
+ * @param[in] enable True to enable the interrupt, false to disable it.
  */
 static inline void HCU_SetIntMode(hcu_status_flag_t statusFlag, bool enable)
 {
@@ -134,9 +179,9 @@ static inline void HCU_SetIntMode(hcu_status_flag_t statusFlag, bool enable)
 }
 
 /*!
- * @brief Enables/Disables HCU done interrupt.
+ * @brief Enable or disable the operation-done interrupt.
  *
- * @param[in] enable Enables/Disables HCU done interrupt.
+ * @param[in] enable True to enable the interrupt, false to disable it.
  */
 static inline void HCU_SetDoneInterrupt(bool enable)
 {
@@ -150,9 +195,9 @@ static inline void HCU_SetDoneInterrupt(bool enable)
 }
 
 /*!
- * @brief Enables/Disables HCU data input interrupt.
+ * @brief Enable or disable the input FIFO watermark interrupt.
  *
- * @param[in] enable Enables/Disables HCU input interrupt.
+ * @param[in] enable True to enable the interrupt, false to disable it.
  */
 static inline void HCU_SetInputInterrupt(bool enable)
 {
@@ -166,9 +211,9 @@ static inline void HCU_SetInputInterrupt(bool enable)
 }
 
 /*!
- * @brief Enables/Disables HCU data output interrupt.
+ * @brief Enable or disable the output FIFO watermark interrupt.
  *
- * @param[in] enable Enables/Disables HCU output interrupt.
+ * @param[in] enable True to enable the interrupt, false to disable it.
  */
 static inline void HCU_SetOutputInterrupt(bool enable)
 {
@@ -182,9 +227,12 @@ static inline void HCU_SetOutputInterrupt(bool enable)
 }
 
 /*!
- * @brief Enables/Disables HCU default interrupt.
+ * @brief Enable or disable the default interrupt set used by the driver.
  *
- * @param[in] enable Enables/Disables HCU default interrupt.
+ * Controls the operation-done, input-watermark, and output-watermark interrupt
+ * enables as one combined helper.
+ *
+ * @param[in] enable True to enable the default interrupt set, false to disable it.
  */
 static inline void HCU_SetDefaultInterrupt(bool enable)
 {
@@ -197,35 +245,49 @@ static inline void HCU_SetDefaultInterrupt(bool enable)
     }
 }
 
+/*! @} */ /* End of Status & Interrupt Control */
+
+/*******************************************************************************
+ * Engine & Context Configuration
+ ******************************************************************************/
 /*!
- * @brief Reset HCU input and output FIFOs.
+ * @name Engine & Context Configuration
+ * @brief Helpers for configuring engine selection, key material, message
+ *        metadata, and authenticated-operation context.
+ * @{
+ */
+
+/*!
+ * @brief Reset both HCU FIFOs.
  */
 static inline void HCU_ResetFifo(void)
 {
-    /* Reset FIFO */
+    /* Assert both FIFO reset bits. */
     HCU->CR |= (HCU_CR_OFSWR_MASK | HCU_CR_IFSWR_MASK);
-    /* De-assert FIFO reset */
+    /* Release both FIFO reset bits. */
     HCU->CR &= ~(HCU_CR_OFSWR_MASK | HCU_CR_IFSWR_MASK);
 }
 
 /*!
- * @brief Config HCU engine and algorithm.
+ * @brief Program the active engine, algorithm, and direction.
  */
-
 static inline void HCU_SetEngineAlgorithm(hcu_engine_sel_t engine, hcu_alg_aes_mode_t algorithm, hcu_mode_sel_t encrypt)
 {
-    /* Reset register fields */
+    /* Clear the engine, algorithm, and direction fields before updating them. */
     HCU->CR &= ~(HCU_CR_ENGSEL_MASK | HCU_CR_ALGSEL_MASK | HCU_CR_ENC_MASK);
-    /* Set register fields */
+    /* Apply the caller-selected engine, algorithm, and direction. */
     HCU->CR |= HCU_CR_ENGSEL(engine) | HCU_CR_ALGSEL(algorithm) | HCU_CR_ENC(encrypt);
-    /* Default enable store context data */
+    /* Keep context-store support enabled for the next operation. */
     HCU->CR |= HCU_CR_CS_MASK;
-    /* Reset FIFO */
+    /* Start the new operation with empty FIFOs. */
     HCU_ResetFifo();
 }
 
 /*!
- * @brief Config HCU key.
+ * @brief Write one software-key word.
+ *
+ * @param[in] key Key word written into the indexed key register.
+ * @param[in] index Key register index.
  */
 static inline void HCU_SetUserKey(uint32_t key, uint8_t index)
 {
@@ -233,7 +295,9 @@ static inline void HCU_SetUserKey(uint32_t key, uint8_t index)
 }
 
 /*!
- * @brief Config HCU IV.
+ * @brief Write the AES IV registers.
+ *
+ * @param[in] iv Pointer to four IV words.
  */
 static inline void HCU_SetIV(const uint32_t *iv)
 {
@@ -245,7 +309,9 @@ static inline void HCU_SetIV(const uint32_t *iv)
 }
 
 /*!
- * @brief Config HCU IV.
+ * @brief Write the AES counter-value registers.
+ *
+ * @param[in] cv Pointer to four counter-value words.
  */
 static inline void HCU_SetCV(const uint32_t *cv)
 {
@@ -261,7 +327,10 @@ static inline void HCU_SetCV(const uint32_t *cv)
 }
 
 /*!
- * @brief Config HCU AESMAC.
+ * @brief Write the AES MAC registers from a byte buffer.
+ *
+ * @param[in] mac Pointer to the MAC byte buffer.
+ * @param[in] length Number of MAC bytes to copy into the registers.
  */
 static inline void HCU_SetMac(const uint8_t *mac, uint8_t length)
 {
@@ -281,7 +350,9 @@ static inline void HCU_SetMac(const uint8_t *mac, uint8_t length)
 }
 
 /*!
- * @brief Readout HCU AESMAC.
+ * @brief Read the AES MAC registers into a byte buffer.
+ *
+ * @param[out] mac Pointer to the destination MAC byte buffer.
  */
 static inline void HCU_ReadMac(uint8_t *mac)
 {
@@ -295,7 +366,7 @@ static inline void HCU_ReadMac(uint8_t *mac)
 }
 
 /*!
- * @brief Config HCU SHAICV.
+ * @brief Program the initial SHA authorize digest context.
  */
 #if FEATURE_HCU_HAS_SHA_AUTHORIZE
 static inline void HCU_SetICV(const uint32_t *icv, uint8_t length)
@@ -326,10 +397,12 @@ static inline void HCU_SetICV(const uint32_t *icv, uint8_t length)
     }
 #endif /* CPU_YTM32B1HA0 */
 }
-#endif
+#endif /* FEATURE_HCU_HAS_SHA_AUTHORIZE */
 
 /*!
- * @brief Config HCU key size.
+ * @brief Program the software-key size field.
+ *
+ * @param[in] size Key-size selector.
  */
 static inline void HCU_SetKeySize(hcu_key_size_t size)
 {
@@ -342,7 +415,10 @@ static inline void HCU_SetKeySize(hcu_key_size_t size)
 }
 
 /*!
- * @brief Config HCU input data size.
+ * @brief Program the primary and additional message lengths.
+ *
+ * @param[in] MsgLen Main message length field.
+ * @param[in] addMsgLen Additional-data length field.
  */
 static inline void HCU_SetMsgLength(uint16_t MsgLen, uint16_t addMsgLen)
 {
@@ -350,7 +426,9 @@ static inline void HCU_SetMsgLength(uint16_t MsgLen, uint16_t addMsgLen)
 }
 
 /*!
- * @brief Config HCU CMAC length
+ * @brief Program the MAC length field.
+ *
+ * @param[in] length MAC length encoding.
  */
 static inline void HCU_SetMacLength(uint8_t length)
 {
@@ -359,7 +437,9 @@ static inline void HCU_SetMacLength(uint8_t length)
 }
 
 /*!
- * @brief Config HCU Message type
+ * @brief Program the message-fragment type field.
+ *
+ * @param[in] type Message-fragment selector.
  */
 static inline void HCU_SetMsgType(hcu_msg_type_t type)
 {
@@ -368,7 +448,9 @@ static inline void HCU_SetMsgType(hcu_msg_type_t type)
 }
 
 /*!
- * @brief Config HCU message total bytes.
+ * @brief Program the total-message-length field.
+ *
+ * @param[in] MsgTotalLen Total message length in bytes.
  */
 static inline void HCU_SetMsgTotalLength(uint32_t MsgTotalLen)
 {
@@ -380,7 +462,10 @@ static inline void HCU_SetMsgTotalLength(uint32_t MsgTotalLen)
 }
 
 /*!
- * @brief Config HCU FIFO watermark.
+ * @brief Program the input and output FIFO watermark levels.
+ *
+ * @param[in] in Input FIFO watermark value.
+ * @param[in] out Output FIFO watermark value.
  */
 static inline void HCU_SetFIFOWatermark(uint8_t in, uint8_t out)
 {
@@ -388,19 +473,31 @@ static inline void HCU_SetFIFOWatermark(uint8_t in, uint8_t out)
     HCU->FIFOWM |= HCU_FIFOWM_IFWM(in) | HCU_FIFOWM_OFWM(out);
 }
 
+/*! @} */ /* End of Engine & Context Configuration */
+
+/*******************************************************************************
+ * FIFO Runtime Access
+ ******************************************************************************/
 /*!
- * @brief HCU start engine.
+ * @name FIFO Runtime Access
+ * @brief Helpers for starting the engine, polling FIFO state, and moving FIFO
+ *        data in software.
+ * @{
  */
 
+/*!
+ * @brief Start the HCU engine.
+ */
 static inline void HCU_StartEngine(void)
 {
-    // write HCU->GO is valid
+    /* Writing GO launches the configured HCU operation. */
     HCU->GO = HCU_GO_GO_MASK;
 }
 
 /*!
- * @brief Returns true if HCU is busy processing a command
- * and false if the command has completed.
+ * @brief Check whether the HCU engine is still busy.
+ *
+ * @return True while the GO bit remains asserted.
  */
 static inline bool HCU_IsBusy(void)
 {
@@ -408,7 +505,9 @@ static inline bool HCU_IsBusy(void)
 }
 
 /*!
- * @brief Returns true if HCU job finished current operation.
+ * @brief Check whether the current HCU operation is done.
+ *
+ * @return True when the operation-done status flag is asserted.
  */
 static inline bool HCU_IsDone(void)
 {
@@ -416,7 +515,9 @@ static inline bool HCU_IsDone(void)
 }
 
 /*!
- * @brief Returns true if HCU need to write in fifo data.
+ * @brief Check whether the input FIFO watermark requests more data.
+ *
+ * @return True when the input FIFO watermark flag is asserted.
  */
 static inline bool HCU_IsInputFifoEmpty(void)
 {
@@ -424,7 +525,9 @@ static inline bool HCU_IsInputFifoEmpty(void)
 }
 
 /*!
- * @brief Returns true if HCU need to read out fifo data.
+ * @brief Check whether the output FIFO watermark requests a read.
+ *
+ * @return True when the output FIFO watermark flag is asserted.
  */
 static inline bool HCU_IsOutputFifoFull(void)
 {
@@ -432,7 +535,9 @@ static inline bool HCU_IsOutputFifoFull(void)
 }
 
 /*!
- * @brief Returns true if HCU is not empty.
+ * @brief Check whether the output FIFO still contains unread data.
+ *
+ * @return True when the output FIFO is not empty.
  */
 static inline bool HCU_OutputFifoHasData(void)
 {
@@ -440,7 +545,10 @@ static inline bool HCU_OutputFifoHasData(void)
 }
 
 /*!
- * @brief HCU load data to input fifo.
+ * @brief Push one software-managed burst into the input FIFO.
+ *
+ * @param[in] data Pointer to the source word buffer.
+ * @param[in] length Number of 32-bit words to write.
  */
 static inline void HCU_WriteInputFifo(const uint32_t *data, uint8_t length)
 {
@@ -452,7 +560,13 @@ static inline void HCU_WriteInputFifo(const uint32_t *data, uint8_t length)
 }
 
 /*!
- * @brief HCU write empty data to avoid entering interrupt.
+ * @brief Push padding words into the input FIFO.
+ *
+ * This helper is used by the interrupt path on devices without fixed DMA to
+ * avoid repeated re-entry after the real payload has been exhausted.
+ *
+ * @param[in] length Number of zero words to emit, minus the helper's final
+ *                   extra word.
  */
 static inline void HCU_WriteInputFifoPatch(uint8_t length)
 {
@@ -464,7 +578,10 @@ static inline void HCU_WriteInputFifoPatch(uint8_t length)
 }
 
 /*!
- * @brief HCU read data from output fifo.
+ * @brief Pull one software-managed burst from the output FIFO.
+ *
+ * @param[out] data Pointer to the destination word buffer.
+ * @param[in] length Number of 32-bit words to read.
  */
 static inline void HCU_ReadOutputFifo(uint32_t *data, uint8_t length)
 {
@@ -475,8 +592,21 @@ static inline void HCU_ReadOutputFifo(uint32_t *data, uint8_t length)
     }
 }
 
+/*! @} */ /* End of FIFO Runtime Access */
+
+/*******************************************************************************
+ * DMA, Verification & Reset Control
+ ******************************************************************************/
 /*!
- * @brief HCU set input fifo dma.
+ * @name DMA, Verification & Reset Control
+ * @brief Helpers for DMA toggles, SHA verification control, and APB reset.
+ * @{
+ */
+
+/*!
+ * @brief Enable or disable input FIFO DMA service.
+ *
+ * @param[in] enable True to enable input DMA, false to disable it.
  */
 static inline void HCU_SetInputDMA(bool enable)
 {
@@ -491,7 +621,9 @@ static inline void HCU_SetInputDMA(bool enable)
 }
 
 /*!
- * @brief HCU set output fifo dma.
+ * @brief Enable or disable output FIFO DMA service.
+ *
+ * @param[in] enable True to enable output DMA, false to disable it.
  */
 static inline void HCU_SetOutputDMA(bool enable)
 {
@@ -506,7 +638,9 @@ static inline void HCU_SetOutputDMA(bool enable)
 }
 
 /*!
- * @brief HCU set SHA verification.
+ * @brief Enable or disable SHA authorization mode.
+ *
+ * @param[in] enable True to enable SHA verification, false to disable it.
  */
 static inline void HCU_SetSHAVerification(bool enable)
 {
@@ -525,7 +659,7 @@ static inline void HCU_SetSHAVerification(bool enable)
 }
 
 /*!
- * @brief Reset HCU by APB.
+ * @brief Reset the HCU through the APB software-reset path.
  */
 static inline void HCU_APBReset(void)
 {
@@ -533,9 +667,22 @@ static inline void HCU_APBReset(void)
     IPC->CTRL[IPC_HCU_INDEX] &= ~IPC_CTRL_SWREN_MASK;
 }
 
+/*! @} */ /* End of DMA, Verification & Reset Control */
+
 #if defined(FEATURE_HCU_HMAC_ENGINE) && (FEATURE_HCU_HMAC_ENGINE > 0)
+/*******************************************************************************
+ * Optional HMAC Control
+ ******************************************************************************/
 /*!
- * @brief Enable HMAC.
+ * @name Optional HMAC Control
+ * @brief Helpers for the optional HMAC extension.
+ * @{
+ */
+
+/*!
+ * @brief Enable or disable the HMAC extension.
+ *
+ * @param[in] enable True to enable HMAC mode, false to disable it.
  */
 static inline void HCU_EnableHMAC(bool enable)
 {
@@ -548,18 +695,24 @@ static inline void HCU_EnableHMAC(bool enable)
 }
 
 /*!
- * @brief Set HCU HMAC key size.
+ * @brief Program the HMAC key-size encoding.
+ *
+ * @param[in] keySize HMAC key-size selector.
  */
 static inline void HCU_SetHMACKeySize(hcu_hmac_key_size_t keySize)
 {
     HCU->CR &= ~HCU_CR_HMACKS_MASK;
     HCU->CR |= keySize << HCU_CR_HMACKS_SHIFT;
 }
+
+/*! @} */ /* End of Optional HMAC Control */
 #endif /* FEATURE_HCU_HMAC_ENGINE */
 
 #if defined(__cplusplus)
 }
 #endif
+
+/*! @} */ /* End of hcu_hw_access_v1 */
 
 #endif /* HCU_HW_ACCESS_H */
 

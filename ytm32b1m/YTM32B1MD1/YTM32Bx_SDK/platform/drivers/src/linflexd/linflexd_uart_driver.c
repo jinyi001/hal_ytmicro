@@ -7,7 +7,7 @@
 
 /*!
  * @file linflexd_uart_driver.c
- * @version 1.4.1
+ * @brief LINFlexD UART driver implementation.
  */
 
 /*!
@@ -40,12 +40,7 @@ static LINFlexD_Type * const s_uartLINFlexDBase[LINFlexD_INSTANCE_COUNT] = LINFl
 static const bool s_LINFlexDInstHasFilters[LINFlexD_INSTANCE_COUNT] = FEATURE_LINFlexD_INST_HAS_IFCR;
 #endif
 
-#if (FEATURE_LINFlexD_RX_TX_ERR_INT_LINES)
-/*! @brief Tables to save LINFlexD IRQ vectors defined in the header file */
-static const IRQn_Type s_uartLINFlexDRxIntVec[LINFlexD_INSTANCE_COUNT] = LINFlexD_RX_IRQS;
-static const IRQn_Type s_uartLINFlexDTxIntVec[LINFlexD_INSTANCE_COUNT] = LINFlexD_TX_IRQS;
-static const IRQn_Type s_uartLINFlexDErrIntVec[LINFlexD_INSTANCE_COUNT] = LINFlexD_ERR_IRQS;
-#elif (FEATURE_LINFlexD_ORED_INT_LINES)
+#if defined(FEATURE_LINFlexD_ORED_INT_LINES) && (FEATURE_LINFlexD_ORED_INT_LINES == 1U)
 /*! @brief Table to save LINFlexD IRQ vectors defined in the header file */
 static const IRQn_Type s_uartLINFlexDIntVec[LINFlexD_INSTANCE_COUNT] = LINFlexD_IRQS;
 #endif
@@ -83,13 +78,9 @@ static void LINFlexD_UART_DRV_FlushRxFifo(const LINFlexD_Type *base);
  * Code
  ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_SetBaudRate
- * Description   : This function sets the baud rate for UART communication.
- *
- * Implements    : LINFlexD_UART_DRV_SetBaudRate_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function sets the baud rate for UART communication.
+ */
 status_t LINFlexD_UART_DRV_SetBaudRate(uint32_t instance, uint32_t baudrate)
 {
     DEV_ASSERT(instance < LINFlexD_INSTANCE_COUNT);
@@ -109,7 +100,7 @@ status_t LINFlexD_UART_DRV_SetBaudRate(uint32_t instance, uint32_t baudrate)
     base = s_uartLINFlexDBase[instance];
     (void)CLOCK_SYS_GetFreq(instanceClkName, &uartSourceClock);
 
-    const linflexd_uart_state_t * uartState;
+    linflexd_uart_state_t * uartState;
     uartState = (linflexd_uart_state_t *)s_uartLINFlexDStatePtr[instance];
 
     if (uartState->isTxBusy == true)
@@ -160,13 +151,9 @@ status_t LINFlexD_UART_DRV_SetBaudRate(uint32_t instance, uint32_t baudrate)
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_GetBaudRate
- * Description   : This function retrieves the baud rate for UART communication.
- *
- * Implements    : LINFlexD_UART_DRV_GetBaudRate_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function retrieves the baud rate for UART communication.
+ */
 status_t LINFlexD_UART_DRV_GetBaudRate(uint32_t instance, uint32_t * baudrate)
 {
     DEV_ASSERT(instance < LINFlexD_INSTANCE_COUNT);
@@ -192,13 +179,9 @@ status_t LINFlexD_UART_DRV_GetBaudRate(uint32_t instance, uint32_t * baudrate)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_InstallRxCallback
- * Description   : This function installs a callback for UART receive.
- *
- * Implements    : LINFlexD_UART_DRV_InstallRxCallback_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function installs a callback for UART receive.
+ */
 uart_callback_t LINFlexD_UART_DRV_InstallRxCallback(uint32_t instance,
                                                     uart_callback_t function,
                                                     void * callbackParam)
@@ -217,13 +200,9 @@ uart_callback_t LINFlexD_UART_DRV_InstallRxCallback(uint32_t instance,
     return currentCallback;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_InstallTxCallback
- * Description   : This function installs a callback for UART transmit.
- *
- * Implements    : LINFlexD_UART_DRV_InstallTxCallback_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function installs a callback for UART transmit.
+ */
 uart_callback_t LINFlexD_UART_DRV_InstallTxCallback(uint32_t instance,
                                                     uart_callback_t function,
                                                     void * callbackParam)
@@ -242,13 +221,9 @@ uart_callback_t LINFlexD_UART_DRV_InstallTxCallback(uint32_t instance,
     return currentCallback;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_InstallErrorCallback
- * Description   : This function installs a callback for UART error cases.
- *
- * Implements    : LINFlexD_UART_DRV_InstallErrorCallback_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function installs a callback for UART error cases.
+ */
 uart_callback_t LINFlexD_UART_DRV_InstallErrorCallback(uint32_t instance,
                                                        uart_callback_t function,
                                                        void * callbackParam)
@@ -267,18 +242,9 @@ uart_callback_t LINFlexD_UART_DRV_InstallErrorCallback(uint32_t instance,
     return currentCallback;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_Init
- * Description   : This function initializes a LINFlexD instance for UART
- * operation.
- * This function will initialize the run-time state structure to keep track of
- * the on-going transfers, initialize the module to user defined settings and
- * default settings, enable the module-level interrupt to the core, and enable
- * the UART module transmitter and receiver.
- *
- * Implements    : LINFlexD_UART_DRV_Init_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function initializes a LINFlexD instance for UART operation. This function will initialize the run-time state structure to keep track of the on-going transfers, initialize the module to user defined settings and default settings, enable the module-level interrupt to the core, and enable the UART module transmitter and receiver.
+ */
 status_t LINFlexD_UART_DRV_Init(uint32_t instance, linflexd_uart_state_t * uartStatePtr,
                                 const linflexd_uart_user_config_t * uartUserConfig)
 {
@@ -397,20 +363,12 @@ status_t LINFlexD_UART_DRV_Init(uint32_t instance, linflexd_uart_state_t * uartS
         (void)OSIF_SemaCreate(&uartStatePtr->txComplete, 0);
     
         /* Install UART handlers */
-#if (FEATURE_LINFlexD_RX_TX_ERR_INT_LINES)
-        INT_SYS_InstallHandler(s_uartLINFlexDRxIntVec[instance], g_uartLINFlexDRxIsr[instance], (isr_t*) 0);
-        INT_SYS_InstallHandler(s_uartLINFlexDTxIntVec[instance], g_uartLINFlexDTxIsr[instance], (isr_t*) 0);
-        INT_SYS_InstallHandler(s_uartLINFlexDErrIntVec[instance], g_uartLINFlexDErrIsr[instance], (isr_t*) 0);
-#elif (FEATURE_LINFlexD_ORED_INT_LINES)
+#if defined(FEATURE_LINFlexD_ORED_INT_LINES) && (FEATURE_LINFlexD_ORED_INT_LINES == 1U)
         INT_SYS_InstallHandler(s_uartLINFlexDIntVec[instance], g_uartLINFlexDIsr[instance], (isr_t*) 0);
 #endif
     
         /* Enable LINFlexD interrupts */
-#if (FEATURE_LINFlexD_RX_TX_ERR_INT_LINES)
-        INT_SYS_EnableIRQ(s_uartLINFlexDRxIntVec[instance]);
-        INT_SYS_EnableIRQ(s_uartLINFlexDTxIntVec[instance]);
-        INT_SYS_EnableIRQ(s_uartLINFlexDErrIntVec[instance]);
-#elif (FEATURE_LINFlexD_ORED_INT_LINES)
+#if defined(FEATURE_LINFlexD_ORED_INT_LINES) && (FEATURE_LINFlexD_ORED_INT_LINES == 1U)
         INT_SYS_EnableIRQ(s_uartLINFlexDIntVec[instance]);
 #endif
     
@@ -422,14 +380,9 @@ status_t LINFlexD_UART_DRV_Init(uint32_t instance, linflexd_uart_state_t * uartS
     return uartStatus;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_Deinit
- * Description   : This function shuts down the UART by disabling interrupts and
- *                 transmitter/receiver.
- *
- * Implements    : LINFlexD_UART_DRV_Deinit_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function shuts down the UART by disabling interrupts and transmitter/receiver.
+ */
 status_t LINFlexD_UART_DRV_Deinit(uint32_t instance)
 {
     DEV_ASSERT(instance < LINFlexD_INSTANCE_COUNT);
@@ -457,20 +410,12 @@ status_t LINFlexD_UART_DRV_Deinit(uint32_t instance)
     LINFlexD_SetInterruptMode(base, LINFlexD_DATA_RECEPTION_COMPLETE_INT, false);
 
     /* Disable LINFlexD interrupts */
-#if (FEATURE_LINFlexD_RX_TX_ERR_INT_LINES)
-    INT_SYS_DisableIRQ(s_uartLINFlexDRxIntVec[instance]);
-    INT_SYS_DisableIRQ(s_uartLINFlexDTxIntVec[instance]);
-    INT_SYS_DisableIRQ(s_uartLINFlexDErrIntVec[instance]);
-#elif (FEATURE_LINFlexD_ORED_INT_LINES)
+#if defined(FEATURE_LINFlexD_ORED_INT_LINES) && (FEATURE_LINFlexD_ORED_INT_LINES == 1U)
     INT_SYS_DisableIRQ(s_uartLINFlexDIntVec[instance]);
 #endif
 
     /* Restore default handlers */
-#if (FEATURE_LINFlexD_RX_TX_ERR_INT_LINES)
-    INT_SYS_InstallHandler(s_uartLINFlexDRxIntVec[instance], DefaultISR, (isr_t*) 0);
-    INT_SYS_InstallHandler(s_uartLINFlexDTxIntVec[instance], DefaultISR, (isr_t*) 0);
-    INT_SYS_InstallHandler(s_uartLINFlexDErrIntVec[instance], DefaultISR, (isr_t*) 0);
-#elif (FEATURE_LINFlexD_ORED_INT_LINES)
+#if defined(FEATURE_LINFlexD_ORED_INT_LINES) && (FEATURE_LINFlexD_ORED_INT_LINES == 1U)
     INT_SYS_InstallHandler(s_uartLINFlexDIntVec[instance], DefaultISR, (isr_t*) 0);
 #endif
 
@@ -484,14 +429,9 @@ status_t LINFlexD_UART_DRV_Deinit(uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_SendDataBlocking
- * Description   : This function sends data using LINFlexD module in UART mode
- * with blocking method.
- *
- * Implements    : LINFlexD_UART_DRV_SendDataBlocking_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function sends data using LINFlexD module in UART mode with blocking method.
+ */
 status_t LINFlexD_UART_DRV_SendDataBlocking(uint32_t instance,
                                             const uint8_t * txBuff,
                                             uint32_t txSize,
@@ -552,14 +492,9 @@ status_t LINFlexD_UART_DRV_SendDataBlocking(uint32_t instance,
 
     return retVal;
 }
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_SendDataPolling
- * Description   : This function sends data using LINFlexD module in UART mode
- * with Polling method.
- *
- * Implements    : LINFlexD_UART_DRV_SendDataPolling_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function sends data using LINFlexD module in UART mode with Polling method.
+ */
 status_t LINFlexD_UART_DRV_SendDataPolling(uint32_t instance,
                                             const uint8_t * txBuff,
                                             uint32_t txSize)
@@ -631,14 +566,9 @@ status_t LINFlexD_UART_DRV_SendDataPolling(uint32_t instance,
 
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_SendData
- * Description   : This function sends data using LINFlexD module in UART mode
- * with non-blocking method.
- *
- * Implements    : LINFlexD_UART_DRV_SendData_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function sends data using LINFlexD module in UART mode with non-blocking method.
+ */
 status_t LINFlexD_UART_DRV_SendData(uint32_t instance,
                                     const uint8_t * txBuff,
                                     uint32_t txSize)
@@ -673,18 +603,9 @@ status_t LINFlexD_UART_DRV_SendData(uint32_t instance,
     return retVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_GetTransmitStatus
- * Description   : This function returns whether the previous UART transmit has
- * finished. When performing non-blocking transmit, the user can call this
- * function to ascertain the state of the current transmission:
- * in progress (or busy) or complete (success). In addition, if the transmission
- * is still in progress, the user can obtain the number of words that have been
- * currently transferred.
- *
- * Implements    : LINFlexD_UART_DRV_GetTransmitStatus_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function returns whether the previous UART transmit has finished. When performing non-blocking transmit, the user can call this function to ascertain the state of the current transmission: in progress (or busy) or complete (success). In addition, if the transmission is still in progress, the user can obtain the number of words that have been currently transferred.
+ */
 status_t LINFlexD_UART_DRV_GetTransmitStatus(uint32_t instance, uint32_t * bytesRemaining)
 {
     DEV_ASSERT(instance < LINFlexD_INSTANCE_COUNT);
@@ -724,15 +645,9 @@ status_t LINFlexD_UART_DRV_GetTransmitStatus(uint32_t instance, uint32_t * bytes
     return uartState->transmitStatus;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_AbortSendingData
- * Description   : This function terminates an non-blocking UART transmission
- * early. During a non-blocking UART transmission, the user has the option to
- * terminate the transmission early if the transmission is still in progress.
- *
- * Implements    : LINFlexD_UART_DRV_AbortSendingData_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function terminates an non-blocking UART transmission early. During a non-blocking UART transmission, the user has the option to terminate the transmission early if the transmission is still in progress.
+ */
 status_t LINFlexD_UART_DRV_AbortSendingData(uint32_t instance)
 {
     DEV_ASSERT(instance < LINFlexD_INSTANCE_COUNT);
@@ -767,14 +682,9 @@ status_t LINFlexD_UART_DRV_AbortSendingData(uint32_t instance)
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_ReceiveDataBlocking
- * Description   : Retrieves data from the LINFlexD module in UART mode with
- * blocking method.
- *
- * Implements    : LINFlexD_UART_DRV_ReceiveDataBlocking_Activity
- *END**************************************************************************/
+/*!
+ * @brief Retrieves data from the LINFlexD module in UART mode with blocking method.
+ */
 status_t LINFlexD_UART_DRV_ReceiveDataBlocking(uint32_t instance,
                                                uint8_t * rxBuff,
                                                uint32_t rxSize,
@@ -836,14 +746,9 @@ status_t LINFlexD_UART_DRV_ReceiveDataBlocking(uint32_t instance,
     return retVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_ReceiveDataPolling
- * Description   : Retrieves data from the LINFlexD module in UART mode with
- * polling method.
- *
- * Implements    : LINFlexD_UART_DRV_ReceiveDataPolling_Activity
- *END**************************************************************************/
+/*!
+ * @brief Retrieves data from the LINFlexD module in UART mode with polling method.
+ */
 status_t LINFlexD_UART_DRV_ReceiveDataPolling(uint32_t instance,
                                                uint8_t * rxBuff,
                                                uint32_t rxSize)
@@ -918,14 +823,9 @@ status_t LINFlexD_UART_DRV_ReceiveDataPolling(uint32_t instance,
     return retVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_ReceiveData
- * Description   : Retrieves data from the LINFlexD module in UART mode with
- * non-blocking method.
- *
- * Implements    : LINFlexD_UART_DRV_ReceiveData_Activity
- *END**************************************************************************/
+/*!
+ * @brief Retrieves data from the LINFlexD module in UART mode with non-blocking method.
+ */
 status_t LINFlexD_UART_DRV_ReceiveData(uint32_t instance,
                                        uint8_t * rxBuff,
                                        uint32_t rxSize)
@@ -960,17 +860,9 @@ status_t LINFlexD_UART_DRV_ReceiveData(uint32_t instance,
     return retVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_GetReceiveStatus
- * Description   : This function returns whether the previous UART receive is
- * complete. When performing a non-blocking receive, the user can call this
- * function to ascertain the state of the current receive progress: in progress
- * or complete. In addition, if the receive is still in progress, the user can
- * obtain the number of words that have not yet been received.
- *
- * Implements    : LINFlexD_UART_DRV_GetReceiveStatus_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function returns whether the previous UART receive is complete. When performing a non-blocking receive, the user can call this function to ascertain the state of the current receive progress: in progress or complete. In addition, if the receive is still in progress, the user can obtain the number of words that have not yet been received.
+ */
 status_t LINFlexD_UART_DRV_GetReceiveStatus(uint32_t instance, uint32_t * bytesRemaining)
 {
     DEV_ASSERT(instance < LINFlexD_INSTANCE_COUNT);
@@ -1009,13 +901,9 @@ status_t LINFlexD_UART_DRV_GetReceiveStatus(uint32_t instance, uint32_t * bytesR
     return uartState->receiveStatus;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_AbortReceivingData
- * Description   : Terminates a non-blocking receive early.
- *
- * Implements    : LINFlexD_UART_DRV_AbortReceivingData_Activity
- *END**************************************************************************/
+/*!
+ * @brief Terminates a non-blocking receive early.
+ */
 status_t LINFlexD_UART_DRV_AbortReceivingData(uint32_t instance)
 {
     DEV_ASSERT(instance < LINFlexD_INSTANCE_COUNT);
@@ -1051,14 +939,9 @@ status_t LINFlexD_UART_DRV_AbortReceivingData(uint32_t instance)
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_GoToSleepMode
- * Description   : This function puts current UART to sleep mode.
- * This function changes current UART state to SLEEP_MODE.
- *
- * Implements    : LINFlexD_UART_DRV_GoToSleepMode_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function puts current UART to sleep mode. This function changes current UART state to SLEEP_MODE.
+ */
 status_t LINFlexD_UART_DRV_GoToSleepMode(uint32_t instance)
 {
     /* Assert parameters. */
@@ -1070,13 +953,9 @@ status_t LINFlexD_UART_DRV_GoToSleepMode(uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_GotoIdleState
- * Description   : This function puts current UART to Idle state.
- *
- * Implements    : LINFlexD_UART_DRV_GotoIdleState_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function puts current UART to Idle state.
+ */
 status_t LINFlexD_UART_DRV_GotoIdleState(uint32_t instance)
 {
     /* Assert parameters. */
@@ -1088,15 +967,9 @@ status_t LINFlexD_UART_DRV_GotoIdleState(uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_SetTxBuffer
- * Description   : Sets the driver internal reference to the tx buffer.
- *                 Can be called from the tx callback to provide a different
- *                 buffer for continuous transmission.
- *
- * Implements    : LINFlexD_UART_DRV_SetTxBuffer_Activity
- *END**************************************************************************/
+/*!
+ * @brief Sets the driver internal reference to the tx buffer. Can be called from the tx callback to provide a different buffer for continuous transmission.
+ */
 status_t LINFlexD_UART_DRV_SetTxBuffer(uint32_t instance,
                                        const uint8_t * txBuff,
                                        uint32_t txSize)
@@ -1112,15 +985,9 @@ status_t LINFlexD_UART_DRV_SetTxBuffer(uint32_t instance,
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_SetRxBuffer
- * Description   : Sets the driver internal reference to the rx buffer.
- *                 Can be called from the rx callback to provide a different
- *                 buffer for continuous reception.
- *
- * Implements    : LINFlexD_UART_DRV_SetRxBuffer_Activity
- *END**************************************************************************/
+/*!
+ * @brief Sets the driver internal reference to the rx buffer. Can be called from the rx callback to provide a different buffer for continuous reception.
+ */
 status_t LINFlexD_UART_DRV_SetRxBuffer(uint32_t instance,
                                        uint8_t * rxBuff,
                                        uint32_t rxSize)
@@ -1136,15 +1003,9 @@ status_t LINFlexD_UART_DRV_SetRxBuffer(uint32_t instance,
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_RxIRQHandler
- * Description   : Rx interrupt handler for UART.
- * This handler uses the rx buffer stored in the state structure to receive
- * data. This is not a public API as it is called by IRQ whenever an interrupt
- * occurs.
- *
- *END**************************************************************************/
+/*!
+ * @brief Rx interrupt handler for UART. This handler uses the rx buffer stored in the state structure to receive data. This is not a public API as it is called by IRQ whenever an interrupt occurs.
+ */
 void LINFlexD_UART_DRV_RxIRQHandler(uint32_t instance)
 {
     linflexd_uart_state_t * uartState;
@@ -1200,15 +1061,9 @@ void LINFlexD_UART_DRV_RxIRQHandler(uint32_t instance)
 
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_TxIRQHandler
- * Description   : Tx interrupt handler for UART.
- * This handler uses the tx buffer stored in the state structure to transmit
- * data. This is not a public API as it is called by IRQ whenever an interrupt
- * occurs.
- *
- *END**************************************************************************/
+/*!
+ * @brief Tx interrupt handler for UART. This handler uses the tx buffer stored in the state structure to transmit data. This is not a public API as it is called by IRQ whenever an interrupt occurs.
+ */
 void LINFlexD_UART_DRV_TxIRQHandler(uint32_t instance)
 {
     linflexd_uart_state_t * uartState;
@@ -1256,13 +1111,9 @@ void LINFlexD_UART_DRV_TxIRQHandler(uint32_t instance)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_ErrIRQHandler
- * Description   : Error interrupt handler for UART.
- * This handler calls the user callback to treat error conditions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Error interrupt handler for UART. This handler calls the user callback to treat error conditions.
+ */
 void LINFlexD_UART_DRV_ErrIRQHandler(uint32_t instance)
 {
     linflexd_uart_state_t * uartState;
@@ -1312,12 +1163,9 @@ void LINFlexD_UART_DRV_ErrIRQHandler(uint32_t instance)
 }
 
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_RxTOHandler
- * Description   : Interrupt handler for UART IDLE.
- *
- *END**************************************************************************/
+/*!
+ * @brief Interrupt handler for UART IDLE.
+ */
 static void LINFlexD_UART_DRV_RxTOHandler(uint32_t instance)
 {
     linflexd_uart_state_t * uartState;
@@ -1370,15 +1218,9 @@ static void LINFlexD_UART_DRV_RxTOHandler(uint32_t instance)
 }
 
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_IRQHandler
- * Description   : Interrupt handler for UART.
- * This handler uses the buffers stored in the state structure to transfer
- * data. This is not a public API as it is called by IRQ whenever an interrupt
- * occurs.
- *
- *END**************************************************************************/
+/*!
+ * @brief Interrupt handler for UART. This handler uses the buffers stored in the state structure to transfer data. This is not a public API as it is called by IRQ whenever an interrupt occurs.
+ */
 void LINFlexD_UART_DRV_IRQHandler(uint32_t instance)
 {
     const LINFlexD_Type * base = s_uartLINFlexDBase[instance];
@@ -1415,14 +1257,9 @@ void LINFlexD_UART_DRV_IRQHandler(uint32_t instance)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_StartSendUsingInterrupts
- * Description   : Initiate (start) a transmit by beginning the process of
- * sending data and enabling the interrupt.
- * This is not a public API as it is called from other driver functions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Initiate (start) a transmit by beginning the process of sending data and enabling the interrupt.
+ */
 static status_t LINFlexD_UART_DRV_StartSendUsingInterrupts(uint32_t instance,
                                                            const uint8_t * txBuff,
                                                            uint32_t txSize)
@@ -1466,14 +1303,9 @@ static status_t LINFlexD_UART_DRV_StartSendUsingInterrupts(uint32_t instance,
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_StartReceiveUsingInterrupts
- * Description   : Initiate (start) a receive by beginning the process of
- * receiving data and enabling the interrupt.
- * This is not a public API as it is called from other driver functions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Initiate (start) a receive by beginning the process of receiving data and enabling the interrupt.
+ */
 static status_t LINFlexD_UART_DRV_StartReceiveUsingInterrupts(uint32_t instance,
                                                               uint8_t * rxBuff,
                                                               uint32_t rxSize)
@@ -1513,14 +1345,9 @@ static status_t LINFlexD_UART_DRV_StartReceiveUsingInterrupts(uint32_t instance,
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_CompleteSendUsingInterrupts
- * Description   : Finish up a transmit by completing the process of sending
- * data and disabling the interrupt.
- * This is not a public API as it is called from other driver functions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Finish up a transmit by completing the process of sending data and disabling the interrupt.
+ */
 static void LINFlexD_UART_DRV_CompleteSendUsingInterrupts(uint32_t instance)
 {
     LINFlexD_Type * base;
@@ -1551,14 +1378,9 @@ static void LINFlexD_UART_DRV_CompleteSendUsingInterrupts(uint32_t instance)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_CompleteReceiveUsingInterrupts
- * Description   : Finish up a receive by completing the process of receiving data
- * and disabling the interrupt.
- * This is not a public API as it is called from other driver functions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Finish up a receive by completing the process of receiving data and disabling the interrupt.
+ */
 static void LINFlexD_UART_DRV_CompleteReceiveUsingInterrupts(uint32_t instance)
 {
     linflexd_uart_state_t * uartState;
@@ -1590,14 +1412,9 @@ static void LINFlexD_UART_DRV_CompleteReceiveUsingInterrupts(uint32_t instance)
 }
 
 #if (FEATURE_LINFlexD_HAS_DMA_ENABLED)
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_StartSendDataUsingDma
- * Description   : Initiate (start) a transmit by beginning the process of
- * sending data using DMA transfers.
- * This is not a public API as it is called from other driver functions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Initiate (start) a transmit by beginning the process of sending data using DMA transfers.
+ */
 static status_t LINFlexD_UART_DRV_StartSendUsingDma(uint32_t instance,
                                                     const uint8_t * txBuff,
                                                     uint32_t txSize)
@@ -1673,14 +1490,9 @@ static status_t LINFlexD_UART_DRV_StartSendUsingDma(uint32_t instance,
     return status;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_StartReceiveDataUsingDma
- * Description   : Initiate (start) a receive by beginning the process of
- * receiving data using DMA transfers.
- * This is not a public API as it is called from other driver functions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Initiate (start) a receive by beginning the process of receiving data using DMA transfers.
+ */
 static status_t LINFlexD_UART_DRV_StartReceiveUsingDma(uint32_t instance,
                                                        uint8_t * rxBuff,
                                                        uint32_t rxSize)
@@ -1757,15 +1569,9 @@ static status_t LINFlexD_UART_DRV_StartReceiveUsingDma(uint32_t instance,
     return retVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_CompleteSendDataUsingDma
- * Description   : Finish up a transmit by completing the process of sending
- * data and disabling the DMA requests. This is a callback for DMA trigger loop
- * completion, so it must match the DMA callback signature.
- * This is not a public API as it is called from other driver functions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Finish up a transmit by completing the process of sending data and disabling the DMA requests. This is a callback for DMA trigger loop completion, so it must match the DMA callback signature.
+ */
 static void LINFlexD_UART_DRV_CompleteSendUsingDma(void * parameter, dma_chn_status_t status)
 {
     (void)status;
@@ -1843,15 +1649,9 @@ static void LINFlexD_UART_DRV_CompleteSendUsingDma(void * parameter, dma_chn_sta
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_CompleteReceiveDataUsingDma
- * Description   : Finish up a receive by completing the process of receiving data
- * and disabling the DMA requests. This is a callback for DMA trigger loop
- * completion, so it must match the DMA callback signature.
- * This is not a public API as it is called from other driver functions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Finish up a receive by completing the process of receiving data and disabling the DMA requests. This is a callback for DMA trigger loop completion, so it must match the DMA callback signature.
+ */
 static void LINFlexD_UART_DRV_CompleteReceiveUsingDma(void * parameter, dma_chn_status_t status)
 {
     (void)status;
@@ -1935,14 +1735,9 @@ static void LINFlexD_UART_DRV_CompleteReceiveUsingDma(void * parameter, dma_chn_
 }
 #endif
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_PutData
- * Description   : Write data to the buffer register, according to configured
- * word length.
- * This is not a public API as it is called from other driver functions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Write data to the buffer register, according to configured word length.
+ */
 static void LINFlexD_UART_DRV_PutData(uint32_t instance)
 {
     linflexd_uart_state_t * uartState;
@@ -1979,14 +1774,9 @@ static void LINFlexD_UART_DRV_PutData(uint32_t instance)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_GetData
- * Description   : Read data from the buffer register, according to configured
- * word length.
- * This is not a public API as it is called from other driver functions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Read data from the buffer register, according to configured word length.
+ */
 static void LINFlexD_UART_DRV_GetData(uint32_t instance)
 {
     linflexd_uart_state_t * uartState;
@@ -2024,13 +1814,9 @@ static void LINFlexD_UART_DRV_GetData(uint32_t instance)
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_FlushRxFifo
- * Description   : Flushes the rx FIFO.
- * This is not a public API as it is called from other driver functions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Flushes the rx FIFO.
+ */
 static void LINFlexD_UART_DRV_FlushRxFifo(const LINFlexD_Type *base)
 {
     uint16_t dummy;
@@ -2051,19 +1837,17 @@ static void LINFlexD_UART_DRV_FlushRxFifo(const LINFlexD_Type *base)
     (void)dummy;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_ConfigureTimeoutCounter
- * Description   : This function configure a LINFlexD timeout counter.
- *
- * Implements    : LINFlexD_UART_DRV_ConfigureTimeoutCounter_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function configure a LINFlexD timeout counter.
+ */
 status_t LINFlexD_UART_DRV_ConfigureTimeoutCounter(uint32_t instance, 
                                                 linflexd_uart_idle_timeout_config_t * timeoutCounterConfig)
 {
     DEV_ASSERT(instance < LINFlexD_INSTANCE_COUNT);
+    DEV_ASSERT(timeoutCounterConfig != NULL);
     DEV_ASSERT(timeoutCounterConfig->idleTimeoutCount <= 0xFFF);
-    DEV_ASSERT((timeoutCounterConfig->enableIdleTimeout == true) && (timeoutCounterConfig->idleTimeoutCount != 0x0));
+    DEV_ASSERT((timeoutCounterConfig->enableIdleTimeout == false) ||
+               (timeoutCounterConfig->idleTimeoutCount != 0x0));
 
     status_t status = STATUS_SUCCESS;
     LINFlexD_Type * base;

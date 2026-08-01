@@ -8,6 +8,13 @@
 /*!
  * @file etmr_hw_access.c
  * @version 1.4.1
+ *
+ * @brief eTMR HW Access Layer — implementation.
+ *
+ * This file implements the hardware-register access functions that
+ * cannot be inlined, including status flag read/clear operations,
+ * interrupt enable/disable, IO status queries, channel mode control,
+ * and fault configuration.
  */
 
 /*!
@@ -24,13 +31,13 @@
 
 
 #if defined(FEATURE_eTMR_HAS_HARDWARE_CAPTURE) && (FEATURE_eTMR_HAS_HARDWARE_CAPTURE == 1U)
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the negative-pulse ready flag for one channel.
  *
- * Function Name : eTMR_DRV_GetChnNegPulseRdyFlag
- * Description   : Get channel negative pulse ready flag
- *
- * Implements    : eTMR_DRV_GetChnNegPulseRdyFlag_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @param[in] channel   Channel index.
+ * @return `true` if the negative-pulse measurement is ready, `false` otherwise.
+ */
 bool eTMR_DRV_GetChnNegPulseRdyFlag(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -39,13 +46,13 @@ bool eTMR_DRV_GetChnNegPulseRdyFlag(uint32_t instance, uint8_t channel)
     return ((etmrBase->STS & (eTMR_STS_CH0NPF_MASK << channel)) >> (eTMR_STS_CH0NPF_SHIFT + channel)) != 0U;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the positive-pulse ready flag for one channel.
  *
- * Function Name : eTMR_DRV_GetChnPosPulseRdyFlag
- * Description   : Get the channel positive pulse ready flag
- *
- * Implements    : eTMR_DRV_GetChnPosPulseRdyFlag_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @param[in] channel   Channel index.
+ * @return `true` if the positive-pulse measurement is ready, `false` otherwise.
+ */
 bool eTMR_DRV_GetChnPosPulseRdyFlag(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -55,13 +62,12 @@ bool eTMR_DRV_GetChnPosPulseRdyFlag(uint32_t instance, uint8_t channel)
 }
 #endif
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the current quadrature decoder direction.
  *
- * Function Name : eTMR_DRV_GetQuadDecodeDir
- * Description   : Get quadrature decoder direction
- *
- * Implements    : eTMR_DRV_GetQuadDecodeDir_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @return `true` when the quadrature decoder is counting up, `false` otherwise.
+ */
 bool eTMR_DRV_GetQuadDecodeDir(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -69,13 +75,12 @@ bool eTMR_DRV_GetQuadDecodeDir(uint32_t instance)
     return (((etmrBase->STS) & eTMR_STS_QDDIR_MASK) >> eTMR_STS_QDDIR_SHIFT) != 0U;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the quadrature decoder counter overflow flag.
  *
- * Function Name : eTMR_DRV_GetQuadDecodeTofFlag
- * Description   : Get quadrature decoder counter overflow flag
- *
- * Implements    : eTMR_DRV_GetQuadDecodeTofFlag_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @return `true` if the overflow flag is set, `false` otherwise.
+ */
 bool eTMR_DRV_GetQuadDecodeTofFlag(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -83,13 +88,12 @@ bool eTMR_DRV_GetQuadDecodeTofFlag(uint32_t instance)
     return (((etmrBase->STS) & eTMR_STS_QDTOF_MASK) >> eTMR_STS_QDTOF_SHIFT) != 0U;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the eTMR counter overflow flag.
  *
- * Function Name : eTMR_DRV_GetTofFlag
- * Description   : Get eTMR counter overflow flag
- *
- * Implements    : eTMR_DRV_GetTofFlag_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @return `true` if the counter overflow flag is set, `false` otherwise.
+ */
 bool eTMR_DRV_GetTofFlag(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -97,13 +101,12 @@ bool eTMR_DRV_GetTofFlag(uint32_t instance)
     return (((etmrBase->STS) & eTMR_STS_TOF_MASK) >> eTMR_STS_TOF_SHIFT) != 0U;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the eTMR reload flag.
  *
- * Function Name : eTMR_DRV_GetReloadFlag
- * Description   : Get eTMR reload flag
- *
- * Implements    : eTMR_DRV_GetReloadFlag_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @return `true` if the reload flag is set, `false` otherwise.
+ */
 bool eTMR_DRV_GetReloadFlag(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -111,13 +114,13 @@ bool eTMR_DRV_GetReloadFlag(uint32_t instance)
     return (((etmrBase->STS) & eTMR_STS_RF_MASK) >> eTMR_STS_RF_SHIFT) != 0U;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the fault flag for one fault channel.
  *
- * Function Name : eTMR_DRV_GetFaultFlag
- * Description   : Get eTMR fault channel flag
- *
- * Implements    : eTMR_DRV_GetFaultFlag_Activity
- *END**************************************************************************/
+ * @param[in] instance    eTMR instance index (0-based).
+ * @param[in] fltChannel  Fault channel index.
+ * @return `true` if the fault flag is set, `false` otherwise.
+ */
 bool eTMR_DRV_GetFaultFlag(uint32_t instance, uint8_t fltChannel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -126,13 +129,13 @@ bool eTMR_DRV_GetFaultFlag(uint32_t instance, uint8_t fltChannel)
     return ((etmrBase->STS & ((uint32_t)eTMR_STS_F0F_MASK << fltChannel)) >> (eTMR_STS_F0F_SHIFT + fltChannel)) != 0U;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the interrupt flag for one eTMR channel.
  *
- * Function Name : eTMR_DRV_GetChnFlag
- * Description   : Get eTMR channel interrupt flag
- *
- * Implements    : eTMR_DRV_GetChnFlag_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @param[in] channel   Channel index.
+ * @return `true` if the channel flag is set, `false` otherwise.
+ */
 bool eTMR_DRV_GetChnFlag(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -141,14 +144,13 @@ bool eTMR_DRV_GetChnFlag(uint32_t instance, uint8_t channel)
     return (((etmrBase->STS) & ((uint32_t)0x1U << channel)) >> channel) != 0U;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : eTMR_DRV_ClearChnNegPulseRdyFlag
- * Description   : Clear channel negative pulse ready flag
- *
- * Implements    : eTMR_DRV_ClearChnNegPulseRdyFlag_Activity
- *END**************************************************************************/
 #if defined(FEATURE_eTMR_HAS_HARDWARE_CAPTURE) && (FEATURE_eTMR_HAS_HARDWARE_CAPTURE == 1U)
+/*!
+ * @brief Clear the negative-pulse ready flag for one channel.
+ *
+ * @param[in] instance  eTMR instance index (0-based).
+ * @param[in] channel   Channel index.
+ */
 void eTMR_DRV_ClearChnNegPulseRdyFlag(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -157,13 +159,12 @@ void eTMR_DRV_ClearChnNegPulseRdyFlag(uint32_t instance, uint8_t channel)
     etmrBase->STS = eTMR_STS_CH0NPF_MASK << channel;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Clear the positive-pulse ready flag for one channel.
  *
- * Function Name : eTMR_DRV_ClearChnPosPulseRdyFlag
- * Description   : Clear channel positive pulse ready flag
- *
- * Implements    : eTMR_DRV_ClearChnPosPulseRdyFlag_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @param[in] channel   Channel index.
+ */
 void eTMR_DRV_ClearChnPosPulseRdyFlag(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -173,13 +174,11 @@ void eTMR_DRV_ClearChnPosPulseRdyFlag(uint32_t instance, uint8_t channel)
 }
 #endif
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Clear the quadrature decoder counter overflow flag.
  *
- * Function Name : eTMR_DRV_ClearQuadDecodeTofFlag
- * Description   : Clear quadrature decoder counter overflow flag
- *
- * Implements    : eTMR_DRV_ClearQuadDecodeTofFlag_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ */
 void eTMR_DRV_ClearQuadDecodeTofFlag(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -187,13 +186,11 @@ void eTMR_DRV_ClearQuadDecodeTofFlag(uint32_t instance)
     etmrBase->STS = eTMR_STS_QDTOF_MASK;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Clear the eTMR counter overflow flag.
  *
- * Function Name : eTMR_DRV_ClearTofFlag
- * Description   : Clear eTMR counter overflow flag
- *
- * Implements    : eTMR_DRV_ClearTofFlag_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ */
 void eTMR_DRV_ClearTofFlag(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -201,13 +198,11 @@ void eTMR_DRV_ClearTofFlag(uint32_t instance)
     etmrBase->STS = eTMR_STS_TOF_MASK;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Clear the eTMR reload flag.
  *
- * Function Name : eTMR_DRV_ClearReloadFlag
- * Description   : Clear eTMR reload flag
- *
- * Implements    : eTMR_DRV_ClearReloadFlag_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ */
 void eTMR_DRV_ClearReloadFlag(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -215,13 +210,12 @@ void eTMR_DRV_ClearReloadFlag(uint32_t instance)
     etmrBase->STS = eTMR_STS_RF_MASK;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Clear the fault flag for one fault channel.
  *
- * Function Name : eTMR_DRV_ClearFaultFlag
- * Description   : Clear fault channel flag
- *
- * Implements    : eTMR_DRV_ClearFaultFlag_Activity
- *END**************************************************************************/
+ * @param[in] instance    eTMR instance index (0-based).
+ * @param[in] fltChannel  Fault channel index.
+ */
 void eTMR_DRV_ClearFaultFlag(uint32_t instance, uint8_t fltChannel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -230,13 +224,12 @@ void eTMR_DRV_ClearFaultFlag(uint32_t instance, uint8_t fltChannel)
     etmrBase->STS = (uint32_t)eTMR_STS_F0F_MASK << fltChannel;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Clear one or more channel interrupt flags.
  *
- * Function Name : eTMR_DRV_ClearChnFlag
- * Description   : Clear channel interrupt flag
- *
- * Implements    : eTMR_DRV_ClearChnFlag_Activity
- *END**************************************************************************/
+ * @param[in] instance    eTMR instance index (0-based).
+ * @param[in] channelSet  Bitmask of channels to clear.
+ */
 void eTMR_DRV_ClearChnFlag(uint32_t instance, uint8_t channelSet)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -244,13 +237,12 @@ void eTMR_DRV_ClearChnFlag(uint32_t instance, uint8_t channelSet)
     etmrBase->STS = ((uint32_t)channelSet << eTMR_STS_CH0F_SHIFT); /*PRQA S 2985*/
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the current phase-B input status in quadrature decode mode.
  *
- * Function Name : eTMR_DRV_GetPhaseBStatus
- * Description   : Get status of phase B in quadrature decode mode
- *
- * Implements    : eTMR_DRV_GetPhaseBStatus_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @return Phase-B input status.
+ */
 uint8_t eTMR_DRV_GetPhaseBStatus(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -258,13 +250,12 @@ uint8_t eTMR_DRV_GetPhaseBStatus(uint32_t instance)
     return (uint8_t)(((etmrBase->IOSTS) & eTMR_IOSTS_PHB_MASK) >> eTMR_IOSTS_PHB_SHIFT);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the current phase-A input status in quadrature decode mode.
  *
- * Function Name : eTMR_DRV_GetPhaseAStatus
- * Description   : Get status of phase A in quadrature decode mode
- *
- * Implements    : eTMR_DRV_GetPhaseAStatus_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @return Phase-A input status.
+ */
 uint8_t eTMR_DRV_GetPhaseAStatus(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -272,13 +263,13 @@ uint8_t eTMR_DRV_GetPhaseAStatus(uint32_t instance)
     return (uint8_t)(((etmrBase->IOSTS) & eTMR_IOSTS_PHA_MASK) >> eTMR_IOSTS_PHA_SHIFT);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the live input status of one fault channel.
  *
- * Function Name : eTMR_DRV_GetFaultInputStatus
- * Description   : Get the fault input status(polarity)
- *
- * Implements    : eTMR_DRV_GetFaultInputStatus_Activity
- *END**************************************************************************/
+ * @param[in] instance    eTMR instance index (0-based).
+ * @param[in] fltChannel  Fault channel index.
+ * @return Fault input status.
+ */
 uint8_t eTMR_DRV_GetFaultInputStatus(uint32_t instance, uint8_t fltChannel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -287,14 +278,13 @@ uint8_t eTMR_DRV_GetFaultInputStatus(uint32_t instance, uint8_t fltChannel)
     return (uint8_t)((etmrBase->IOSTS & ((uint32_t)eTMR_IOSTS_F0_MASK << fltChannel)) >> (eTMR_IOSTS_F0_SHIFT + fltChannel));
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the IO status of one eTMR channel.
  *
- * Function Name : eTMR_DRV_GetChnIoStatus
- * Description   : Get eTMR channel IO status in pwm, output compare and input
- *                 capture mode.
- *
- * Implements    : eTMR_DRV_GetChnIoStatus_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @param[in] channel   Channel index.
+ * @return Current IO status for the channel.
+ */
 uint8_t eTMR_DRV_GetChnIoStatus(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -303,13 +293,13 @@ uint8_t eTMR_DRV_GetChnIoStatus(uint32_t instance, uint8_t channel)
     return (uint8_t)((etmrBase->IOSTS >> channel) & eTMR_IOSTS_CH0IO_MASK);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Configure one channel pair for PWM complementary or independent mode.
  *
- * Function Name : eTMR_DRV_SetChnCompMode
- * Description   : Set channel as complementary mode
- *
- * Implements    : eTMR_DRV_SetChnCompMode_Activity
- *END**************************************************************************/
+ * @param[in] instance     eTMR instance index (0-based).
+ * @param[in] channelPair  Channel-pair index.
+ * @param[in] mode         PWM mode selection for the pair.
+ */
 void eTMR_DRV_SetChnCompMode(uint32_t instance, uint8_t channelPair, etmr_pwm_mode_t mode)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -320,13 +310,13 @@ void eTMR_DRV_SetChnCompMode(uint32_t instance, uint8_t channelPair, etmr_pwm_mo
 }
 
 #if FEATURE_eTMR_HAS_DOUBLE_SWITCH
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Enable or disable double-switch mode for one channel pair.
  *
- * Function Name : eTMR_DRV_SetChnDoubleSwitch
- * Description   : Set channel as double switch mode
- *
- * Implements    : eTMR_DRV_SetChnDoubleSwitch_Activity
- *END**************************************************************************/
+ * @param[in] instance     eTMR instance index (0-based).
+ * @param[in] channelPair  Channel-pair index.
+ * @param[in] en           `true` to enable double-switch mode.
+ */
 void eTMR_DRV_SetChnDoubleSwitch(uint32_t instance, uint8_t channelPair, bool en)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -338,13 +328,13 @@ void eTMR_DRV_SetChnDoubleSwitch(uint32_t instance, uint8_t channelPair, bool en
 #endif
 
 #if FEATURE_eTMR_HAS_COMBINATION_CAPTURE
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Enable or disable combination-capture mode for one channel pair.
  *
- * Function Name : eTMR_DRV_SetChnCombMode
- * Description   : Set channel as combination capture mode
- *
- * Implements    : eTMR_DRV_SetChnCombMode_Activity
- *END**************************************************************************/
+ * @param[in] instance     eTMR instance index (0-based).
+ * @param[in] channelPair  Channel-pair index.
+ * @param[in] en           `true` to enable combination capture.
+ */
 void eTMR_DRV_SetChnCombMode(uint32_t instance, uint8_t channelPair, bool en)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -354,13 +344,13 @@ void eTMR_DRV_SetChnCombMode(uint32_t instance, uint8_t channelPair, bool en)
     etmrBase->CTRL |= ((uint32_t)(en ? 1U : 0U) << (eTMR_CTRL_COMB01_SHIFT + channelPair));
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Select the combination-capture source for one channel pair.
  *
- * Function Name : eTMR_DRV_SetChnCombSrc
- * Description   : Set channel as combination capture source
- *
- * Implements    : eTMR_DRV_SetChnCombSrc_Activity
- *END**************************************************************************/
+ * @param[in] instance     eTMR instance index (0-based).
+ * @param[in] channelPair  Channel-pair index.
+ * @param[in] src          Combination-capture source selection.
+ */
 void eTMR_DRV_SetChnCombSrc(uint32_t instance, uint8_t channelPair, uint8_t src)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -371,13 +361,13 @@ void eTMR_DRV_SetChnCombSrc(uint32_t instance, uint8_t channelPair, uint8_t src)
 }
 #endif
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Set the input polarity for one fault channel.
  *
- * Function Name : eTMR_DRV_SetFaultChnPol
- * Description   : Set fault channel input polarity
- *
- * Implements    : eTMR_DRV_SetFaultChnPol_Activity
- *END**************************************************************************/
+ * @param[in] instance    eTMR instance index (0-based).
+ * @param[in] fltChannel  Fault channel index.
+ * @param[in] pol         Fault input polarity value.
+ */
 void eTMR_DRV_SetFaultChnPol(uint32_t instance, uint8_t fltChannel, uint32_t pol)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -387,13 +377,13 @@ void eTMR_DRV_SetFaultChnPol(uint32_t instance, uint8_t fltChannel, uint32_t pol
     etmrBase->FAULT |= (pol << (eTMR_FAULT_F0POL_SHIFT + fltChannel));
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Enable or disable one fault channel.
  *
- * Function Name : eTMR_DRV_SetFaultChnEnable
- * Description   : Set fault channel interrupt enable or not
- *
- * Implements    : eTMR_DRV_SetFaultChnEnable_Activity
- *END**************************************************************************/
+ * @param[in] instance    eTMR instance index (0-based).
+ * @param[in] fltChannel  Fault channel index.
+ * @param[in] enable      `true` to enable the fault channel.
+ */
 void eTMR_DRV_SetFaultChnEnable(uint32_t instance, uint8_t fltChannel, bool enable)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -403,13 +393,11 @@ void eTMR_DRV_SetFaultChnEnable(uint32_t instance, uint8_t fltChannel, bool enab
     etmrBase->FAULT |= ((uint32_t)(enable ? 1U : 0U) << (eTMR_FAULT_F0EN_SHIFT + fltChannel)); /*PRQA S 2986*/
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Enable the quadrature decoder overflow interrupt.
  *
- * Function Name : eTMR_DRV_EnableQuadDecodeTofInt
- * Description   : Enable quadrature decoder counter overflow interrupt.
- *
- * Implements    : eTMR_DRV_EnableQdTofInt_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ */
 void eTMR_DRV_EnableQuadDecodeTofInt(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -417,13 +405,11 @@ void eTMR_DRV_EnableQuadDecodeTofInt(uint32_t instance)
     eTMR_SetQdTofIntEnable(etmrBase, true);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Disable the quadrature decoder overflow interrupt.
  *
- * Function Name : eTMR_DRV_DisableQuadDecodeTofInt
- * Description   : Disable quadrature decoder counter overflow interrupt
- *
- * Implements    : eTMR_DRV_DisableQuadDecodeTofInt_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ */
 void eTMR_DRV_DisableQuadDecodeTofInt(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -431,13 +417,11 @@ void eTMR_DRV_DisableQuadDecodeTofInt(uint32_t instance)
     eTMR_SetQdTofIntEnable(etmrBase, false);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Enable the eTMR counter overflow interrupt.
  *
- * Function Name : eTMR_DRV_EnableTofInt
- * Description   : Enable eTMR overflow interrupt
- *
- * Implements    : eTMR_DRV_EnableTofInt_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ */
 void eTMR_DRV_EnableTofInt(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -445,13 +429,11 @@ void eTMR_DRV_EnableTofInt(uint32_t instance)
     eTMR_SetTofIntEnable(etmrBase, true);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Disable the eTMR counter overflow interrupt.
  *
- * Function Name : eTMR_DRV_DisableTofInt
- * Description   : Disable eTMR overflow interrupt
- *
- * Implements    : eTMR_DRV_DisableTofInt_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ */
 void eTMR_DRV_DisableTofInt(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -459,13 +441,12 @@ void eTMR_DRV_DisableTofInt(uint32_t instance)
     eTMR_SetTofIntEnable(etmrBase, false);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Enable the interrupt for one channel.
  *
- * Function Name : eTMR_DRV_EnableChnInt
- * Description   : Enable specified channel interrupt.
- *
- * Implements    : eTMR_DRV_EnableChnInt_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @param[in] channel   Channel index.
+ */
 void eTMR_DRV_EnableChnInt(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -475,13 +456,12 @@ void eTMR_DRV_EnableChnInt(uint32_t instance, uint8_t channel)
     etmrBase->INTE |= ((uint32_t)0x1U << (eTMR_INTE_CH0IE_SHIFT + channel)); /*PRQA S 2986*/
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Enable interrupts for a set of channels.
  *
- * Function Name : eTMR_DRV_SetChnsetIntEnable
- * Description   : Enable channel set interrupt.
- *
- * Implements    : eTMR_DRV_SetChnsetIntEnable_Activity
- *END**************************************************************************/
+ * @param[in] instance    eTMR instance index (0-based).
+ * @param[in] channelSet  Bitmask of channels to enable.
+ */
 void eTMR_DRV_SetChnsetIntEnable(uint32_t instance, uint8_t channelSet)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -489,13 +469,12 @@ void eTMR_DRV_SetChnsetIntEnable(uint32_t instance, uint8_t channelSet)
     etmrBase->INTE |= ((uint32_t)channelSet << eTMR_INTE_CH0IE_SHIFT); /*PRQA S 2985*/
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Disable the interrupt for one channel.
  *
- * Function Name : eTMR_DRV_DisableChnInt
- * Description   : Disable specified channel interrupt.
- *
- * Implements    : eTMR_DRV_DisableChnInt_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @param[in] channel   Channel index.
+ */
 void eTMR_DRV_DisableChnInt(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -504,13 +483,12 @@ void eTMR_DRV_DisableChnInt(uint32_t instance, uint8_t channel)
     etmrBase->INTE &= ~((uint32_t)eTMR_INTE_CH0IE_MASK << channel);
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Disable interrupts for a set of channels.
  *
- * Function Name : eTMR_DRV_SetChnsetIntDisable
- * Description   : Disable channel set interrupt.
- *
- * Implements    : eTMR_DRV_SetChnsetIntDisable_Activity
- *END**************************************************************************/
+ * @param[in] instance    eTMR instance index (0-based).
+ * @param[in] channelSet  Bitmask of channels to disable.
+ */
 void eTMR_DRV_SetChnsetIntDisable(uint32_t instance, uint8_t channelSet)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -518,13 +496,12 @@ void eTMR_DRV_SetChnsetIntDisable(uint32_t instance, uint8_t channelSet)
     etmrBase->INTE &= ~((uint32_t)channelSet << eTMR_INTE_CH0IE_SHIFT); /*PRQA S 2985*/
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Check whether the counter overflow interrupt is enabled.
  *
- * Function Name : eTMR_DRV_IsTofIntEnabled
- * Description   : Get if counter overflow interrupt is enabled or not.
- *
- * Implements    : eTMR_DRV_IsTofIntEnabled_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @return `true` if the interrupt is enabled, `false` otherwise.
+ */
 bool eTMR_DRV_IsTofIntEnabled(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -532,13 +509,12 @@ bool eTMR_DRV_IsTofIntEnabled(uint32_t instance)
     return (((etmrBase->INTE) & eTMR_INTE_TOIE_MASK) >> eTMR_INTE_TOIE_SHIFT) != 0U;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Check whether the quadrature decoder overflow interrupt is enabled.
  *
- * Function Name : eTMR_DRV_IsQuadDecodeTofIntEnabled
- * Description   : Get if quadrature decoder counter overflow interrupt is enabled or not.
- *
- * Implements    : eTMR_DRV_IsQdTofIntEnabled_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @return `true` if the interrupt is enabled, `false` otherwise.
+ */
 bool eTMR_DRV_IsQuadDecodeTofIntEnabled(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -546,13 +522,12 @@ bool eTMR_DRV_IsQuadDecodeTofIntEnabled(uint32_t instance)
     return (((etmrBase->INTE) & eTMR_INTE_QDTOIE_MASK) >> eTMR_INTE_QDTOIE_SHIFT) != 0U;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Check whether the fault interrupt is enabled.
  *
- * Function Name : eTMR_DRV_IsFaultIntEnabled
- * Description   : Get if fault interrupt is enabled or not.
- *
- * Implements    : eTMR_DRV_IsFaultIntEnabled_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @return `true` if the interrupt is enabled, `false` otherwise.
+ */
 bool eTMR_DRV_IsFaultIntEnabled(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -560,13 +535,13 @@ bool eTMR_DRV_IsFaultIntEnabled(uint32_t instance)
     return (((etmrBase->INTE) & eTMR_INTE_FIE_MASK) >> eTMR_INTE_FIE_SHIFT) != 0U;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Check whether the interrupt for one channel is enabled.
  *
- * Function Name : eTMR_DRV_IsChnIntEnabled
- * Description   : Get if the channel interrupt is enabled or not.
- *
- * Implements    : eTMR_DRV_IsChnIntEnabled_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @param[in] channel   Channel index.
+ * @return `true` if the channel interrupt is enabled, `false` otherwise.
+ */
 bool eTMR_DRV_IsChnIntEnabled(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);
@@ -575,13 +550,12 @@ bool eTMR_DRV_IsChnIntEnabled(uint32_t instance, uint8_t channel)
     return ((etmrBase->INTE & ((uint32_t)eTMR_INTE_CH0IE_MASK << channel)) >> (eTMR_INTE_CH0IE_SHIFT + channel)) != 0U; /*PRQA S 2986*/
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Get the current eTMR counter value.
  *
- * Function Name : eTMR_DRV_GetCntVal
- * Description   : Get eTMR current counter value.
- *
- * Implements    : eTMR_DRV_GetCntVal_Activity
- *END**************************************************************************/
+ * @param[in] instance  eTMR instance index (0-based).
+ * @return Current counter value.
+ */
 uint32_t eTMR_DRV_GetCntVal(uint32_t instance)
 {
     DEV_ASSERT(instance < eTMR_INSTANCE_COUNT);

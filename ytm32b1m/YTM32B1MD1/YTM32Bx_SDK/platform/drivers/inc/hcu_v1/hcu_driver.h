@@ -8,6 +8,24 @@
 /*!
  * @file hcu_driver.h
  * @version 1.4.1
+ *
+ * @brief HCU V1 Driver - Public API for the Hardware Cryptography Unit.
+ *
+ * This header defines the application-facing API for the HCU V1 security
+ * engine. The driver manages runtime state, data-carry mode selection, user
+ * key loading, and cryptographic processing flows for AES, optional SM4,
+ * SHA, CMAC, CCM, and optional HMAC features.
+ *
+ * The APIs are organized into the following categories:
+ *   - Initialization & Runtime Control
+ *   - Callback & Key Management
+ *   - Cipher Operations
+ *   - MAC & Hash Operations
+ *   - Authenticated Encryption
+ *   - Command Status & Interrupt Handling
+ *
+ * @note Data-processing APIs document their alignment, block-size, and
+ *       segmented-message requirements individually.
  */
 
 #ifndef HCU_DRV_H
@@ -21,190 +39,214 @@
 #include "callbacks.h"
 
 /*!
- * @addtogroup hcu_driver_v1
+ * @defgroup hcu_driver_v1 HCU V1 Driver
+ * @ingroup hcu_v1
+ * @brief Public driver APIs for the Hardware Cryptography Unit V1.
+ * @details Provides runtime setup, key loading, cipher execution, MAC or hash
+ *          orchestration, and asynchronous completion support for the HCU V1
+ *          hardware block.
  * @{
  */
 
 /*!
- * @brief Specify the key size to be used to implement the requested cryptographic
- * operation.
+ * @brief User-key size selection.
  *
- * Implements : hcu_key_size_t_Class
+ * Selects the key length written through `HCU_DRV_LoadUserKey()`.
+ *
+ * | Value | Description |
+ * |-------|-------------|
+ * | `KEY_SIZE_128_BITS` | Load a 128-bit key. |
+ * | `KEY_SIZE_192_BITS` | Load a 192-bit key. |
+ * | `KEY_SIZE_256_BITS` | Load a 256-bit key. |
  */
 typedef enum
 {
-    KEY_SIZE_128_BITS = 0x00U, /*!< 128-bit key size */
-    KEY_SIZE_192_BITS = 0x01U, /*!< 192-bit key size */
-    KEY_SIZE_256_BITS = 0x02U, /*!< 256-bit key size */
+    KEY_SIZE_128_BITS = 0x00U, /*!< Select a 128-bit key. */
+    KEY_SIZE_192_BITS = 0x01U, /*!< Select a 192-bit key. */
+    KEY_SIZE_256_BITS = 0x02U, /*!< Select a 256-bit key. */
 } hcu_key_size_t;
 
 /*!
- * @brief Specify the block type used to implement the requested cryptographic
- * operation.
+ * @brief Message-fragment type for segmented operations.
  *
- * Implements : hcu_block_type_t_Class
+ * Identifies whether the current API call carries the first, middle, final, or
+ * complete message fragment for CMAC, SHA, HMAC, or CCM processing.
+ *
+ * | Value | Description |
+ * |-------|-------------|
+ * | `MSG_START` | First fragment of a multi-call message. |
+ * | `MSG_END` | Final fragment of a multi-call message. |
+ * | `MSG_ALL` | Entire message provided in a single call. |
+ * | `MSG_MIDDLE` | Intermediate fragment of a multi-call message. |
  */
 typedef enum
 {
-    MSG_START = 0x02U,       /*!< Start of a message block */
-    MSG_END = 0x01U,         /*!< End of a message block */
-    MSG_ALL = 0x03U,         /*!< All message in one block */
-    MSG_MIDDLE = 0x00U,      /*!< All message in one block */
+    MSG_START = 0x02U,       /*!< Mark the first fragment of a segmented message. */
+    MSG_END = 0x01U,         /*!< Mark the last fragment of a segmented message. */
+    MSG_ALL = 0x03U,         /*!< Mark a complete message handled in one call. */
+    MSG_MIDDLE = 0x00U,      /*!< Mark an intermediate fragment of a segmented message. */
 } hcu_msg_type_t;
 
 /*!
- * @brief Specify the SHA type used to implement the requested cryptographic
- * operation.
+ * @brief SHA algorithm selector.
  *
- * Implements : hcu_sha_type_t_Class
+ * Chooses which SHA engine profile is used by the SHA and optional HMAC APIs.
  */
 typedef enum
 {
-    HCU_SHA_256 = 0x01U,       /*!< SHA 256 algorithm */
-    HCU_SHA_384 = 0x02U,       /*!< SHA 384 algorithm */
+    HCU_SHA_256 = 0x01U,       /*!< Select the SHA-256 profile. */
+    HCU_SHA_384 = 0x02U,       /*!< Select the SHA-384 profile. */
 } hcu_sha_type_t;
 
-/*! 
- * @brief HCU mode selection 
- * 
- * Implements : hcu_mode_sel_t_Class
+/*!
+ * @brief HCU operation direction selector.
+ *
+ * Controls whether the active command runs in encrypt/generate mode or in
+ * decrypt/authorize mode.
  */
 typedef enum
 {
-    MODE_ENC = 1U,          /*!< Encryption mode */
-    MODE_DEC = 0U           /*!< Decryption mode */
+    MODE_ENC = 1U,          /*!< Execute an encrypt or generate flow. */
+    MODE_DEC = 0U           /*!< Execute a decrypt or authorize flow. */
 } hcu_mode_sel_t;
 
-/*! 
- * @brief HCU swapping mode 
- * 
- * Implements : hcu_swapping_t_Class
+/*!
+ * @brief HCU data-swapping mode.
+ *
+ * Selects the byte or bit swapping applied by `HCU_DRV_CfgSwapping()`.
  */
 typedef enum
 {
-    MODE_SWAPPING_NO        = 0U,          /*!< No swapping */
-    MODE_SWAPPING_HALFWORD  = 1U,          /*!< Half-word swapping */
-    MODE_SWAPPING_BYTE      = 2U,          /*!< Byte swapping */
-    MODE_SWAPPING_BIT       = 3U,          /*!< Bit swapping */
+    MODE_SWAPPING_NO        = 0U,          /*!< Keep the hardware data order unchanged. */
+    MODE_SWAPPING_HALFWORD  = 1U,          /*!< Swap the two half-words in each word. */
+    MODE_SWAPPING_BYTE      = 2U,          /*!< Swap the byte order in each word. */
+    MODE_SWAPPING_BIT       = 3U,          /*!< Reverse the bit order in the data path. */
 } hcu_swapping_t;
 
-/*! 
- * @brief Define input data and output data carried type 
+/*!
+ * @brief Data-carry mode selection.
  *
- * Implements : hcu_carry_type_t_Class
+ * Selects how the driver services the HCU FIFOs while a command is running.
+ *
+ * | Value | Description |
+ * |-------|-------------|
+ * | `HCU_USING_POLLING` | Service the FIFOs in the calling context until completion. |
+ * | `HCU_USING_INTERRUPT` | Service the FIFOs from the HCU interrupt handler. |
+ * | `HCU_USING_DMA` | Transfer FIFO data through DMA channels. |
  */
 typedef enum
 {
-    HCU_USING_POLLING         = 0U,          /*!< Carry data by polling */
-    HCU_USING_INTERRUPT       = 1U,          /*!< Carry data by interrupt */
-    HCU_USING_DMA             = 2U,          /*!< Carry data by DMA */
+    HCU_USING_POLLING         = 0U,          /*!< Move data through polling loops. */
+    HCU_USING_INTERRUPT       = 1U,          /*!< Move data through interrupt-driven FIFO service. */
+    HCU_USING_DMA             = 2U,          /*!< Move data through DMA transfers. */
 } hcu_carry_type_t;
 
-/*! 
- * @brief HCU algorithm selection
+/*!
+ * @brief Driver-tracked algorithm identifier.
  *
- * Implements : hcu_alg_mode_t_Class
+ * This enumeration records which algorithm family is currently active in the
+ * internal runtime state.
  */
 typedef enum
 {
-    ALG_DISABLE   = 0x000U,             /*!< No algorithm selected */
-    AES_ECB_MODE  = 0x001U,             /*!< AES-ECB selected */
-    AES_CBC_MODE  = 0x002U,             /*!< AES-CBC selected */
-    AES_CTR_MODE  = 0x003U,             /*!< AES-CTR selected */
-    AES_CCM_MODE  = 0x004U,             /*!< AES-CCM selected */
-    AES_CMAC_MODE = 0x005U,             /*!< AES-CMAC selected */
-    SM4_ECB_MODE  = 0x010U,             /*!< SM4-ECB selected */
-    SHA_256_MODE  = 0x200U,             /*!< SHA-256 selected */
-    SHA_384_MODE  = 0x300U              /*!< SHA-384 selected */
+    ALG_DISABLE   = 0x000U,             /*!< No command is currently associated with a tracked algorithm. */
+    AES_ECB_MODE  = 0x001U,             /*!< AES ECB command context. */
+    AES_CBC_MODE  = 0x002U,             /*!< AES CBC command context. */
+    AES_CTR_MODE  = 0x003U,             /*!< AES CTR command context. */
+    AES_CCM_MODE  = 0x004U,             /*!< AES CCM command context. */
+    AES_CMAC_MODE = 0x005U,             /*!< AES CMAC command context. */
+    SM4_ECB_MODE  = 0x010U,             /*!< SM4 ECB command context. */
+    SHA_256_MODE  = 0x200U,             /*!< SHA-256 command context. */
+    SHA_384_MODE  = 0x300U              /*!< SHA-384 command context. */
 } hcu_alg_mode_t;
 
 #if defined(FEATURE_HCU_HMAC_ENGINE) && (FEATURE_HCU_HMAC_ENGINE > 0)
 /*!
- * @brief Specify the key size to be used to implement the requested cryptographic
- * operation for HMAC.
+ * @brief HMAC key-size encoding.
  *
- * Implements :hcu_hmac_key_size_t_Class
+ * Selects the key-size code written into the optional HMAC control field.
  */
 typedef enum
 {
-    HMAC_KEY_16_BITS = 0x0U,            /*!< 16-bit HMAC key size*/
-    HMAC_KEY_32_BITS = 0x1U,            /*!< 32-bit HMAC key size*/
-    HMAC_KEY_64_BITS = 0x2U,            /*!< 64-bit HMAC key size*/
-    HMAC_KEY_128_BITS = 0x3U,           /*!< 128-bit HMAC key size*/
-    HMAC_KEY_256_BITS = 0x4U,           /*!< 256-bit HMAC key size*/
+    HMAC_KEY_16_BITS = 0x0U,            /*!< Select the HMAC key-size code named 16 bits. */
+    HMAC_KEY_32_BITS = 0x1U,            /*!< Select the HMAC key-size code named 32 bits. */
+    HMAC_KEY_64_BITS = 0x2U,            /*!< Select the HMAC key-size code named 64 bits. */
+    HMAC_KEY_128_BITS = 0x3U,           /*!< Select the HMAC key-size code named 128 bits. */
+    HMAC_KEY_256_BITS = 0x4U,           /*!< Select the HMAC key-size code named 256 bits. */
 } hcu_hmac_key_size_t;
 #endif /* FEATURE_HCU_HMAC_ENGINE */
 
 /*!
- * @brief Specifies the CCM configuration.
+ * @brief CCM context configuration.
  *
- * Implements : hcu_ccm_config_t_Class
+ * Holds the nonce, additional authenticated data, tag buffer, and message
+ * length used by `HCU_DRV_CCMConfig()`.
  */
 typedef struct
 {
-    uint8_t *nonce;         /*!< Specifies the nonce used for the CCM operation */
-    uint8_t nonceSize;      /*!< Specifies the size of the nonce used for the CCM operation */
-    uint8_t *addData;       /*!< Specifies the additional data used for the CCM operation */
-    uint8_t addDataSize;    /*!< Specifies the size of the additional data used for the CCM operation */
-    uint8_t *tag;           /*!< Specifies the tag used for the CCM operation */
-    uint8_t tagSize;        /*!< Specifies the size of the tag used for the CCM operation */
-    uint64_t msgLen;        /*!< Specifies the length of the plain text or cipher text buffer */
+    uint8_t *nonce;         /*!< Nonce buffer used to build the CCM B0 and counter blocks. */
+    uint8_t nonceSize;      /*!< Nonce length in bytes. */
+    uint8_t *addData;       /*!< Additional authenticated data buffer. */
+    uint8_t addDataSize;    /*!< Additional authenticated data length in bytes. */
+    uint8_t *tag;           /*!< Tag buffer used for CCM output or verification input. */
+    uint8_t tagSize;        /*!< Requested authentication tag length in bytes. */
+    uint64_t msgLen;        /*!< Total plaintext or ciphertext length associated with the CCM context. */
 } hcu_ccm_config_t;
 
 /*!
- * @brief Specifies the CMAC configuration.
+ * @brief CMAC buffer configuration.
  *
- * Implements : hcu_cmac_config_t_Class
+ * Describes the MAC buffer used by CMAC generate and authorize flows.
  */
 typedef struct
 {
-    uint8_t *macPtr;        /*!< Specifies the mac used for the CMAC operation */
-    uint8_t macLen;         /*!< Specifies the length of the mac used for the CMAC operation */
+    uint8_t *macPtr;        /*!< MAC buffer used for CMAC output or authorize input. */
+    uint8_t macLen;         /*!< Number of MAC bytes to read or compare. */
 } hcu_cmac_config_t;
 
 /*!
- * @brief Specifies the user configuration of HCU.
+ * @brief User configuration for HCU V1 driver initialization.
  *
- * Implements : hcu_user_config_t_Class
+ * Selects the swap mode and FIFO carry path used after `HCU_DRV_Init()`.
  */
 typedef struct
 {
-    hcu_swapping_t swap;           /*!< Specifies the type of swapping */
-    hcu_carry_type_t carryType;    /*!< Specifies the type of data carried type */
-    uint8_t ingressDMAChannel;     /*!< Channel number for DMA ingress channel */
-    uint8_t egressDMAChannel;      /*!< Channel number for DMA egress channel */
+    hcu_swapping_t swap;           /*!< Data swap mode programmed into the HCU control register. */
+    hcu_carry_type_t carryType;    /*!< FIFO carry mode used while a command is running. */
+    uint8_t ingressDMAChannel;     /*!< DMA channel used for input FIFO transfers. */
+    uint8_t egressDMAChannel;      /*!< DMA channel used for output FIFO transfers. */
 } hcu_user_config_t;
 
 /*!
  * @brief Internal driver state information.
  *
- * @note The contents of this structure are internal to the driver and should not be
- *       modified by users. Also, contents of the structure are subject to change in
- *       future releases.
+ * The driver uses this structure to track the active command, remaining FIFO
+ * work, callback information, and authenticated-operation context.
  *
- * Implements : hcu_state_t_Class
+ * @note This structure is owned by the driver after `HCU_DRV_Init()` and must
+ *       not be modified by application code while the driver is active.
  */
 typedef struct
 {
-    volatile bool cmdInProgress;  /*!< Specifies if a command is in progress */
-    bool isLastBlock;             /*!< Specifies if the last block */
-    bool blockingCmd;             /*!< Specifies if a command is blocking or asynchronous */
-    security_callback_t callback; /*!< The callback invoked when a command is complete */
-    void *callbackParam;          /*!< User parameter for the command completion callback */
-    semaphore_t cmdComplete;      /*!< Synchronization object for synchronous operation */
-    uint32_t const *dataInputPtr;  /*!< Specifies current processing data input pointer */
-    uint32_t *dataOutputPtr;       /*!< Specifies current processing data output pointer */
-    uint64_t msgLen;              /*!< Specifies the length of the plain text or cipher text buffer */
-    uint64_t inputCount;          /*!< Specifies the input fifo count of the plain text or cipher text buffer */
-    uint64_t outputCount;         /*!< Specifies the output fifo count of the plain text or cipher text buffer */
-    uint8_t ingressDMAChannel;    /*!< Channel number for DMA ingress channel */
-    uint8_t egressDMAChannel;     /*!< Channel number for DMA egress channel */
-    hcu_ccm_config_t *ccmConfig;  /*!< Specifies the CCM configuration */
-    hcu_cmac_config_t *cmacConfig; /*!< Specifies the CMAC configuration */
-    status_t status;              /*!< Specifies the current status */
-    hcu_mode_sel_t mode;           /*!< Encryption or decryption */
-    hcu_carry_type_t carryType;    /*!< Specifies the type of data carried type */
-    hcu_alg_mode_t algorithm;      /*!< Specifies the current algorithm */
+    volatile bool cmdInProgress;   /*!< True while the driver is servicing an active command. */
+    bool isLastBlock;              /*!< True when the current segment closes the message stream. */
+    bool blockingCmd;              /*!< True when the command is tracked as blocking by the driver. */
+    security_callback_t callback;  /*!< Completion callback invoked by asynchronous paths. */
+    void *callbackParam;           /*!< User parameter passed back through the completion callback. */
+    semaphore_t cmdComplete;       /*!< Synchronization object created during initialization. */
+    uint32_t const *dataInputPtr;  /*!< Current input FIFO source pointer. */
+    uint32_t *dataOutputPtr;       /*!< Current output FIFO destination pointer. */
+    uint64_t msgLen;               /*!< Current payload length programmed for the command. */
+    uint64_t inputCount;           /*!< Remaining input bytes still waiting to enter the FIFO path. */
+    uint64_t outputCount;          /*!< Remaining output bytes still waiting to be drained. */
+    uint8_t ingressDMAChannel;     /*!< DMA channel reserved for input FIFO transfers. */
+    uint8_t egressDMAChannel;      /*!< DMA channel reserved for output FIFO transfers. */
+    hcu_ccm_config_t *ccmConfig;   /*!< Active CCM context, when CCM has been configured. */
+    hcu_cmac_config_t *cmacConfig; /*!< Active CMAC buffer configuration. */
+    status_t status;               /*!< Last completion status reported by the driver. */
+    hcu_mode_sel_t mode;           /*!< Current encrypt/generate or decrypt/authorize direction. */
+    hcu_carry_type_t carryType;    /*!< Active FIFO carry mode. */
+    hcu_alg_mode_t algorithm;      /*!< Internal identifier for the currently active algorithm. */
 } hcu_state_t;
 
 
@@ -216,433 +258,454 @@ typedef struct
 extern "C" {
 #endif
 
+/*******************************************************************************
+ * Initialization & Runtime Control
+ ******************************************************************************/
 /*!
- * @brief Initializes the internal state of the driver and enables the HCU interrupt.
+ * @name Initialization & Runtime Control
+ * @brief Functions for installing the driver state, restoring runtime defaults,
+ *        and controlling top-level HCU status bits.
+ * @{
+ */
+
+/*!
+ * @brief Initialize the HCU V1 driver state.
  *
- * @param[in] userConfig Pointer to the configuration of hcu module.
- * @param[in] state Pointer to the state structure which will be used for holding
- * the internal state of the driver.
- * @return Error Code after command execution.
+ * Installs the caller-provided runtime state structure, clears its tracked
+ * command context, copies the carry-mode configuration, applies the selected
+ * swap mode, and creates the completion semaphore.
+ *
+ * @param[in] userConfig Pointer to the user configuration structure. Must not
+ *                       be NULL.
+ * @param[in] state Pointer to the runtime state structure that remains owned by
+ *                  the driver after initialization. Must not be NULL.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Driver initialization completed successfully.
+ * @retval STATUS_ERROR Semaphore creation failed.
+ *
+ * @post The driver is ready to accept key-loading and processing requests.
  */
 status_t HCU_DRV_Init(const hcu_user_config_t * userConfig, hcu_state_t *state);
 
 /*!
- * @brief De-initializes the internal state of the driver and disables the HCU interrupt.
+ * @brief De-initialize the HCU V1 driver state.
  *
- * @param[in] state Pointer to the state structure which will be used for holding
- * the internal state of the driver.
- * @return Error Code after command execution.
+ * Clears the tracked runtime state, disables the HCU interrupt path, resets the
+ * main control and interrupt-enable registers, and destroys the semaphore owned
+ * by @a state.
+ *
+ * @param[in] state Pointer to the runtime state structure previously passed to
+ *                  `HCU_DRV_Init()`. Must not be NULL.
+ * @return Execution status reported by the OSIF semaphore destroy helper.
+ *
+ * @post The global driver state pointer is cleared.
  */
 status_t HCU_DRV_DeInit(hcu_state_t *state);
 
 /*!
- * @brief Configure Data Swapping.
+ * @brief Program the HCU data-swapping mode.
  *
- * @param[in] cfg HCU swapping type.
+ * @param[in] cfg Swap mode written into the HCU data-swap field.
  *
- * @return None.
+ * @note The value must be one of the `hcu_swapping_t` enumerators.
  */
 void HCU_DRV_CfgSwapping(hcu_swapping_t cfg);
 
 /*!
- * @brief Clear operate done flag.
+ * @brief Clear the operation-done status flag.
  *
- * @return None.
+ * Writes the HCU operation-done bit using the status register W1C mechanism.
  */
 void HCU_DRV_ClearODFlag(void);
 
+/*! @} */ /* End of Initialization & Runtime Control */
+
+/*******************************************************************************
+ * Callback & Key Management
+ ******************************************************************************/
 /*!
- * @brief Load user defined key into the key slot.
+ * @name Callback & Key Management
+ * @brief Functions for installing callbacks and loading software keys.
+ * @{
+ */
+
+/*!
+ * @brief Load a software key into the HCU key registers.
  *
- * @param[in] key Pointer to the user defined key.
- * @param[in] keySize Specifies the size of the key.
- * @return Key load result.
+ * @param[in] key Pointer to the key buffer. The address must be 32-bit aligned.
+ * @param[in] keySize Key-size selector written to the HCU key-size field.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Key load completed successfully.
+ * @retval STATUS_HCU_KEY_SIZE_NOT_SUPPORTED The requested key size is not handled.
+ * @retval STATUS_HCU_LOAD_KEY_WHEN_BUSY A command is already in progress.
+ *
+ * @warning Do not call this function while the driver is servicing another
+ *          command.
  */
 status_t HCU_DRV_LoadUserKey(const void *key, hcu_key_size_t keySize);
 
 /*!
- * @brief Installs a user callback for the command complete event.
+ * @brief Install a completion callback for asynchronous command paths.
  *
- * This function installs a user callback for the command complete event.
- *
- * @param[in] callbackFunction The pointer to the callback function.
- * @param[in] callbackParam The pointer to the callback function's parameter.
- * @return Pointer to the previous callback.
+ * @param[in] callbackFunction Callback invoked when an asynchronous command
+ *                             completes. Pass NULL to clear the callback.
+ * @param[in] callbackParam User parameter passed back to the callback.
+ * @return Previously installed callback pointer.
  */
 security_callback_t HCU_DRV_InstallCallback(security_callback_t callbackFunction, void *callbackParam);
 
+/*! @} */ /* End of Callback & Key Management */
+
+/*******************************************************************************
+ * Cipher Operations
+ ******************************************************************************/
 /*!
- * @brief Performs the AES encryption in ECB mode.
+ * @name Cipher Operations
+ * @brief AES and optional SM4 block-cipher processing helpers.
  *
- * This function performs the AES encryption in ECB mode of the input
- * plain text buffer
+ * Unless stated otherwise, the input and output buffers used by these APIs
+ * must be 32-bit aligned and the payload length must be a multiple of 16 bytes.
+ * @{
+ */
+
+/*!
+ * @brief Encrypt a payload with AES in ECB mode.
  *
- * @param[in] plainText Pointer to the plain text buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[in] length Number of bytes of plain text message to be encrypted.
- *            @note Should be multiple of 16 bytes.
- * @param[out] cipherText Pointer to the cipher text buffer. The buffer shall
- * have the same size as the plain text buffer.
- *             @note Address passed in this parameter must be 32 bit aligned.
- * @return Error Code after command execution. Output parameters are valid if
- * the error code is STATUS_SUCCESS.
+ * @param[in] plainText Pointer to the plaintext buffer.
+ * @param[in] length Plaintext length in bytes.
+ * @param[out] cipherText Pointer to the ciphertext output buffer.
+ * @return Execution status.
+ *
+ * @note The buffer addresses must be 32-bit aligned.
+ * @warning `length` must be a multiple of 16 bytes.
  */
 status_t HCU_DRV_EncryptECB(const void *plainText,
                             uint16_t length, void *cipherText);
 
 /*!
- * @brief Performs the AES decryption in ECB mode.
+ * @brief Decrypt a payload with AES in ECB mode.
  *
- * This function performs the AES decryption in ECB mode of the input
- * cipher text buffer.
+ * @param[in] cipherText Pointer to the ciphertext buffer.
+ * @param[in] length Ciphertext length in bytes.
+ * @param[out] plainText Pointer to the plaintext output buffer.
+ * @return Execution status.
  *
- * @param[in] cipherText Pointer to the cipher text buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[in] length Number of bytes of cipher text message to be decrypted.
- *            @note Should be multiple of 16 bytes.
- * @param[out] plainText Pointer to the plain text buffer. The buffer shall
- * have the same size as the cipher text buffer.
- *             @note Address passed in this parameter must be 32 bit aligned.
- * @return Error Code after command execution. Output parameters are valid if
- * the error code is STATUS_SUCCESS.
+ * @note The buffer addresses must be 32-bit aligned.
+ * @warning `length` must be a multiple of 16 bytes.
  */
 status_t HCU_DRV_DecryptECB(const void *cipherText,
                             uint16_t length, void *plainText);
 
 #if FEATURE_HCU_SM4_ENGINE
 /*!
- * @brief Performs the SM4-128 encryption in ECB mode.
+ * @brief Encrypt a payload with SM4 in ECB mode.
  *
- * This function performs the SM4-128 encryption in ECB mode of the input
- * plain text buffer
+ * @param[in] plainText Pointer to the plaintext buffer.
+ * @param[in] length Plaintext length in bytes.
+ * @param[out] cipherText Pointer to the ciphertext output buffer.
+ * @return Execution status.
  *
- * @param[in] plainText Pointer to the plain text buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[in] length Number of bytes of plain text message to be encrypted.
- *            @note Should be multiple of 16 bytes.
- * @param[out] cipherText Pointer to the cipher text buffer. The buffer shall
- * have the same size as the plain text buffer.
- *             @note Address passed in this parameter must be 32 bit aligned.
- * @return Error Code after command execution. Output parameters are valid if
- * the error code is STATUS_SUCCESS.
+ * @note The buffer addresses must be 32-bit aligned.
+ * @warning `length` must be a multiple of 16 bytes.
  */
 status_t HCU_DRV_EncryptSM4ECB(const void *plainText,
                                uint16_t length, void *cipherText);
 
 /*!
- * @brief Performs the SM4-128 decryption in ECB mode.
+ * @brief Decrypt a payload with SM4 in ECB mode.
  *
- * This function performs the SM4-128 decryption in ECB mode of the input
- * cipher text buffer.
+ * @param[in] cipherText Pointer to the ciphertext buffer.
+ * @param[in] length Ciphertext length in bytes.
+ * @param[out] plainText Pointer to the plaintext output buffer.
+ * @return Execution status.
  *
- * @param[in] cipherText Pointer to the cipher text buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[in] length Number of bytes of cipher text message to be decrypted.
- *            @note Should be multiple of 16 bytes.
- * @param[out] plainText Pointer to the plain text buffer. The buffer shall
- * have the same size as the cipher text buffer.
- *             @note Address passed in this parameter must be 32 bit aligned.
- * @return Error Code after command execution. Output parameters are valid if
- * the error code is STATUS_SUCCESS.
+ * @note The buffer addresses must be 32-bit aligned.
+ * @warning `length` must be a multiple of 16 bytes.
  */
 status_t HCU_DRV_DecryptSM4ECB(const void *cipherText,
                                uint16_t length, void *plainText);
 #endif /* FEATURE_HCU_SM4_ENGINE */
 
 /*!
- * @brief Performs the AES encryption in CBC mode.
+ * @brief Encrypt a payload with AES in CBC mode.
  *
- * This function performs the AES encryption in CBC mode of the input
- * plaintext buffer.
+ * @param[in] plainText Pointer to the plaintext buffer.
+ * @param[in] length Plaintext length in bytes.
+ * @param[in] iv Pointer to the IV buffer. Pass NULL to keep the current IV.
+ * @param[out] cipherText Pointer to the ciphertext output buffer.
+ * @return Execution status.
  *
- * @param[in] plainText Pointer to the plain text buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[in] length Number of bytes of plain text message to be encrypted.
- *            @note Should be multiple of 16 bytes.
- * @param[in] iv Pointer to the initialization vector buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[out] cipherText Pointer to the cipher text buffer. The buffer shall
- * have the same size as the plain text buffer.
- *             @note Address passed in this parameter must be 32 bit aligned.
- * @return Error Code after command execution. Output parameters are valid if
- * the error code is STATUS_SUCCESS.
+ * @note The plaintext, IV, and ciphertext addresses must be 32-bit aligned
+ *       when the corresponding pointer is non-NULL.
+ * @warning `length` must be a multiple of 16 bytes.
  */
 status_t HCU_DRV_EncryptCBC(const void *plainText, uint16_t length,
                             const void *iv, void *cipherText);
 
 /*!
- * @brief Performs the AES decryption in CBC mode.
+ * @brief Decrypt a payload with AES in CBC mode.
  *
- * This function performs the AES decryption in CBC mode of the input
- * cipher text buffer.
+ * @param[in] cipherText Pointer to the ciphertext buffer.
+ * @param[in] length Ciphertext length in bytes.
+ * @param[in] iv Pointer to the IV buffer. Pass NULL to keep the current IV.
+ * @param[out] plainText Pointer to the plaintext output buffer.
+ * @return Execution status.
  *
- * @param[in] cipherText Pointer to the cipher text buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[in] length Number of bytes of cipher text message to be decrypted.
- * It should be multiple of 16 bytes.
- * @param[in] iv Pointer to the initialization vector buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[out] plainText Pointer to the plain text buffer. The buffer shall
- * have the same size as the cipher text buffer.
- *             @note Address passed in this parameter must be 32 bit aligned.
- * @return Error Code after command execution. Output parameters are valid if
- * the error code is STATUS_SUCCESS.
+ * @note The ciphertext, IV, and plaintext addresses must be 32-bit aligned
+ *       when the corresponding pointer is non-NULL.
+ * @warning `length` must be a multiple of 16 bytes.
  */
 status_t HCU_DRV_DecryptCBC(const void *cipherText, uint16_t length,
                             const void *iv, void *plainText);
 
 #if FEATURE_HCU_AES_CTR_ENGINE
 /*!
- * @brief Performs the AES decryption in CTR mode.
+ * @brief Decrypt a payload with AES in CTR mode.
  *
- * This function performs the AES decryption in CTR mode of the input
- * cipher text buffer.
+ * @param[in] cipherText Pointer to the ciphertext buffer.
+ * @param[in] length Ciphertext length in bytes.
+ * @param[in] cv Pointer to the counter-value buffer. Pass NULL to keep the
+ *               current counter value.
+ * @param[out] plainText Pointer to the plaintext output buffer.
+ * @return Execution status.
  *
- * @param[in] cipherText Pointer to the cipher text buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[in] length Number of bytes of cipher text message to be decrypted.
- * It should be multiple of 16 bytes.
- * @param[in] cv Pointer to the count value buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[out] plainText Pointer to the plain text buffer. The buffer shall
- * have the same size as the cipher text buffer.
- *             @note Address passed in this parameter must be 32 bit aligned.
- * @return Error Code after command execution. Output parameters are valid if
- * the error code is STATUS_SUCCESS.
+ * @note The ciphertext, counter-value, and plaintext addresses must be 32-bit
+ *       aligned when the corresponding pointer is non-NULL.
+ * @warning `length` must be a multiple of 16 bytes.
  */
 status_t HCU_DRV_DecryptCTR(const void *cipherText, uint16_t length, 
                             const void *cv, void *plainText);
 
 /*!
- * @brief Performs the AES encryption in CTR mode.
+ * @brief Encrypt a payload with AES in CTR mode.
  *
- * This function performs the AES encryption in CTR mode of the input
- * plaintext buffer.
+ * @param[in] plainText Pointer to the plaintext buffer.
+ * @param[in] length Plaintext length in bytes.
+ * @param[in] cv Pointer to the counter-value buffer. Pass NULL to keep the
+ *               current counter value.
+ * @param[out] cipherText Pointer to the ciphertext output buffer.
+ * @return Execution status.
  *
- * @param[in] plainText Pointer to the plain text buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[in] length Number of bytes of plain text message to be encrypted.
- *            @note Should be multiple of 16 bytes.
- * @param[in] cv Pointer to the count value buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[out] cipherText Pointer to the cipher text buffer. The buffer shall
- * have the same size as the plain text buffer.
- *             @note Address passed in this parameter must be 32 bit aligned.
- * @return Error Code after command execution. Output parameters are valid if
- * the error code is STATUS_SUCCESS.
+ * @note The plaintext, counter-value, and ciphertext addresses must be 32-bit
+ *       aligned when the corresponding pointer is non-NULL.
+ * @warning `length` must be a multiple of 16 bytes.
  */
 status_t HCU_DRV_EncryptCTR(const void *plainText, uint16_t length, 
                             const void *cv, void *cipherText);
-#endif
+#endif /* FEATURE_HCU_AES_CTR_ENGINE */
+
+/*! @} */ /* End of Cipher Operations */
+
+/*******************************************************************************
+ * MAC & Hash Operations
+ ******************************************************************************/
+/*!
+ * @name MAC & Hash Operations
+ * @brief Functions for CMAC, SHA, and optional HMAC services.
+ * @{
+ */
 
 /*!
- * @brief Calculates the MAC of a given message using CMAC with AES.
+ * @brief Generate a CMAC value with the AES engine.
  *
- * This function calculates the MAC of a given message using CMAC with AES.
+ * @param[in] msg Pointer to the message buffer. The address must be 32-bit aligned.
+ * @param[in] msgLen Number of message bytes processed by this call.
+ * @param[in] msgType Message-fragment type for segmented CMAC flows.
+ * @param[in,out] cmacConfig CMAC buffer description used to return the MAC
+ *                           bytes for generate flows.
+ * @return Execution status.
  *
- * @param[in] msg Pointer to the message buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[in] msgLen Number of bytes of message on which CMAC will be computed.
- * @param[in] msgType Indicates whether the message is header or data.
- * @param[out] cmacConfig Pointer to the cmac configuration.
- * computation.
- *             @note Address passed in this parameter must be 32 bit aligned.
- * @return Error Code after command execution. Output parameters are valid if
- * the error code is STATUS_SUCCESS.
+ * @note `MSG_END` and `MSG_ALL` cause the driver to finalize the MAC status.
  */
 status_t HCU_DRV_GenerateMAC(const void *msg, uint16_t msgLen, hcu_msg_type_t msgType,
                              hcu_cmac_config_t *cmacConfig);
 
 /*!
- * @brief Authorize the MAC of a given message using CMAC with AES.
+ * @brief Authorize a CMAC value with the AES engine.
  *
- * This function authorizes the MAC of a given message and mac using CMAC with AES.
- *
- * @param[in] msg Pointer to the message buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[in] msgLen Number of bytes of message on which CMAC will be computed.
- * @param[in] msgType Indicates whether the message is header or data.
- * @param[in] cmacConfig Pointer to the cmac configuration.
- * computation.
- *             @note Address passed in this parameter must be 32 bit aligned.
- * @return Error Code after command execution. Output parameters are valid if
- * the error code is STATUS_SUCCESS.
+ * @param[in] msg Pointer to the message buffer. The address must be 32-bit aligned.
+ * @param[in] msgLen Number of message bytes processed by this call.
+ * @param[in] msgType Message-fragment type for segmented CMAC flows.
+ * @param[in,out] cmacConfig CMAC buffer description that supplies the expected
+ *                           MAC bytes.
+ * @return Execution status.
  */
 status_t HCU_DRV_AuthorizeMAC(const void *msg, uint16_t msgLen, hcu_msg_type_t msgType,
                               hcu_cmac_config_t *cmacConfig);
 
 #if FEATURE_HCU_SHA_ENGINE
 /*!
- * @brief Calculates the result of a given message using SHA.
+ * @brief Generate a SHA digest.
  *
- * This function calculates the result of a given message using SHA.
+ * @param[in] msg Pointer to the message buffer. The address must be 32-bit aligned.
+ * @param[in] msgLen Number of bytes processed by this call.
+ * @param[in] totalLen Total message length in bytes. Programmed on the first or
+ *                     all-in-one SHA block.
+ * @param[in] shaType SHA algorithm selector.
+ * @param[in] msgType Message-fragment type for segmented SHA processing.
+ * @param[out] result Pointer to the digest output buffer. The address must be
+ *                    32-bit aligned when non-NULL.
+ * @return Execution status.
  *
- * @param[in] msg Pointer to the message buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[in] msgLen Number of bytes of message on which SHA will be computed.
- * @param[in] totalLen Number of bytes of total message on which SHA will be computed.
- * @param[in] shaType SHA algorithm type.
- * @param[in] msgType Indicates whether the message is header or data.
- * @param[out] result Pointer to the buffer containing the result of the CMAC
- * computation.
- *             @note Address passed in this parameter must be 32 bit aligned.
- * @return Error Code after command execution. Output parameters are valid if
- * the error code is STATUS_SUCCESS.
+ * @warning For segmented SHA processing, `MSG_START` and `MSG_MIDDLE` blocks
+ *          must be non-zero multiples of the hardware block size.
  */
 status_t HCU_DRV_GenerateSHA(const void *msg, uint16_t msgLen, uint32_t totalLen,
                              hcu_sha_type_t shaType, hcu_msg_type_t msgType, void *result);
 
 #if FEATURE_HCU_HAS_SHA_AUTHORIZE
 /*!
- * @brief Authorize the result of a given message using SHA.
+ * @brief Authorize a SHA digest.
  *
- * This function authorizes the result of a given message using SHA.
- *
- * @param[in] msg Pointer to the message buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[in] msgLen Number of bytes of message on which SHA will be computed.
- * @param[in] totalLen Number of bytes of total message on which SHA will be computed.
- * @param[in] shaType SHA algorithm type.
- * @param[in] msgType Indicates whether the message is header or data.
- * @param[in] result Pointer to the buffer containing the given result of the SHA
- * computation.
- *             @note Address passed in this parameter must be 32 bit aligned.
- * @param[out] trueResult Pointer to the buffer containing the result of the SHA
- * computation.
- *             @note Address passed in this parameter must be 32 bit aligned.
- * @return Error Code after command execution. Output parameters are valid if
- * the error code is STATUS_SUCCESS.
+ * @param[in] msg Pointer to the message buffer. The address must be 32-bit aligned.
+ * @param[in] msgLen Number of bytes processed by this call.
+ * @param[in] totalLen Total message length in bytes.
+ * @param[in] shaType SHA algorithm selector.
+ * @param[in] msgType Message-fragment type for segmented SHA authorization.
+ * @param[in] result Pointer to the expected digest buffer. The address must be
+ *                   32-bit aligned.
+ * @param[out] trueResult Pointer to the computed digest buffer. The address
+ *                        must be 32-bit aligned when non-NULL.
+ * @return Execution status.
  */
 status_t HCU_DRV_AuthorizeSHA(const void *msg, uint16_t msgLen, uint32_t totalLen,
                              hcu_sha_type_t shaType, hcu_msg_type_t msgType, void *result, void *trueResult);
 #endif /* FEATURE_HCU_HAS_SHA_AUTHORIZE */
 #endif /* FEATURE_HCU_SHA_ENGINE */
 
-#if FEATURE_HCU_AES_CCM_ENGINE
-/*!
- * @brief CCM parameters configuration.
- *
- * Config ccm parameters include nonce, addition data and tag.
- *
- * @param[in] ccm Pointer to the configuration of CCM.
- * @param[in] mode Indicate if encrypt or decrypt.
- * @return Error Code after command execution. Output parameters are valid if
- * the error code is STATUS_SUCCESS.
- */
-status_t HCU_DRV_CCMConfig(hcu_ccm_config_t *ccm, hcu_mode_sel_t mode);
-
-/*!
- * @brief Performs the AES encryption in CCM mode.
- *
- * This function performs the AES encryption in CCM mode of the input
- * cipher text buffer.
- *
- * @param[in] plainText Pointer to the plain text buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[in] length Number of bytes of cipher text message to be decrypted.
- * It should be multiple of 16 bytes.
- * @param[out] cipherText Pointer to the cipher text buffer. The buffer shall
- * have the same size as the plain text buffer.
- *             @note Address passed in this parameter must be 32 bit aligned.
- * @param[in] isLast Indicate if is the last block.
- * @return Error Code after command execution. Output parameters are valid if
- * the error code is STATUS_SUCCESS.
- */
-status_t HCU_DRV_EncryptCCM(const void *plainText, uint16_t length,
-                            void *cipherText, bool isLast);
-
-/*!
- * @brief Performs the AES decryption in CCM mode.
- *
- * This function performs the AES decryption in CCM mode of the input
- * cipher text buffer.
- *
- * @param[in] cipherText Pointer to the cipher text buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[in] length Number of bytes of cipher text message to be decrypted.
- * It should be multiple of 16 bytes.
- * @param[out] plainText Pointer to the plain text buffer. The buffer shall
- * have the same size as the cipher text buffer.
- *             @note Address passed in this parameter must be 32 bit aligned.
- * @param[in] isLast Indicate if is the last block.
- * @return Error Code after command execution. Output parameters are valid if
- * the error code is STATUS_SUCCESS.
- */
-status_t HCU_DRV_DecryptCCM(const void *cipherText, uint16_t length,
-                            void *plainText, bool isLast);
-#endif /* FEATURE_HCU_AES_CCM_ENGINE */
-
 #if defined(FEATURE_HCU_HMAC_ENGINE) && (FEATURE_HCU_HMAC_ENGINE > 0)
 /*!
- * @brief Performs the AES load key for HMAC.
+ * @brief Load an HMAC key into the optional HMAC engine.
  *
- * This function loads the user key into the HCU for HMAC.
+ * @param[in] key Pointer to the HMAC key buffer. The address must be 32-bit aligned.
+ * @param[in] keySize HMAC key-size encoding written to the control register.
+ * @return Execution status.
  *
- * @param[in] key Pointer to the user defined key.
- * @param[in] keySize Specifies the size of the key.
- * @return Key load result.
+ * @note This API is available only when `FEATURE_HCU_HMAC_ENGINE` is enabled.
  */
 status_t HCU_DRV_LoadHMACKey(const void *key, hcu_hmac_key_size_t keySize);
 
 /*!
- * @brief Calculates the result of a given message using HMAC.
+ * @brief Generate an HMAC digest.
  *
- * This function calculates the result of a given message using HMAC.
- *
- * @param[in] msg Pointer to the message buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[in] msgLen Number of bytes of message on which HMAC will be computed.
- * @param[in] totalLen Number of bytes of total message on which HMAC will be computed.
- * @param[in] shaType SHA algorithm type.
- * @param[in] msgType Indicates whether the message is header or data.
- * @param[out] result Pointer to the buffer containing the result of the CMAC
- * computation.
- *             @note Address passed in this parameter must be 32 bit aligned.
- * @return Error Code after command execution. Output parameters are valid if
- * the error code is STATUS_SUCCESS.
+ * @param[in] msg Pointer to the message buffer. The address must be 32-bit aligned.
+ * @param[in] msgLen Number of bytes processed by this call.
+ * @param[in] totalLen Total message length in bytes.
+ * @param[in] shaType SHA variant used by the HMAC engine.
+ * @param[in] msgType Message-fragment type for segmented HMAC processing.
+ * @param[out] result Pointer to the digest output buffer. The address must be
+ *                    32-bit aligned when non-NULL.
+ * @return Execution status.
  */
 status_t HCU_DRV_GenerateHMAC(const void *msg, uint16_t msgLen, uint32_t totalLen,
                              hcu_sha_type_t shaType, hcu_msg_type_t msgType, void *result);
 
 #if FEATURE_HCU_HAS_SHA_AUTHORIZE
 /*!
- * @brief Authorize the result of a given message using HMAC.
+ * @brief Authorize an HMAC digest.
  *
- * This function authorizes the result of a given message using HMAC.
- *
- * @param[in] msg Pointer to the message buffer.
- *            @note Address passed in this parameter must be 32 bit aligned.
- * @param[in] msgLen Number of bytes of message on which HMAC will be computed.
- * @param[in] totalLen Number of bytes of total message on which HMAC will be computed.
- * @param[in] shaType SHA algorithm type.
- * @param[in] msgType Indicates whether the message is header or data.
- * @param[in] result Pointer to the buffer containing the given result of the HMAC
- * computation.
- *             @note Address passed in this parameter must be 32 bit aligned.
- * @param[out] trueResult Pointer to the buffer containing the result of the HMAC
- * computation.
- *             @note Address passed in this parameter must be 32 bit aligned.
- * @return Error Code after command execution. Output parameters are valid if
- * the error code is STATUS_SUCCESS.
+ * @param[in] msg Pointer to the message buffer. The address must be 32-bit aligned.
+ * @param[in] msgLen Number of bytes processed by this call.
+ * @param[in] totalLen Total message length in bytes.
+ * @param[in] shaType SHA variant used by the HMAC engine.
+ * @param[in] msgType Message-fragment type for segmented HMAC authorization.
+ * @param[in] result Pointer to the expected digest buffer. The address must be
+ *                   32-bit aligned.
+ * @param[out] trueResult Pointer to the computed digest buffer. The address
+ *                        must be 32-bit aligned when non-NULL.
+ * @return Execution status.
  */
 status_t HCU_DRV_AuthorizeHMAC(const void *msg, uint16_t msgLen, uint32_t totalLen,
                              hcu_sha_type_t shaType, hcu_msg_type_t msgType, void *result, void *trueResult);
 #endif /* FEATURE_HCU_HAS_SHA_AUTHORIZE */
 #endif /* FEATURE_HCU_HMAC_ENGINE */
 
+/*! @} */ /* End of MAC & Hash Operations */
+
+/*******************************************************************************
+ * Authenticated Encryption
+ ******************************************************************************/
 /*!
- * @brief Cancels a previously initiated command.
+ * @name Authenticated Encryption
+ * @brief Functions for AES-CCM setup and payload processing.
+ * @{
+ */
+
+#if FEATURE_HCU_AES_CCM_ENGINE
+/*!
+ * @brief Configure the CCM authenticated-data context.
  *
- * This function cancels any on-going HCU command.
+ * Programs the nonce, additional authenticated data, tag settings, and total
+ * payload length required by subsequent CCM encrypt or decrypt calls.
  *
- * @return STATUS_SUCCESS.
+ * @param[in,out] ccm Pointer to the CCM configuration structure.
+ * @param[in] mode Select encrypt or decrypt context setup.
+ * @return Execution status.
+ *
+ * @warning `tagSize` must be even and must not exceed 16 bytes.
+ */
+status_t HCU_DRV_CCMConfig(hcu_ccm_config_t *ccm, hcu_mode_sel_t mode);
+
+/*!
+ * @brief Encrypt a CCM payload segment.
+ *
+ * @param[in] plainText Pointer to the plaintext buffer.
+ * @param[in] length Payload length in bytes.
+ * @param[out] cipherText Pointer to the ciphertext output buffer.
+ * @param[in] isLast True when this segment is the last CCM payload block.
+ * @return Execution status.
+ *
+ * @note `HCU_DRV_CCMConfig()` must succeed before this API is used.
+ * @warning `length` must be a multiple of 16 bytes and the buffers must be
+ *          32-bit aligned.
+ */
+status_t HCU_DRV_EncryptCCM(const void *plainText, uint16_t length,
+                            void *cipherText, bool isLast);
+
+/*!
+ * @brief Decrypt a CCM payload segment.
+ *
+ * @param[in] cipherText Pointer to the ciphertext buffer.
+ * @param[in] length Payload length in bytes.
+ * @param[out] plainText Pointer to the plaintext output buffer.
+ * @param[in] isLast True when this segment is the last CCM payload block.
+ * @return Execution status.
+ *
+ * @note `HCU_DRV_CCMConfig()` must succeed before this API is used.
+ * @warning `length` must be a multiple of 16 bytes and the buffers must be
+ *          32-bit aligned.
+ */
+status_t HCU_DRV_DecryptCCM(const void *cipherText, uint16_t length,
+                            void *plainText, bool isLast);
+#endif /* FEATURE_HCU_AES_CCM_ENGINE */
+
+/*! @} */ /* End of Authenticated Encryption */
+
+/*******************************************************************************
+ * Command Status & Interrupt Handling
+ ******************************************************************************/
+/*!
+ * @name Command Status & Interrupt Handling
+ * @brief Functions that expose command-cancel intent and the shared IRQ entry.
+ * @{
+ */
+
+/*!
+ * @brief Reserved hook for command cancellation support.
+ *
+ * @return Execution status reported by the cancel path.
  */
 status_t HCU_DRV_CancelCommand(void);
 
 /*!
- * @brief Interrupt handler for HCU hardware Interface.
+ * @brief Shared HCU interrupt handler.
+ *
+ * Services input FIFO watermark, output FIFO watermark, and operation-done
+ * interrupt events for interrupt-driven HCU commands.
  */
 void HCU_DRV_IRQHandler(void);
+
+/*! @} */ /* End of Command Status & Interrupt Handling */
 
 #if defined(__cplusplus)
 }

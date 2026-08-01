@@ -1,10 +1,238 @@
 /*!
-@defgroup lptmr Low Power Timer (lpTMR)
-@details
-The YTMicro SDK provides Peripheral Drivers for the Low Power Timer (LPTMR) module of YTMicro SDK devices.
+@defgroup lptmr
+@ingroup mod_timer Low Power Timer (lpTMR)
+@brief Low-power 16-bit timer and pulse counter module for the YTMicro SDK.
 
-The lpTMR is a configurable 16-bit counter that can operate in two functional
-modes:
-    - Timer mode with selectable prescaler and clock source (periodic or free-running).
-    - Pulse-Counter mode, with configurable glitch filter, that can count events (internal or external)
- */
+@details
+The lpTMR module provides a low-power 16-bit counter that can operate either as
+a timer or as a pulse counter. In timer mode, the counter advances from a
+selectable clock source and generates compare-match events. In pulse-counter
+mode, the counter increments on internal or external pulse edges, with the
+prescaler field reused as a configurable glitch filter depth.
+
+@section lptmr_features Key Features
+- 16-bit low-power counter with compare-match event generation.
+- Supports **Timer Mode** and **Pulse-Counter Mode**.
+- Accepts compare values in raw ticks or microseconds.
+- Optional free-running mode for overflow-based timing.
+- Programmable prescaler in timer mode or glitch filter in pulse-counter mode.
+- Optional interrupt generation and DMA request on compare match.
+- Selectable pulse input source and active edge for pulse counting.
+- Optional clock source selection on devices that expose `FEATURE_lpTMR_HAS_CLOCK_SELECTION`.
+
+@section lptmr_modes Supported Modes
+
+| Mode | Counter Source | Compare Units | Prescaler Field Meaning | Typical Use |
+|------|----------------|---------------|-------------------------|-------------|
+| Timer Mode | Selected lpTMR clock source | Ticks or microseconds | Counter prescaler | Periodic wake-up, timeouts, low-power delays |
+| Pulse-Counter Mode | TMU trigger or external input pin | Ticks only | Glitch filter depth | Event counting, pulse accumulation, edge capture |
+
+@section lptmr_arch Module Architecture
+
+The lpTMR module is organized in a two-layer architecture:
+
+@verbatim
+┌──────────────────────────────────────────────┐
+│              Application Code                │
+│       (calls lpTMR_DRV_* public APIs)        │
+├──────────────────────────────────────────────┤
+│      lpTMR Driver Layer (lptmr_driver.h/c)   │
+│  ● Instance-based configuration and control  │
+│  ● Microsecond-to-tick conversion helpers    │
+│  ● Runtime status and compare-value services │
+├──────────────────────────────────────────────┤
+│   lpTMR HW Access Layer (lptmr_hw_access.h/c)│
+│  ● Direct register programming helpers       │
+│  ● Inline accessors for flags and registers  │
+│  ● Reset-state initialization routine        │
+├──────────────────────────────────────────────┤
+│           lpTMR Peripheral Hardware          │
+│      (CTRL, STS, DIE, PRS, CMP, CNT regs)    │
+└──────────────────────────────────────────────┘
+@endverbatim
+
+@subsection lptmr_arch_driver Driver Layer (lptmr_driver.h)
+Application code should use the `lpTMR_DRV_*` APIs to configure an instance,
+update compare values, and control runtime behavior by instance index.
+
+@subsection lptmr_arch_hw HW Access Layer (lptmr_hw_access.h)
+This internal layer provides register-level initialization and inline helpers
+for DMA, interrupt, mode, prescaler, compare, and counter operations.
+
+@section lptmr_config Configuration Parameters
+
+@subsection lptmr_config_struct lptmr_config_t Fields
+| Field | Type | Description | Default Value |
+|-------|------|-------------|---------------|
+| dmaRequest | bool | Enables DMA request generation on compare match. Present only when `lpTMR_DIE_DMAEN_MASK` is available. | `false` |
+| interruptEnable | bool | Enables compare-match interrupts. | `false` |
+| freeRun | bool | Selects overflow-based free-running operation instead of compare-reset operation. | `false` |
+| workMode | lptmr_workmode_t | Selects Timer Mode or Pulse-Counter Mode. | `lpTMR_WORKMODE_TIMER` |
+| prescaler | lptmr_prescaler_t | Selects timer prescaler or pulse-counter glitch-filter depth. | `lpTMR_PRESCALE_2` |
+| bypassPrescaler | bool | Bypasses the prescaler or glitch filter when set. | `false` |
+| compareValue | uint32_t | Requested compare value. Interpreted in ticks or microseconds according to `counterUnits`. | `0U` |
+| counterUnits | lptmr_counter_units_t | Selects whether `compareValue` is expressed in ticks or microseconds. | `lpTMR_COUNTER_UNITS_TICKS` |
+| pinSelect | lptmr_pinselect_t | Selects the pulse input source used in Pulse-Counter Mode. | `lpTMR_PINSELECT_TMU` |
+| pinPolarity | lptmr_pinpolarity_t | Selects the active edge counted in Pulse-Counter Mode. | `lpTMR_PINPOLARITY_RISING` |
+| clockSource | lptmr_clock_source_t | Selects the lpTMR counter clock on devices that support clock selection. | Platform-selected enum value written by `lpTMR_DRV_InitConfigStruct()` |
+
+@subsection lptmr_config_features Device Feature Macros
+| Macro | Description |
+|-------|-------------|
+| `FEATURE_lpTMR_HAS_INPUT_ALT1_SELECTION` | Indicates whether `lpTMR_PINSELECT_ALT1` is available. |
+| `FEATURE_lpTMR_HAS_CLOCK_SELECTION` | Indicates whether the lpTMR clock source is programmable. |
+| `FEATURE_lpTMR_CLKSRC_SUPPORT_FIRC` | Enables the FIRC clock source enum entry. |
+| `FEATURE_lpTMR_CLKSRC_SUPPORT_IPC` | Enables the IPC clock source enum entry. |
+| `FEATURE_lpTMR_CLKSRC_SUPPORT_SIRC` | Enables the SIRC clock source enum entry. |
+| `FEATURE_lpTMR_CLKSRC_SUPPORT_SIRC_DIV4` | Enables the divided SIRC clock source enum entry. |
+| `FEATURE_lpTMR_CLKSRC_SUPPORT_SXOSC` | Enables the SXOSC clock source enum entry. |
+| `FEATURE_lpTMR_CLKSRC_SUPPORT_FXOSC` | Enables the FXOSC clock source enum entry. |
+| `FEATURE_lpTMR_CLKSRC_SUPPORT_LPO` | Enables the LPO clock source enum entry. |
+| `lpTMR_DIE_DMAEN_MASK` | Indicates that the instance exposes DMA request enable control. |
+
+@section lptmr_usage Usage Patterns
+
+@subsection lptmr_usage_timer_ticks Pattern 1: Basic Timer Mode in Tick Units
+@code{.c}
+#define INST_LPTMR (0U)
+
+lptmr_config_t config;
+
+lpTMR_DRV_InitConfigStruct(&config);
+config.workMode = lpTMR_WORKMODE_TIMER;
+config.counterUnits = lpTMR_COUNTER_UNITS_TICKS;
+config.compareValue = 1000U;
+
+lpTMR_DRV_Init(INST_LPTMR, &config, true);
+
+while (!lpTMR_DRV_GetCompareFlag(INST_LPTMR))
+{
+}
+
+lpTMR_DRV_ClearCompareFlag(INST_LPTMR);
+lpTMR_DRV_StopCounter(INST_LPTMR);
+lpTMR_DRV_Deinit(INST_LPTMR);
+@endcode
+
+@subsection lptmr_usage_timer_us Pattern 2: Timer Mode in Microseconds
+@code{.c}
+#define INST_LPTMR (0U)
+
+lptmr_config_t config;
+uint32_t programmedUs;
+
+lpTMR_DRV_InitConfigStruct(&config);
+config.workMode = lpTMR_WORKMODE_TIMER;
+config.counterUnits = lpTMR_COUNTER_UNITS_MICROSECONDS;
+config.compareValue = 500U;
+#if defined(FEATURE_lpTMR_HAS_CLOCK_SELECTION) && (FEATURE_lpTMR_HAS_CLOCK_SELECTION == 1U)
+config.clockSource = lpTMR_CLOCK_SOURCE_SIRC;
+#endif
+
+lpTMR_DRV_Init(INST_LPTMR, &config, false);
+lpTMR_DRV_StartCounter(INST_LPTMR);
+lpTMR_DRV_GetCompareValueByUs(INST_LPTMR, &programmedUs);
+@endcode
+
+@subsection lptmr_usage_pulse Pattern 3: Pulse-Counter Configuration
+@code{.c}
+#define INST_LPTMR (0U)
+
+lptmr_config_t config;
+
+lpTMR_DRV_InitConfigStruct(&config);
+config.workMode = lpTMR_WORKMODE_PULSECOUNTER;
+config.counterUnits = lpTMR_COUNTER_UNITS_TICKS;
+config.compareValue = 16U;
+config.pinSelect = lpTMR_PINSELECT_ALT2;
+config.pinPolarity = lpTMR_PINPOLARITY_RISING;
+config.prescaler = lpTMR_PRESCALE_4_GLITCHFILTER_2;
+config.bypassPrescaler = false;
+
+lpTMR_DRV_Init(INST_LPTMR, &config, true);
+@endcode
+
+@subsection lptmr_usage_update Pattern 4: Runtime Compare Update
+@code{.c}
+#define INST_LPTMR (0U)
+
+lptmr_config_t config;
+status_t status;
+
+lpTMR_DRV_InitConfigStruct(&config);
+config.workMode = lpTMR_WORKMODE_TIMER;
+config.counterUnits = lpTMR_COUNTER_UNITS_TICKS;
+config.compareValue = 200U;
+
+lpTMR_DRV_Init(INST_LPTMR, &config, true);
+lpTMR_DRV_StopCounter(INST_LPTMR);
+
+status = lpTMR_DRV_SetCompareValueByCount(INST_LPTMR, 400U);
+if (status == STATUS_SUCCESS)
+{
+    lpTMR_DRV_StartCounter(INST_LPTMR);
+}
+@endcode
+
+@section lptmr_api API Quick Reference
+
+@subsection lptmr_api_driver Driver Layer
+| Function | Description |
+|----------|-------------|
+| lpTMR_DRV_InitConfigStruct() | Fill a configuration structure with module defaults. |
+| lpTMR_DRV_Init() | Configure an instance and optionally start the counter. |
+| lpTMR_DRV_Deinit() | Stop the instance and restore register reset values. |
+| lpTMR_DRV_SetConfig() | Apply a new timer or pulse-counter configuration. |
+| lpTMR_DRV_GetConfig() | Read back the currently latched runtime configuration in tick units. |
+| lpTMR_DRV_SetCompareValueByCount() | Program the compare value directly in ticks. |
+| lpTMR_DRV_GetCompareValueByCount() | Read the compare register value in ticks. |
+| lpTMR_DRV_SetCompareValueByUs() | Program the compare value in microseconds for Timer Mode. |
+| lpTMR_DRV_GetCompareValueByUs() | Convert the active compare value back to microseconds. |
+| lpTMR_DRV_GetCompareFlag() | Query the compare-match flag state. |
+| lpTMR_DRV_ClearCompareFlag() | Clear the compare-match flag. |
+| lpTMR_DRV_IsRunning() | Report whether the counter is enabled. |
+| lpTMR_DRV_SetInterrupt() | Enable or disable compare interrupts. |
+| lpTMR_DRV_GetCounterValueByCount() | Read the current counter value in ticks. |
+| lpTMR_DRV_StartCounter() | Enable the counter. |
+| lpTMR_DRV_StopCounter() | Disable the counter. |
+| lpTMR_DRV_SetPinConfiguration() | Update pulse-counter input selection and edge polarity. |
+
+@subsection lptmr_api_hw HW Access Layer
+| Function | Description |
+|----------|-------------|
+| lpTMR_Init() | Reset the peripheral registers to their default state. |
+| lpTMR_SetDmaRequest() / lpTMR_GetDmaRequest() | Control DMA request generation when supported by the device. |
+| lpTMR_SetInterrupt() / lpTMR_GetInterruptEnable() | Control compare-match interrupt generation. |
+| lpTMR_SetWorkMode() / lpTMR_GetWorkMode() | Select Timer Mode or Pulse-Counter Mode. |
+| lpTMR_SetPrescaler() / lpTMR_GetPrescaler() | Program the timer prescaler or glitch-filter depth. |
+| lpTMR_SetCompareValue() / lpTMR_GetCompareValue() | Access the compare register. |
+| lpTMR_GetCounterValue() | Latch and read the current counter value. |
+
+@section lptmr_notes Important Notes
+@warning The lpTMR peripheral clock must be enabled before calling any driver or HW access API.
+@warning `lpTMR_COUNTER_UNITS_MICROSECONDS` is valid only in `lpTMR_WORKMODE_TIMER`. Using it in pulse-counter mode triggers `DEV_ASSERT` checks and produces invalid timing.
+@warning In pulse-counter mode, `lpTMR_PRESCALE_2` is not a valid glitch-filter setting unless the prescaler/filter is bypassed.
+@warning `lpTMR_DRV_SetCompareValueByCount()` and `lpTMR_DRV_SetCompareValueByUs()` return `STATUS_ERROR` if the counter is running and the compare flag is not set.
+@note `lpTMR_DRV_GetConfig()` always reports `compareValue` in tick units.
+@note The microsecond conversion APIs rely on the clock frequency cached during timer configuration. Configure the timer first before calling `lpTMR_DRV_GetCompareValueByUs()`.
+
+@section lptmr_integration Integration Guide
+
+@subsection lptmr_integration_units Compilation Units
+@verbatim
+${SDK_PATH}\platform\drivers\src\lptmr\lptmr_driver.c
+${SDK_PATH}\platform\drivers\src\lptmr\lptmr_hw_access.c
+@endverbatim
+
+@subsection lptmr_integration_include Include Path
+@verbatim
+${SDK_PATH}\platform\drivers\inc\
+${SDK_PATH}\platform\drivers\src\lptmr\
+@endverbatim
+
+@subsection lptmr_integration_symbols Compile Symbols
+No special symbols are required beyond the device feature macros provided by the SDK.
+
+@subsection lptmr_integration_deps Dependencies
+- `clock_manager`
+*/

@@ -386,6 +386,12 @@
                     :min="0"
                     :max="wdgInstance"
                   />
+                </el-form-item>                
+                <el-form-item
+                  label="Compare interrupt"
+                  :prop="`compIntEnable`"
+                >
+                  <el-checkbox v-model="data[activeMasterInst].compIntEnable" />
                 </el-form-item>
                 <el-collapse-item
                   :title="`Compare configuration #${i}`"
@@ -446,12 +452,6 @@
                     :rules="compLowRule"
                   >
                     <el-input v-model.number="data[activeMasterInst].compareConfig[i - 1].compLow" />
-                  </el-form-item>
-                  <el-form-item
-                    label="Compare interrupt"
-                    :prop="`compareConfig.${i - 1}.compIntEnable`"
-                  >
-                    <el-checkbox v-model="data[activeMasterInst].compareConfig[i - 1].compIntEnable" />
                   </el-form-item>
                   <el-form-item
                     label="Watchdog effective mode"
@@ -515,7 +515,6 @@ const defComConfig = {
     compHigh: 4095,
     compLow: 0,
     comWdchIndex:0,
-    compIntEnable: false,
     effectiveMode:'ADC_AWG_EFFECTIVE_OUTSIDE'
   }
 
@@ -544,7 +543,8 @@ const defMasterParam: any = {
     sampIntEnable: false,
     ovrunIntEnable: false,
   },
-  adcCompareCnt: 1,
+  adcCompareCnt: 1,  
+  compIntEnable: false,
   compareConfig: [JSON.parse(JSON.stringify(defComConfig)), JSON.parse(JSON.stringify(defComConfig)), JSON.parse(JSON.stringify(defComConfig)), JSON.parse(JSON.stringify(defComConfig))],
 }
 const filterError = ref('')

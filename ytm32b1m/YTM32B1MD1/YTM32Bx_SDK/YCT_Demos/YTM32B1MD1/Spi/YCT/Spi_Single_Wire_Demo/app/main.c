@@ -93,7 +93,7 @@ int main(void)
 
         /* Wait data transfer finished */
         while ((STATUS_SUCCESS != SPI_DRV_MasterGetTransferStatus(SPI_MASTER_INST, NULL)) ||
-               STATUS_SUCCESS != SPI_DRV_MasterGetTransferStatus(SPI_SLAVE_INST, NULL))
+               STATUS_SUCCESS != SPI_DRV_SlaveGetTransferStatus(SPI_SLAVE_INST, NULL))
         {
             OSIF_TimeDelay(1);
             if (timer++ > TIMEOUT)

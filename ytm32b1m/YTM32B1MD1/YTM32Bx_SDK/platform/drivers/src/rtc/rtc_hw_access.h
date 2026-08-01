@@ -8,164 +8,175 @@
 /*!
  * @file rtc_hw_access.h
  * @version 1.4.1
+ *
+ * @brief RTC Hardware Access Layer.
+ *
+ * This header provides the low-level register access helpers used by the RTC
+ * driver implementation. It exposes a mix of non-inline functions and
+ * `static inline` register accessors organized into the following categories:
+ *   - Counter enable/disable and RTC initialization helpers.
+ *   - Seconds and alarm register access.
+ *   - Compensation and control-register programming.
+ *   - Status-flag and interrupt-control helpers.
+ *
+ * @note This is an internal layer used by rtc_driver.c. Application code
+ *       should use the RTC_DRV_* APIs declared in rtc_driver.h.
  */
 
 #ifndef RTC_HW_ACCESS_H
 #define RTC_HW_ACCESS_H
 
 #include <stdbool.h>
+#include <stdint.h>
 #include "device_registers.h"
 #include "status.h"
 #include "rtc_driver.h"
-#include <stdint.h>
 
 /*!
+ * @addtogroup rtc_hw_access RTC Hardware Access
+ * @ingroup rtc
+ * @brief Low-level register access functions for the RTC peripheral.
  * @{
  */
-
-/*******************************************************************************
- * Definitions
- ******************************************************************************/
-
-/*******************************************************************************
- * Code
- ******************************************************************************/
 
 #if defined(__cplusplus)
 extern "C" {
 #endif
 
+/*******************************************************************************
+ * Initialization & Counter Control
+ ******************************************************************************/
 /*!
- * @name Configuration
+ * @name Initialization & Counter Control
+ * @brief Functions for enabling, disabling, and applying top-level RTC control.
  * @{
  */
 
-/*****************************************************************************
- * Methods for RTC Control
- ****************************************************************************/
-
 /*!
- * @brief Enable RTC instance counter
+ * @brief Enable the RTC time counter.
  *
- * @param[in] base RTC base pointer
- * @return    STATUS_SUCCESS if the operation was successful, STATUS_ERROR
- *            if the counter is enabled or if the time invalid flag is set.
+ * @param[in] base  Pointer to the RTC peripheral base address.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Counter enable request completed.
+ * @retval STATUS_ERROR   Counter was already enabled.
  */
 status_t RTC_Enable(RTC_Type *const base);
 
 /*!
- * @brief Disable RTC instance counter
+ * @brief Disable the RTC time counter.
  *
- * @param[in] base RTC base pointer
- * @return    STATUS_SUCCESS if the operation was successful, STATUS_ERROR
- *            if the counter was not disabled.
+ * @param[in] base  Pointer to the RTC peripheral base address.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Counter disable request completed.
+ * @retval STATUS_ERROR   Counter remained enabled after the disable request.
  */
 status_t RTC_Disable(RTC_Type *const base);
 
 /*!
- * @brief This function configures the Clock Out pin source
+ * @brief Configure the RTC clock-output pin source.
  *
- * @param[in] base RTC base pointer
- * @param[in] config Source for the Clock Out pin
- * @return    Returns the status of the operation, STATUS_SUCCESS
- *            if the configuration was successful, STATUS_ERROR if the Control
- *            Register is locked.
+ * @param[in] base    Pointer to the RTC peripheral base address.
+ * @param[in] config  Clock-output source selection.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Clock-output selection was written.
  */
 status_t RTC_ConfigureClockOut(RTC_Type *const base, rtc_clk_out_config_t config);
 
-/*****************************************************************************
- * Methods for RTC Time Seconds register
- ****************************************************************************/
+/*! @} */ /* End of Initialization & Counter Control */
+
+/*******************************************************************************
+ * Time Seconds Register Access
+ ******************************************************************************/
+/*!
+ * @name Time Seconds Register Access
+ * @brief Helpers for reading or programming the RTC seconds counter.
+ * @{
+ */
 
 /*!
- * @brief Get Time Seconds Register Value
+ * @brief Read the current RTC seconds register value.
  *
- * @param[in] base RTC base pointer
- * @return    Number of seconds passed
+ * @param[in] base  Pointer to the RTC peripheral base address.
+ * @return Current RTC seconds count.
  */
-static inline uint32_t RTC_GetTimeSecondsRegister(const RTC_Type* base)
+static inline uint32_t RTC_GetTimeSecondsRegister(const RTC_Type *base)
 {
     uint32_t tmp = base->SEC;
     tmp = (tmp & RTC_SEC_SEC_MASK) >> RTC_SEC_SEC_SHIFT;
-    return (uint32_t) (tmp);
+    return (uint32_t)(tmp);
 }
 
 /*!
- * @brief Set Time Seconds Register
+ * @brief Program the RTC seconds register.
  *
- * This function will help you set the time at a specified value.
- * The write will fail if the Time Counter is enabled and will return
- * STATUS_ERROR, otherwise the return will be STATUS_SUCCESS
- *
- * @param[in] base    RTC base pointer
- * @param[in] seconds number of seconds passed
- * @return    STATUS_SUCCESS if the write is succeeded or STATUS_ERROR if
- *            the counter is enabled.
+ * @param[in] base     Pointer to the RTC peripheral base address.
+ * @param[in] seconds  Seconds value to write into the RTC SEC register.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Seconds register updated successfully.
+ * @retval STATUS_ERROR   The counter was running, so the write was rejected.
  */
 status_t RTC_SetTimeSecondsRegister(RTC_Type *const base, uint32_t seconds);
 
-/*****************************************************************************
- * Methods for RTC Time Alarm register
- ****************************************************************************/
+/*! @} */ /* End of Time Seconds Register Access */
+
+/*******************************************************************************
+ * Alarm Register Access
+ ******************************************************************************/
+/*!
+ * @name Alarm Register Access
+ * @brief Helpers for reading or programming the RTC alarm register.
+ * @{
+ */
 
 /*!
- * @brief Get Time Alarm Register
+ * @brief Read the current RTC alarm register value.
  *
- * @param[in] base RTC base pointer
- * @return    Value in seconds of the Time Alarm Register
+ * @param[in] base  Pointer to the RTC peripheral base address.
+ * @return Alarm value in RTC seconds units.
  */
-static inline uint32_t RTC_GetTimeAlarmRegister(const RTC_Type * base)
+static inline uint32_t RTC_GetTimeAlarmRegister(const RTC_Type *base)
 {
     uint32_t tmp = base->ALM;
     tmp = (tmp & RTC_ALM_ALM_MASK) >> RTC_ALM_ALM_SHIFT;
-    return (uint32_t) (tmp);
+    return (uint32_t)(tmp);
 }
 
 /*!
- * @brief Set Time Alarm Register
+ * @brief Program the RTC alarm register.
  *
- * @param[in] base    RTC base pointer
- * @param[in] seconds Number of seconds at which the alarm is triggered. The ALM
- *                    value is correct only if the value is greater than current
- *                    time (Time seconds register)
+ * @param[in] base     Pointer to the RTC peripheral base address.
+ * @param[in] seconds  Alarm target expressed in RTC seconds units.
+ *
+ * @note This helper also clears the hardware update flag after writing the
+ *       new alarm value.
  */
 static inline void RTC_SetTimeAlarmRegister(RTC_Type *const base, uint32_t seconds)
 {
     base->ALM = seconds;
-    /* update flag bit */
+    /* Clear the update flag after programming a new alarm value. */
     base->INTF = 0;
 }
 
-/*****************************************************************************
- * Methods for RTC Time Compensation register
- ****************************************************************************/
+/*! @} */ /* End of Alarm Register Access */
+
+/*******************************************************************************
+ * Time Compensation
+ ******************************************************************************/
+/*!
+ * @name Time Compensation
+ * @brief Helpers for programming or reading RTC compensation values.
+ * @{
+ */
 
 /*!
- * @brief Set Time Compensation
+ * @brief Program the RTC compensation value and compensation interval.
  *
- * Configure the frequency of the Time Seconds counter together with
- * Compensation Interval register.
+ * The compensation logic adjusts the effective prescaler period to trim RTC
+ * drift. The supplied values are written directly into the RTC CMP register.
  *
- * The Time Prescaler register overflows at every 32768 - (compValue)
- * cycles. For example if the compValue is -128 TPR overflows at
- * 32768 - (-128) = 32896 cycles
- *
- * Else if compValue is 127 TPR overflows at 32641 cycles
- *
- * The compensation interval in seconds from 1 to 256 is used to
- * control how frequently the CMP should adjust the number of 32.768 kHz
- * cycles in each second. The value written should be one less than the
- * number of seconds. For example, write zero to configure for a
- * compensation interval of one second. This register is double buffered
- * and writes do not take affect until the end of the current compensation
- * interval.
- *
- * @param[in] base RTC base pointer
- * @param[in] compensationValue - the value which is subtracted from the counter
- *                                valid range -128, +127
- * @param[in] compensationInterval Compensation interval at which the compensation value
- *                                is added to the prescaler register
- * @return    None
+ * @param[in] base                  Pointer to the RTC peripheral base address.
+ * @param[in] compensationValue     Signed compensation value applied to the prescaler.
+ * @param[in] compensationInterval  Compensation interval value written to CMPIV.
  */
 static inline void RTC_SetTimeCompensation(RTC_Type *const base,
                                            int8_t compensationValue,
@@ -179,44 +190,38 @@ static inline void RTC_SetTimeCompensation(RTC_Type *const base,
 }
 
 /*!
- * @brief Get TimeCompensation Value and Interval
+ * @brief Read the currently active RTC compensation value and interval.
  *
- * Returns current value used by the compensation logic for the present
- * second interval. Updated once a second if the CIC equals 0 with the
- * contents of the CMP field. If the CIC does not equal zero then it
- * is loaded with zero.
- *
- * @param[in] base RTC base pointer
- * @param[out] compensationValue -  Current value which is subtracted from the counter
- *                                  valid range -128, +127
- * @param[out] compensationInterval Current Compensation interval at which the compensation value
- *                                  is added to the prescaler register
- * @return    Current value used by the compensation logic for the present second interval
+ * @param[in]  base                  Pointer to the RTC peripheral base address.
+ * @param[out] compensationValue     Pointer that receives the active compensation value.
+ * @param[out] compensationInterval  Pointer that receives the active compensation interval.
  */
-static inline void RTC_GetCurrentTimeCompensation(const RTC_Type * base,
+static inline void RTC_GetCurrentTimeCompensation(const RTC_Type *base,
                                                   int8_t *compensationValue,
                                                   uint8_t *compensationInterval)
 {
     uint32_t tmp;
     tmp = ((base->CMP & RTC_CMP_CMPVS_MASK) >> RTC_CMP_CMPVS_SHIFT);
     (*compensationValue) = (int8_t)tmp;
-    (*compensationInterval) = (uint8_t) ((base->CMP & RTC_CMP_CMPIVS_MASK) >> RTC_CMP_CMPIVS_SHIFT);
+    (*compensationInterval) = (uint8_t)((base->CMP & RTC_CMP_CMPIVS_MASK) >> RTC_CMP_CMPIVS_SHIFT);
 }
 
-/*****************************************************************************
- * Methods for RTC Control register
- ****************************************************************************/
+/*! @} */ /* End of Time Compensation */
+
+/*******************************************************************************
+ * Control Register Helpers
+ ******************************************************************************/
+/*!
+ * @name Control Register Helpers
+ * @brief Helpers for programming the RTC control and reset-related fields.
+ * @{
+ */
 
 /*!
- * @brief Select clock source for RTC prescaler
+ * @brief Select the RTC clock source.
  *
- * When set, the RTC prescaler increments using the LPO 1kHz
- * clock and not the RTC 32kHz crystal clock. The LPO increments
- * the prescaler from bit TPR[5] (TPR[4:0] are ignored),
- * supporting close to 1 second increment of the seconds register.
- *
- * @param[in] base RTC base pointer
- * @param[in] clk_select clock source
+ * @param[in] base        Pointer to the RTC peripheral base address.
+ * @param[in] clk_select  RTC clock source value from @ref rtc_clk_source_t.
  */
 static inline void RTC_SetClockSource(RTC_Type *const base, rtc_clk_source_t clk_select)
 {
@@ -227,13 +232,10 @@ static inline void RTC_SetClockSource(RTC_Type *const base, rtc_clk_source_t clk
 }
 
 /*!
- * @brief Set Non-Supervisor access mode
+ * @brief Configure RTC debug behavior.
  *
- * @param[in] base RTC base pointer
- * @param[in] enable supervisor access
- *          - if true Non-supervisor mode write accesses are supported.
- *          - if false Non-supervisor mode write accesses are not supported and
- *            generate a bus error.
+ * @param[in] base    Pointer to the RTC peripheral base address.
+ * @param[in] enable  true to allow RTC debug operation, false to disable it.
  */
 static inline void RTC_SetDebugMode(RTC_Type *const base, bool enable)
 {
@@ -244,38 +246,42 @@ static inline void RTC_SetDebugMode(RTC_Type *const base, bool enable)
 }
 
 /*!
- * @brief Trigger a software reset
+ * @brief Trigger an RTC software reset pulse.
  *
- * @param[in] base RTC base pointer
+ * @param[in] base  Pointer to the RTC peripheral base address.
  */
 static inline void RTC_SoftwareReset(RTC_Type *const base)
 {
     base->CTRL |= RTC_CTRL_SWRST_MASK;
     base->CTRL &= ~RTC_CTRL_SWRST_MASK;
-
 }
 
+/*!
+ * @brief Disable all RTC interrupt enable bits.
+ *
+ * @param[in] base  Pointer to the RTC peripheral base address.
+ */
 static inline void RTC_ClearIntEnable(RTC_Type *const base)
 {
     base->INTE &= ~(RTC_INTE_ALMIE_MASK | RTC_INTE_OVFIE_MASK | RTC_INTE_SECIE_MASK);
 }
 
-/*****************************************************************************
- * Methods for RTC Status register
- ****************************************************************************/
+/*! @} */ /* End of Control Register Helpers */
+
+/*******************************************************************************
+ * Counter State & Status Flags
+ ******************************************************************************/
+/*!
+ * @name Counter State & Status Flags
+ * @brief Helpers for reading or writing RTC enable bits and status flags.
+ * @{
+ */
 
 /*!
- * @brief Enable or disable the Time counter
+ * @brief Write the RTC time-counter enable bit.
  *
- * When time counter is disabled the SEC register and TPR register are
- * writable, but do not increment.
- * When time counter is enabled the SEC register and TPR register are
- * not writable, but increment.
- *
- * @param[in] base RTC base pointer
- * @param[in] enable :
- *            - true to enable the counter
- *            - false to disable the counter
+ * @param[in] base    Pointer to the RTC peripheral base address.
+ * @param[in] enable  true to enable counting, false to disable counting.
  */
 static inline void RTC_SetTimeCounterEnable(RTC_Type *const base, bool enable)
 {
@@ -286,14 +292,12 @@ static inline void RTC_SetTimeCounterEnable(RTC_Type *const base, bool enable)
 }
 
 /*!
- * @brief Get the Time Counter Enable value
+ * @brief Read the RTC time-counter enable bit.
  *
- * @param[in] base RTC base pointer
- * @return    State of the counter enable bit
- *      -     true if the counter is enabled
- *      -     false if the counter is disabled
+ * @param[in] base  Pointer to the RTC peripheral base address.
+ * @return true if the RTC counter is enabled, false otherwise.
  */
-static inline bool RTC_GetTimeCounterEnable(const RTC_Type * base)
+static inline bool RTC_GetTimeCounterEnable(const RTC_Type *base)
 {
     uint32_t tmp = base->EN;
     tmp = (tmp & RTC_EN_EN_MASK) >> RTC_EN_EN_SHIFT;
@@ -301,16 +305,12 @@ static inline bool RTC_GetTimeCounterEnable(const RTC_Type * base)
 }
 
 /*!
- * @brief Get the Time alarm flag
+ * @brief Read the RTC alarm interrupt flag.
  *
- * The alarm flag is cleared after a write in Time Alarm Register
- *
- * @param[in] base RTC base pointer
- * @return :  State of the alarm flag
- *      -     true if an alarm occurred
- *      -     false if an alarm was not occurred
+ * @param[in] base  Pointer to the RTC peripheral base address.
+ * @return true if the alarm flag is set, false otherwise.
  */
-static inline bool RTC_GetTimeAlarmFlag(const RTC_Type * base)
+static inline bool RTC_GetTimeAlarmFlag(const RTC_Type *base)
 {
     uint32_t tmp = base->INTF;
     tmp = (tmp & RTC_INTF_ALMIF_MASK) >> RTC_INTF_ALMIF_SHIFT;
@@ -318,17 +318,12 @@ static inline bool RTC_GetTimeAlarmFlag(const RTC_Type * base)
 }
 
 /*!
- * @brief Get Time Overflow Flag
+ * @brief Read the RTC overflow interrupt flag.
  *
- * The OVFIF is set when Time Seconds Register overflows. Disable the
- * counter and write SEC to clear this bit
- *
- * @param[in] base RTC base pointer
- * @return    State of the Time overflow flag
- *      -     true if an overflow has occurred
- *      -     false if an overflow has not occurred
+ * @param[in] base  Pointer to the RTC peripheral base address.
+ * @return true if the overflow flag is set, false otherwise.
  */
-static inline bool RTC_GetTimeOverflowFlag(const RTC_Type * base)
+static inline bool RTC_GetTimeOverflowFlag(const RTC_Type *base)
 {
     uint32_t tmp = base->INTF;
     tmp = (tmp & RTC_INTF_OVFIF_MASK) >> RTC_INTF_OVFIF_SHIFT;
@@ -336,60 +331,58 @@ static inline bool RTC_GetTimeOverflowFlag(const RTC_Type * base)
 }
 
 /*!
- * @brief Get the Enable Register Lock state
+ * @brief Read the RTC register-unlock state.
  *
- * @param[in] base RTC base pointer
- * @return    State of the Enable register lock
- *      -     true if register is locked
- *      -     false if the register is unlocked
+ * @param[in] base  Pointer to the RTC peripheral base address.
+ * @return true if the register interface is locked, false if it is unlocked.
  */
-static inline bool RTC_EnableRegisterLock(const RTC_Type * base)
+static inline bool RTC_EnableRegisterLock(const RTC_Type *base)
 {
     uint32_t tmp = base->CTRL;
     tmp = (tmp & RTC_CTRL_UNLOCK_MASK) >> RTC_CTRL_UNLOCK_SHIFT;
     return ((tmp == 1U) ? false : true);
 }
 
-
 /*!
- * @brief Unlock the Enable Register
+ * @brief Unlock the RTC register interface.
  *
- * This method locks the Control Register.
- *
- * @param[in] base RTC base pointer
+ * @param[in] base  Pointer to the RTC peripheral base address.
  */
 static inline void RTC_EnableRegisterUnlock(RTC_Type *const base)
 {
     base->CTRL |= RTC_CTRL_UNLOCK_MASK;
 }
 
+/*! @} */ /* End of Counter State & Status Flags */
 
-/*****************************************************************************
- * Methods for RTC Interrupt Enable register
- ****************************************************************************/
+/*******************************************************************************
+ * Interrupt Control
+ ******************************************************************************/
+/*!
+ * @name Interrupt Control
+ * @brief Helpers for configuring RTC interrupt frequency, enable bits, and flags.
+ * @{
+ */
 
 /*!
- * @brief Configure Time Seconds interrupt
+ * @brief Select the RTC periodic seconds interrupt frequency.
  *
- * @param[in] base RTC base pointer
- * @param[in] intCfg Select at which frequency the interrupt
- *                   will occur.
+ * @param[in] base    Pointer to the RTC peripheral base address.
+ * @param[in] intCfg  Periodic interrupt frequency selection.
  */
 static inline void RTC_SetTimeSecondsIntConf(RTC_Type *const base, rtc_second_int_cfg_t intCfg)
 {
     uint32_t tmp = base->INTE;
     tmp &= ~(RTC_INTE_SECOCS_MASK);
-    tmp |= RTC_INTE_SECOCS((uint8_t) intCfg);
+    tmp |= RTC_INTE_SECOCS((uint8_t)intCfg);
     base->INTE = tmp;
 }
 
 /*!
- * @brief Enable TimeSeconds interrupt
+ * @brief Enable or disable the RTC periodic seconds interrupt.
  *
- * @param[in] base RTC base pointer
- * @param[in] enable Write:
- *      -     true to enable the interrupt
- *      -     false to disable it
+ * @param[in] base    Pointer to the RTC peripheral base address.
+ * @param[in] enable  true to enable the interrupt, false to disable it.
  */
 static inline void RTC_SetTimeSecondsIntEnable(RTC_Type *const base, bool enable)
 {
@@ -400,9 +393,9 @@ static inline void RTC_SetTimeSecondsIntEnable(RTC_Type *const base, bool enable
 }
 
 /*!
- * @brief Clear TimeSeconds interrupt flag
+ * @brief Clear the RTC periodic seconds interrupt flag.
  *
- * @param[in] base RTC base pointer
+ * @param[in] base  Pointer to the RTC peripheral base address.
  */
 static inline void RTC_ClearTimeSecondsIntFlag(RTC_Type *const base)
 {
@@ -410,23 +403,31 @@ static inline void RTC_ClearTimeSecondsIntFlag(RTC_Type *const base)
     base->INTF = 0;
 }
 
+/*!
+ * @brief Clear the RTC overflow interrupt flag.
+ *
+ * @param[in] base  Pointer to the RTC peripheral base address.
+ */
 static inline void RTC_ClearTimeOverflowIntFlag(RTC_Type *const base)
 {
     base->INTF &= ~(RTC_INTF_OVFIF_MASK | RTC_INTF_SECIF_MASK);
 }
 
+/*!
+ * @brief Clear the RTC alarm interrupt flag.
+ *
+ * @param[in] base  Pointer to the RTC peripheral base address.
+ */
 static inline void RTC_ClearTimeAlarmIntFlag(RTC_Type *const base)
 {
     base->INTF &= ~(RTC_INTF_ALMIF_MASK | RTC_INTF_SECIF_MASK);
 }
 
 /*!
- * @brief Enable TimeAlarm interrupt
+ * @brief Enable or disable the RTC alarm interrupt source.
  *
- * @param[in] base RTC base pointer
- * @param[in] enable Write
- *      -     true to enable the interrupt
- *      -     false to disable it
+ * @param[in] base    Pointer to the RTC peripheral base address.
+ * @param[in] enable  true to enable the interrupt, false to disable it.
  */
 static inline void RTC_SetTimeAlarmIntEnable(RTC_Type *const base, bool enable)
 {
@@ -437,12 +438,10 @@ static inline void RTC_SetTimeAlarmIntEnable(RTC_Type *const base, bool enable)
 }
 
 /*!
- * @brief Enable TimeOverflow interrupt
+ * @brief Enable or disable the RTC overflow interrupt source.
  *
- * @param[in] base RTC base pointer
- * @param[in] enable Write
- *          - true to enable the interrupt
- *          - false to disable it
+ * @param[in] base    Pointer to the RTC peripheral base address.
+ * @param[in] enable  true to enable the interrupt, false to disable it.
  */
 static inline void RTC_SetTimeOverflowIntEnable(RTC_Type *const base, bool enable)
 {
@@ -452,14 +451,13 @@ static inline void RTC_SetTimeOverflowIntEnable(RTC_Type *const base, bool enabl
     base->INTE = tmp;
 }
 
-
-/*! @}*/
+/*! @} */ /* End of Interrupt Control */
 
 #if defined(__cplusplus)
 }
 #endif
 
-/*! @}*/
+/*! @} */ /* End of rtc_hw_access group */
 
 #endif /* RTC_HW_ACCESS_H */
 /*******************************************************************************

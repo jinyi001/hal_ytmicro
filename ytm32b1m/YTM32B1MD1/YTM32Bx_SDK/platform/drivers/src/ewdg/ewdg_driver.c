@@ -8,26 +8,33 @@
 /*!
  * @file ewdg_driver.c
  * @version 1.4.1
+ *
+ * @brief EWDG Driver — implementation of the public API.
+ *
+ * This file implements the instance-based EWDG driver declared in
+ * `ewdg_driver.h`. The implementation validates startup parameters,
+ * resolves the hardware base address for each instance, protects the
+ * refresh and restore sequences from interrupt latency, and exposes
+ * lightweight helpers for input-mode query and interrupt masking.
  */
 
 #include "stddef.h"
 #include "ewdg_hw_access.h"
 #include "interrupt_manager.h"
-/* @brief Local table used to store EWDG base pointers */
+/*! @brief Local table used to store EWDG base pointers. */
 static EWDG_Type * const s_ewdgBase[] = EWDG_BASE_PTRS;
 
 /*******************************************************************************
  * Code
  ******************************************************************************/
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Initialize one EWDG instance with the requested watchdog settings.
  *
- * Function Name : EWDG_DRV_Init
- * Description   : This function initializes the EWDG instance to a specified
- * state
- *
- * Implements    : EWDG_DRV_Init_Activity
- *END**************************************************************************/
+ * @param[in] instance  EWDG instance index.
+ * @param[in] config    Pointer to the startup configuration.
+ * @return Execution status.
+ */
 status_t EWDG_DRV_Init(uint32_t instance, const ewdg_init_config_t *config)
 {
     DEV_ASSERT(instance < EWDG_INSTANCE_COUNT);
@@ -96,14 +103,11 @@ status_t EWDG_DRV_Init(uint32_t instance, const ewdg_init_config_t *config)
     return statusCode;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Populate an EWDG configuration structure with default values.
  *
- * Function Name : EWDG_DRV_GetDefaultConfig
- * Description   : This function initializes the EWDG configuration structure
- * to default values
- *
- * Implements    : EWDG_DRV_GetDefaultConfig_Activity
- *END**************************************************************************/
+ * @param[out] config  Pointer to the configuration structure to initialize.
+ */
 void EWDG_DRV_GetDefaultConfig(ewdg_init_config_t * config)
 {
     DEV_ASSERT(config != NULL);
@@ -123,13 +127,11 @@ void EWDG_DRV_GetDefaultConfig(ewdg_init_config_t * config)
     config->compareLow      = FEATURE_EWDG_CMPL_MIN_VALUE;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Refresh the EWDG counter inside the programmed service window.
  *
- * Function Name : EWDG_DRV_Refresh
- * Description   : This function refreshes the EWDG instance counter
- *
- * Implements    : EWDG_DRV_Refresh_Activity
- *END**************************************************************************/
+ * @param[in] instance  EWDG instance index.
+ */
 void EWDG_DRV_Refresh(uint32_t instance)
 {
     DEV_ASSERT(instance < EWDG_INSTANCE_COUNT);
@@ -145,13 +147,12 @@ void EWDG_DRV_Refresh(uint32_t instance)
     INT_SYS_EnableIRQGlobal();
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Read the configured EWDG input-pin assert behavior.
  *
- * Function Name : EWDG_DRV_GetInputPinAssertLogic
- * Description   : Get the Input pin assert logic
- *
- * Implements : EWDG_DRV_GetInputPinAssertLogic_Activity
- *END**************************************************************************/
+ * @param[in] instance  EWDG instance index.
+ * @return Configured input-pin assert behavior.
+ */
 ewdg_in_assert_logic_t EWDG_DRV_GetInputPinAssertLogic(uint32_t instance)
 {
     DEV_ASSERT(instance < EWDG_INSTANCE_COUNT);
@@ -177,13 +178,11 @@ ewdg_in_assert_logic_t EWDG_DRV_GetInputPinAssertLogic(uint32_t instance)
     return returnValue;
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Restore one EWDG instance to its reset-like register state.
  *
- * Function Name : EWDG_DRV_DeInit
- * Description   : DeInit EWDG module.
- *
- * Implements : EWDG_DRV_DeInit_Activity
- *END**************************************************************************/
+ * @param[in] instance  EWDG instance index.
+ */
 void EWDG_DRV_DeInit(uint32_t instance)
 {
      /* Base pointer */
@@ -196,13 +195,11 @@ void EWDG_DRV_DeInit(uint32_t instance)
     INT_SYS_EnableIRQGlobal();
 }
 
-/*FUNCTION**********************************************************************
+/*!
+ * @brief Disable EWDG interrupt generation for one instance.
  *
- * Function Name : EWDG_DRV_DisableInterrupt
- * Description   : Disable EWDG interrupt.
- *
- * Implements : EWDG_DRV_DisableInterrupt_Activity
- *END**************************************************************************/
+ * @param[in] instance  EWDG instance index.
+ */
 void EWDG_DRV_DisableInterrupt(uint32_t instance)
 {
     uint32_t tmp = 0;

@@ -7,7 +7,11 @@
 
 /*!
  * @file spi_irq.c
- * @version 1.4.1
+ * @brief SPI interrupt handler entry points for each SPI instance.
+ *
+ * Each SPIn_IRQHandler function dispatches to the shared
+ * SPI_DRV_IRQHandler(), which routes to the master or slave handler
+ * based on the instance's current master/slave mode configuration.
  */
 
 #include "device_registers.h"
@@ -15,7 +19,7 @@
 
 
 /*!
- * @addtogroup spi_driver
+ * @addtogroup spi
  * @{
  */
 
@@ -161,4 +165,3 @@ void SPI7_IRQHandler(void)
 /*******************************************************************************
  * EOF
  ******************************************************************************/
-

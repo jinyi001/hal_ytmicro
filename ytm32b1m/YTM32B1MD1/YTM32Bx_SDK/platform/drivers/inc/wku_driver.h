@@ -8,6 +8,23 @@
 /*!
  * @file wku_driver.h
  * @version 1.4.1
+ *
+ * @brief WKU Driver - Public API for Wakeup Unit configuration.
+ *
+ * This header defines the application-facing interface for the Wakeup Unit
+ * (WKU). It provides helper APIs for configuring external pin wakeup sources,
+ * reset-pin wakeup behavior, internal module wakeup requests, and optional
+ * pin-isolation support during power-down transitions.
+ *
+ * The APIs are organized into the following categories:
+ *   - Pin Wakeup Initialization & De-initialization
+ *   - Pin Wakeup Channel Control
+ *   - Reset Wakeup Control
+ *   - Internal Module Wakeup Control
+ *   - Power-Down Pin Isolation
+ *
+ * @note Configure the relevant clocking and low-power flow before relying on
+ *       WKU as a wakeup source. See @ref clock_manager and @ref power_manager.
  */
 
 #ifndef WKU_DRIVER_H
@@ -18,280 +35,393 @@
 #include "status.h"
 #include "device_registers.h"
 
-
 /*!
- * @addtogroup wku_driver
- * @brief This section describes the programming interface of the WKU driver.
+ * @addtogroup wku
+ * @brief Wakeup Unit peripheral driver - public API.
+ * @details Provides instance-based APIs for external pin wakeup setup,
+ *          reset-pin wakeup control, internal module wakeup requests, and
+ *          optional pin-isolation handling for power-down scenarios.
  * @{
  */
-
-/*******************************************************************************
- * Variables
- ******************************************************************************/
 
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
 
-
 /*!
- * @brief Edge event.
- * Implements : wku_edge_event_t_Class
+ * @brief Edge-detection mode for a WKU pin channel.
+ *
+ * Selects which transition on the monitored pin is treated as a wakeup event.
+ *
+ * | Value            | Description                               |
+ * |------------------|-------------------------------------------|
+ * | WKU_EDGE_NONE    | Disable edge detection for the channel.   |
+ * | WKU_EDGE_RISING  | Detect low-to-high transitions only.      |
+ * | WKU_EDGE_FALLING | Detect high-to-low transitions only.      |
+ * | WKU_EDGE_BOTH    | Detect both rising and falling edges.     |
  */
 typedef enum
 {
-    WKU_EDGE_NONE = 0U,   /*!< None event */
-    WKU_EDGE_RISING = 1U,   /*!< Rising edge event */
-    WKU_EDGE_FALLING = 2U,   /*!< Falling edge event */
-    WKU_EDGE_BOTH = 3U    /*!< Both rising and falling edge event */
+    WKU_EDGE_NONE = 0U,       /*!< Disable edge detection. */
+    WKU_EDGE_RISING = 1U,     /*!< Detect rising edges only. */
+    WKU_EDGE_FALLING = 2U,    /*!< Detect falling edges only. */
+    WKU_EDGE_BOTH = 3U        /*!< Detect both rising and falling edges. */
 } wku_edge_event_t;
 
 /*!
- * @brief Filter clock source.
- * Implements : wku_filter_clock_source_t_Class
+ * @brief Digital-filter clock source selection.
+ *
+ * Selects the clock used by the WKU filter logic when
+ * `FEATURE_WKU_SUPPORT_FILTER_CLOCK_SEL` is enabled.
+ *
+ * | Value               | Description                         |
+ * |---------------------|-------------------------------------|
+ * | WKU_FILTER_CLK_SIRC | Use the SIRC clock as filter input. |
+ * | WKU_FILTER_CLK_SXOSC | Use the SXOSC clock as filter input. |
  */
 typedef enum
 {
-    WKU_FILTER_CLK_SIRC = 0U,   /*!< SRIC clock source */
-    WKU_FILTER_CLK_SXOSC = 1U,   /*!< SXOSC clock source */
+    WKU_FILTER_CLK_SIRC = 0U,    /*!< Select the SIRC clock source. */
+    WKU_FILTER_CLK_SXOSC = 1U    /*!< Select the SXOSC clock source. */
 } wku_filter_clock_source_t;
 
-
 /*!
- * @brief WKU pin wakeup configuration structure.
- * Implements : wku_pin_wakeup_cfg_t_Class
+ * @brief External pin-wakeup channel configuration.
+ *
+ * Describes the configuration applied to one WKU external wakeup channel.
+ *
+ * | Field        | Type                       | Description |
+ * |--------------|----------------------------|-------------|
+ * | hwChannel    | uint8_t                    | Hardware channel index programmed in the WKU PCR array. |
+ * | wakeupEn     | bool                       | Requested wakeup-enable state tracked by the channel configuration. |
+ * | edgeEvent    | wku_edge_event_t           | Edge-detection mode programmed for the channel. |
+ * | filterEn     | bool                       | Enables or bypasses the digital filter for the channel. |
+ * | filterClkSrc | wku_filter_clock_source_t  | Filter clock source when filter-clock selection is supported. |
  */
 typedef struct
 {
-    uint8_t hwChannel;                      /*!< Hardware channel index */
-    bool wakeupEn;                          /*!< WKU/pin wakeup enable */
-    wku_edge_event_t edgeEvent;             /*!< WKU/pin wakeup edge event */
-    bool filterEn;                          /*!< WKU/pin wakeup filter enable */
+    uint8_t hwChannel;                      /*!< Hardware channel index. */
+    bool wakeupEn;                          /*!< Requested wakeup-enable state for the channel. */
+    wku_edge_event_t edgeEvent;             /*!< Edge-detection mode for the channel. */
+    bool filterEn;                          /*!< Enable or bypass the digital filter. */
 #if FEATURE_WKU_SUPPORT_FILTER_CLOCK_SEL
-    wku_filter_clock_source_t filterClkSrc; /*!< WKU/pin wakeup filter clock source */
+    wku_filter_clock_source_t filterClkSrc; /*!< Filter clock source used when filtering is enabled. */
 #endif /* FEATURE_WKU_SUPPORT_FILTER_CLOCK_SEL */
 } wku_pin_wakeup_cfg_t;
 
-
 /*!
- * @brief Reset configuration structure.
- * Implements : wku_reset_cfg_t_Class
+ * @brief Reset-pin wakeup configuration.
+ *
+ * Describes the WKU settings applied to the reset pin when it is used as a
+ * wakeup source from low-power mode.
+ *
+ * | Field        | Type                       | Description |
+ * |--------------|----------------------------|-------------|
+ * | wakeupEn     | bool                       | Enable or disable reset-pin wakeup requests. |
+ * | filterEn     | bool                       | Enable or bypass the reset-pin digital filter. |
+ * | filterClkSrc | wku_filter_clock_source_t  | Filter clock source when filter-clock selection is supported. |
  */
 typedef struct
 {
-    bool wakeupEn;                          /*!< Reset wakeup request enable */
-    bool filterEn;                          /*!< Reset pin wakeup filter enable */
+    bool wakeupEn;                          /*!< Enable or disable reset-pin wakeup requests. */
+    bool filterEn;                          /*!< Enable or bypass reset-pin filtering. */
 #if FEATURE_WKU_SUPPORT_FILTER_CLOCK_SEL
-    wku_filter_clock_source_t filterClkSrc; /*!< Reset pin wakeup filter clock source */
+    wku_filter_clock_source_t filterClkSrc; /*!< Filter clock source for the reset-pin path. */
 #endif /* FEATURE_WKU_SUPPORT_FILTER_CLOCK_SEL */
 } wku_reset_cfg_t;
 
-/* WKU wakeup module list */
+/*!
+ * @brief Internal low-power module wakeup identifiers.
+ *
+ * Selects which internal module wakeup request is enabled through the WKU
+ * module-enable register.
+ *
+ * | Value                    | Description |
+ * |--------------------------|-------------|
+ * | WKU_RTC_WAKEUP           | RTC alarm/module wakeup source. |
+ * | WKU_RTC_SECONDS_WAKEUP   | RTC seconds interrupt wakeup source. |
+ * | WKU_lpTMR0_WAKEUP        | lpTMR0 wakeup source. |
+ * | WKU_ACMP0_WAKEUP         | ACMP0 wakeup source. |
+ * | WKU_ACMP1_WAKEUP         | ACMP1 wakeup source when supported by the device. |
+ *
+ * @note Actual module availability is device-dependent.
+ */
 typedef enum
 {
-    WKU_RTC_WAKEUP = 0x00U, /*!< WKU RTC module wakeup */
-    WKU_RTC_SECONDS_WAKEUP = 0x01U,   /*!< WKU RTC seconds interrupt wakeup */
-    WKU_lpTMR0_WAKEUP = 0x02U,   /*!< WKU lpTMR0 module wakeup */
-    WKU_ACMP0_WAKEUP = 0x03U,   /*!< WKU ACMP0 module wakeup */
-    WKU_ACMP1_WAKEUP = 0x04U,   /*!< WKU ACMP1 module wakeup, only valid when MCU support ACMP1 */
+    WKU_RTC_WAKEUP = 0x00U,          /*!< RTC module wakeup source. */
+    WKU_RTC_SECONDS_WAKEUP = 0x01U,  /*!< RTC seconds interrupt wakeup source. */
+    WKU_lpTMR0_WAKEUP = 0x02U,       /*!< lpTMR0 wakeup source. */
+    WKU_ACMP0_WAKEUP = 0x03U,        /*!< ACMP0 wakeup source. */
+    WKU_ACMP1_WAKEUP = 0x04U         /*!< ACMP1 wakeup source on supported devices. */
 } wku_wakeup_module_t;
-
-
-/*******************************************************************************
- * API
- ******************************************************************************/
-/*!
- * @name WKU DRIVER API
- * @{
- */
 
 #if defined(__cplusplus)
 extern "C" {
 #endif
 
+/*******************************************************************************
+ * Pin Wakeup Initialization & De-initialization
+ ******************************************************************************/
+/*!
+ * @name Pin Wakeup Initialization & De-initialization
+ * @brief Functions for preparing and resetting external pin wakeup channels.
+ * @{
+ */
 
 /*!
- * @brief Initializes the pin wakeup WKU module
+ * @brief Initialize a set of external pin wakeup channels.
  *
- * This function initializes pin wakeup WKU driver based on user configuration input.
- * The channelCnt takes values between 1 and the maximum channel count supported by the hardware
+ * Applies each entry from @a pPinWakeupConfig to the selected WKU instance.
+ * The driver programs the channel filter, optional filter clock, interrupt
+ * enable, and edge-detection mode for each configured entry.
  *
- * @param[in] instance The WKU instance number
- * @param[in] channelCnt The number of channels
- * @param[in] pPinWakeupConfig Pointer to structure of pin wakeup configuration for each the channel
- * @return Execution status (success/error)
+ * @param[in] instance          WKU instance index. Must be less than
+ *                              `WKU_INSTANCE_COUNT`.
+ * @param[in] channelCnt        Number of configuration entries to apply.
+ *                              Valid range: 1 to `FEATURE_WKU_MAX_CHANNEL_COUNT`.
+ * @param[in] pPinWakeupConfig  Pointer to the configuration table.
+ *                              Must not be NULL.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS Initialization completed successfully.
+ *
+ * @pre The WKU peripheral must be accessible for the selected instance.
+ * @post The first @a channelCnt entries have been applied to hardware.
  */
 status_t WKU_DRV_InitPinWakeup(uint32_t instance,
                                uint8_t channelCnt,
                                const wku_pin_wakeup_cfg_t *pPinWakeupConfig);
 
 /*!
- * @brief De-initializes the pin wakeup WKU module
+ * @brief Clear all external pin wakeup channel settings.
  *
- * This function de-initializes the pin wakeup WKU module.
- * Reset pin wakeup configuration, disable IRQ and Wake-up, clear filter enable,
- * pull-up enable, edge events enable.
+ * Iterates across every supported WKU channel and clears the previously
+ * programmed filter, interrupt, flag, and edge-detection settings.
  *
- * @param[in] instance The WKU instance number
- * @return Execution status (success/error)
+ * @param[in] instance WKU instance index. Must be less than
+ *                     `WKU_INSTANCE_COUNT`.
+ * @return Execution status.
+ * @retval STATUS_SUCCESS De-initialization completed successfully.
+ *
+ * @post All supported pin wakeup channels are returned to their cleared state.
  */
 status_t WKU_DRV_DeinitPinWakeup(uint32_t instance);
 
 /*!
- * @brief Gets pin wakeup default configuration
+ * @brief Populate the default pin wakeup configuration table.
  *
- * This function gets pin wakeup default configuration.
- * Note that: The user need provides an array have 32 elements of pin wakeup configuration
+ * Initializes one configuration entry per hardware channel. Each entry is
+ * assigned its channel index, both-edge detection, filter disabled, and the
+ * default filter clock when supported by the device.
  *
- * @param[out] pPinWakeupConfig Pointer to structure of pin wakeup configuration for each the channel
+ * @param[out] pPinWakeupConfig Pointer to an array containing
+ *                              `FEATURE_WKU_MAX_CHANNEL_COUNT` elements.
+ *                              Must not be NULL.
+ *
+ * @post All array entries for the supported hardware channels are initialized.
+ * @note The `wakeupEn` field is not written by this helper and should be set
+ *       explicitly by the caller before applying the configuration.
  */
 void WKU_DRV_GetPinWakeupDefaultConfig(wku_pin_wakeup_cfg_t *const pPinWakeupConfig);
 
+/*! @} */ /* End of Pin Wakeup Initialization & De-initialization */
+
+/*******************************************************************************
+ * Pin Wakeup Channel Control
+ ******************************************************************************/
 /*!
- * @brief Configures for pin wakeup
+ * @name Pin Wakeup Channel Control
+ * @brief Functions for configuring, clearing, and servicing individual pin
+ *        wakeup channels.
+ * @{
+ */
+
+/*!
+ * @brief Apply the configuration for one external pin wakeup channel.
  *
- * This function sets the pin wakeup configuration based on pin wakeup configuration input
+ * Clears any pending flag on the target channel, programs the digital filter,
+ * optionally selects the filter clock, enables the pin interrupt path, and
+ * updates the edge-detection mode.
  *
- * @param[in] instance The WKU instance number
- * @param[in] pPinWakeupConfig Pointer to structure of pin wakeup configuration
+ * @param[in] instance          WKU instance index. Must be less than
+ *                              `WKU_INSTANCE_COUNT`.
+ * @param[in] pPinWakeupConfig  Pointer to the channel configuration structure.
+ *                              Must not be NULL.
+ *
+ * @note If filtering is disabled, the filter clock selection is not used.
  */
 void WKU_DRV_SetPinWakeupConfig(uint32_t instance,
                                 const wku_pin_wakeup_cfg_t *pPinWakeupConfig);
 
 /*!
- * @brief Clears pin wakeup Configuration
+ * @brief Clear the configuration of one external pin wakeup channel.
  *
- * This function clears pin wakeup configuration, disable IRQ and Wake-up,
- * clear filter enable, pull-up enable, edge events enable
+ * Clears the pending flag, disables the digital filter and interrupt path,
+ * restores the default filter clock when supported, and removes edge
+ * detection for the selected channel.
  *
- * @param[in] instance The WKU instance number
- * @param[in] hwChannel The WKU hardware channel
+ * @param[in] instance   WKU instance index. Must be less than
+ *                       `WKU_INSTANCE_COUNT`.
+ * @param[in] hwChannel  Hardware channel index. Must be less than
+ *                       `FEATURE_WKU_MAX_CHANNEL_COUNT`.
  */
 void WKU_DRV_ClearPinWakeupConfig(uint32_t instance,
                                   uint8_t hwChannel);
 
 /*!
- * @brief Sets pin wakeup normal mode
+ * @brief Put a pin wakeup channel into the driver's normal operating mode.
  *
- * This function sets pin wakeup normal mode(enable) for the WKU,
- * enable pin wakeup and wake-up
- *
- * @param[in] instance The WKU instance number
- * @param[in] hwChannel The WKU hardware channel
+ * @param[in] instance   WKU instance index.
+ * @param[in] hwChannel  Hardware channel index.
  */
 void WKU_DRV_SetPinWakeupNormalMode(uint32_t instance,
                                     uint8_t hwChannel);
 
 /*!
- * @brief Sets pin wakeup sleep mode
+ * @brief Put a pin wakeup channel into the driver's sleep-mode policy.
  *
- * This function sets sleep mode for the WKU or disable pin wakeup
- * and wake-up
- *
- * @param[in] instance The WKU instance number
- * @param[in] hwChannel The WKU hardware channel
+ * @param[in] instance   WKU instance index.
+ * @param[in] hwChannel  Hardware channel index.
  */
 void WKU_DRV_SetPinWakeupSleepMode(uint32_t instance,
                                    uint8_t hwChannel);
 
 /*!
- * @brief Sets edge events
+ * @brief Update the edge-detection mode of one pin wakeup channel.
  *
- * This function sets edge events for each channel of the WKU
- *
- * @param[in] instance The WKU instance number
- * @param[in] hwChannel The WKU hardware channel
- * @param[in] edge The edge event for pin wakeup
+ * @param[in] instance   WKU instance index. Must be less than
+ *                       `WKU_INSTANCE_COUNT`.
+ * @param[in] hwChannel  Hardware channel index. Must be less than
+ *                       `FEATURE_WKU_MAX_CHANNEL_COUNT`.
+ * @param[in] edge       Edge-detection mode to program.
  */
 void WKU_DRV_SetPinWakeupEdgeEvent(uint32_t instance,
                                    uint8_t hwChannel,
                                    wku_edge_event_t edge);
 
 /*!
- * @brief Clears pin wakeup flag
+ * @brief Clear the wakeup flag of one pin channel.
  *
- * This function clears pin wakeup flag for channel mask
+ * @param[in] instance   WKU instance index. Must be less than
+ *                       `WKU_INSTANCE_COUNT`.
+ * @param[in] hwChannel  Hardware channel index. Must be less than
+ *                       `FEATURE_WKU_MAX_CHANNEL_COUNT`.
  *
- * @param[in] instance The WKU instance number
- * @param[in] hwChannel The WKU hardware channel
+ * @post Any pending wakeup flag for the selected channel is acknowledged.
  */
 void WKU_DRV_ClearPinWakeupFlag(uint32_t instance,
                                 uint8_t hwChannel);
 
+/*! @} */ /* End of Pin Wakeup Channel Control */
+
+/*******************************************************************************
+ * Reset Wakeup Control
+ ******************************************************************************/
 /*!
- * @brief Initializes the reset WKU module
+ * @name Reset Wakeup Control
+ * @brief Functions for configuring reset-pin wakeup behavior.
+ * @{
+ */
+
+/*!
+ * @brief Initialize reset-pin wakeup handling.
  *
- * This function sets reset configuration of the WKU based on reset configuration input
+ * Programs the reset-pin wakeup enable state, the reset-pin digital filter,
+ * and the filter clock selection when supported by the device.
  *
- * @param[in] instance The WKU instance number
- * @param[in] pResetConfig Pointer to structure of reset configuration
+ * @param[in] instance      WKU instance index. Must be less than
+ *                          `WKU_INSTANCE_COUNT`.
+ * @param[in] pResetConfig  Pointer to the reset-pin configuration structure.
+ *                          Must not be NULL.
  */
 void WKU_DRV_InitReset(uint32_t instance,
                        const wku_reset_cfg_t *pResetConfig);
 
 /*!
- * @brief De-initializes the Reset WKU module
+ * @brief Restore the reset-pin wakeup path to its cleared state.
  *
- * This function de-initializes the Reset WKU module. Reset configuration,
- * disable Wake-up, edge events enable and lock enable.
+ * Disables reset-pin wakeup requests, disables the reset-pin filter, and
+ * restores the default filter clock when supported by the device.
  *
- * @param[in] instance The WKU instance number
+ * @param[in] instance WKU instance index. Must be less than
+ *                     `WKU_INSTANCE_COUNT`.
  */
 void WKU_DRV_DeinitReset(uint32_t instance);
 
 /*!
- * @brief Gets Reset default configuration
+ * @brief Populate the default reset-pin wakeup configuration.
  *
- * This function gets Reset default configuration.
+ * Fills the configuration structure with wakeup enabled, filter enabled, and
+ * the SIRC filter clock when filter-clock selection is supported.
  *
- * @param[out] pResetConfig Pointer to structure of NMI configuration
+ * @param[out] pResetConfig Pointer to the reset-pin configuration structure.
+ *                          Must not be NULL.
  */
 void WKU_DRV_GetResetDefaultConfig(wku_reset_cfg_t *pResetConfig);
 
+/*! @} */ /* End of Reset Wakeup Control */
+
+/*******************************************************************************
+ * Internal Module Wakeup Control
+ ******************************************************************************/
 /*!
- * @brief Enable module wakeup request
+ * @name Internal Module Wakeup Control
+ * @brief Functions for gating internal module wakeup requests.
+ * @{
+ */
+
+/*!
+ * @brief Enable an internal module wakeup request.
  *
- * This function enables module wakeup request
- *
- * @param[in] instance The WKU instance number
- * @param[in] moduleID The wakeup module number
+ * @param[in] instance  WKU instance index. Must be less than
+ *                      `WKU_INSTANCE_COUNT`.
+ * @param[in] moduleID  Internal wakeup source ID. See @ref wku_wakeup_module_t.
  */
 void WKU_DRV_EnableModuleWakeup(uint32_t instance, uint8_t moduleID);
 
 /*!
- * @brief Disable module wakeup request
+ * @brief Disable an internal module wakeup request.
  *
- * This function disables module wakeup request
- *
- * @param[in] instance The WKU instance number
- * @param[in] moduleID The wakeup module number
+ * @param[in] instance  WKU instance index. Must be less than
+ *                      `WKU_INSTANCE_COUNT`.
+ * @param[in] moduleID  Internal wakeup source ID. See @ref wku_wakeup_module_t.
  */
 void WKU_DRV_DisableModuleWakeup(uint32_t instance, uint8_t moduleID);
 
+/*! @} */ /* End of Internal Module Wakeup Control */
+
 #if FEATURE_WKU_SUPPORT_PIN_ISOLATION
+/*******************************************************************************
+ * Power-Down Pin Isolation
+ ******************************************************************************/
 /*!
- * @brief Enable disable PIN isolation under power down mode
- *
- * PIN isolation will keep the pin state when the power down mode is entered and
- * after the power down mode is exited. Application should disable pin isolation after
- * MCU reinitialization pin configuration.
- *
- * @note Not all MCU support pin isolation features
- *
- * @param[in] enable Enable/disable pin isolation
+ * @name Power-Down Pin Isolation
+ * @brief Optional helper for preserving pin state across power-down cycles.
+ * @{
  */
 
+/*!
+ * @brief Enable or disable pin isolation during power-down mode.
+ *
+ * Pin isolation preserves the current pad state while the device is in
+ * power-down mode and until software reconfigures the pads after wakeup.
+ *
+ * @param[in] enable `true` to enable pin isolation, `false` to disable it.
+ *
+ * @note Availability is controlled by `FEATURE_WKU_SUPPORT_PIN_ISOLATION`.
+ * @warning Disable pin isolation after the MCU reinitializes its pin
+ *          configuration following wakeup.
+ */
 static inline void WKU_DRV_SetPinIsolation(bool enable)
 {
 #if defined(CPU_YTM32B1ME1)
-    PCU->CTRL0 = (PCU->CTRL0 & ~PCU_CTRL0_PKE_MASK)| PCU_CTRL0_PKE(enable ? 1U : 0U);
+    PCU->CTRL0 = (PCU->CTRL0 & ~PCU_CTRL0_PKE_MASK) | PCU_CTRL0_PKE(enable ? 1U : 0U);
 #else
-    PCU->CTRL = (PCU->CTRL & ~PCU_CTRL_PKE_MASK)| PCU_CTRL_PKE(enable ? 1U : 0U);
+    PCU->CTRL = (PCU->CTRL & ~PCU_CTRL_PKE_MASK) | PCU_CTRL_PKE(enable ? 1U : 0U);
 #endif /* CPU_YTM32B1ME1 */
 }
-#endif /* FEATURE_WKU_SUPPORT_PIN_ISOLATION */
 
-/*! @} */
+/*! @} */ /* End of Power-Down Pin Isolation */
+#endif /* FEATURE_WKU_SUPPORT_PIN_ISOLATION */
 
 #if defined(__cplusplus)
 }

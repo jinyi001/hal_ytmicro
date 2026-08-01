@@ -8,6 +8,12 @@
 /*!
  * @file pins_port_hw_access.h
  * @version 1.4.1
+ *
+ * @brief PINS PORT Hardware Access Layer.
+ *
+ * This internal header provides low-level helpers for programming the PCTRL
+ * registers used by the PINS module. The APIs in this file are used by the
+ * public driver layer and should not be called directly by application code.
  */
 
 #ifndef PINS_PCTRL_HW_ACCESS_H
@@ -15,61 +21,61 @@
 
 #include "pins_driver.h"
 
-
 /*!
- * @defgroup port_hal Port Control and Interrupts (PORT)
- * @ingroup pins_driver
- * @brief This module covers the functionality of the PORT peripheral.
- * <p>
- *  PORT HAL provides the API for reading and writing register bit-fields belonging to the PORT module.
- * </p>
+ * @addtogroup pins_port_hw_access PINS PORT Hardware Access
+ * @ingroup pins
+ * @brief Low-level PCTRL register access helpers for the PINS module.
  * @{
  */
-
-/*******************************************************************************
- * Definitions
- ******************************************************************************/
-/*******************************************************************************
- * API
- ******************************************************************************/
 
 #if defined(__cplusplus)
 extern "C" {
 #endif
 
+/*******************************************************************************
+ * Pin Initialization
+ ******************************************************************************/
 /*!
- * @name Configuration
+ * @name Pin Initialization
+ * @brief Functions for applying complete pin-configuration records.
  * @{
  */
 
 /*!
- * @brief Initializes the pins with the given configuration structure
+ * @brief Apply one pin configuration record to the hardware registers.
  *
- * This function configures the pins with the options provided in the
- * given structure.
+ * Programs the selected PCR register, optional digital-filter settings, GPIO
+ * direction, interrupt mode, and optional register lock state.
  *
- * @param[in] config the configuration structure
+ * @param[in] config  Pointer to the pin configuration record.
  */
 void PINS_Init(const pin_settings_config_t * config);
 
+/*! @} */ /* End of Pin Initialization */
+
+/*******************************************************************************
+ * Port Control
+ ******************************************************************************/
+/*!
+ * @name Port Control
+ * @brief Functions for updating specific PCTRL PCR fields.
+ * @{
+ */
+
 #if FEATURE_PINS_HAS_PULL_SELECTION
 /*!
- * @brief Configures the internal resistor.
+ * @brief Configure the internal pull resistor for a pin.
  *
- * Pull configuration is valid in all digital pin muxing modes.
- *
- * @param[in] base        port base pointer.
- * @param[in] pin         port pin number
- * @param[in] pullConfig  internal resistor pull feature selection
- *        - PCTRL_PULL_NOT_ENABLED: internal pull-down or pull-up resistor is not enabled.
- *        - PCTRL_PULL_DOWN_ENABLED: internal pull-down resistor is enabled.
- *        - PCTRL_PULL_UP_ENABLED: internal pull-up resistor is enabled.
+ * @param[in] base        Port control base pointer.
+ * @param[in] pin         Zero-based pin index inside the port.
+ * @param[in] pullConfig  Pull resistor configuration to apply.
  */
 static inline void PINS_SetPullSel(PCTRL_Type * const base,
                                    uint32_t pin,
                                    port_pull_config_t pullConfig)
 {
     DEV_ASSERT(pin < PCTRL_PCR_COUNT);
+
     switch (pullConfig)
     {
         case PCTRL_INTERNAL_PULL_NOT_ENABLED:
@@ -99,29 +105,28 @@ static inline void PINS_SetPullSel(PCTRL_Type * const base,
             break;
     }
 }
-
-#endif /* if FEATURE_PINS_HAS_PULL_SELECTION */
+#endif /* FEATURE_PINS_HAS_PULL_SELECTION */
 
 /*!
- * @brief Configures the pin muxing.
+ * @brief Select the mux mode for a pin.
  *
- * @param[in] base  port base pointer
- * @param[in] pin  port pin number
- * @param[in] mux  pin muxing slot selection
- *        - PCTRL_PIN_DISABLED: Pin disabled.
- *        - PCTRL_MUX_AS_GPIO : Set as GPIO.
- *        - PCTRL_MUX_ADC_INTERLEAVE : For ADC interleaved
- *        - others           : chip-specific.
+ * Updates only the mux field of the selected PCR register.
+ *
+ * @param[in] base  Port control base pointer.
+ * @param[in] pin   Zero-based pin index inside the port.
+ * @param[in] mux   Mux selection to apply.
  */
 void PINS_SetMuxModeSel(PCTRL_Type * const base,
                         uint32_t pin,
                         port_mux_t mux);
 
+/*! @} */ /* End of Port Control */
+
 #if defined(__cplusplus)
 }
 #endif
 
-/*! @} */
+/*! @} */ /* End of pins_port_hw_access group */
 
 #endif /* PINS_PCTRL_HW_ACCESS_H */
 /*******************************************************************************

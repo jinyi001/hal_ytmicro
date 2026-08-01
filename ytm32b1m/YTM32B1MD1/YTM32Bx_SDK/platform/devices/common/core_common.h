@@ -8,6 +8,7 @@
 /*!
  * @file core_common.h
  * @version 1.4.1
+ * @brief Shared compiler and core utility macros for platform/devices.
  */
 
 /*!
@@ -19,13 +20,12 @@
  */
 
 /*
- * Tool Chains:
- *   GNUC flag is defined also by ARM compiler - it shows the current major version of the compatible GCC version
- *   __GNUC__   : GNU Compiler Collection
- *   __ghs__    : Green Hills ARM Compiler
- *   __ICCARM__ : IAR ARM Compiler
- *   __DCC__    : Wind River Diab Compiler
- *   __ARMCC_VERSION:  ARM Compiler
+ * Compiler identification macros used throughout platform/devices:
+ *   __GNUC__        :  GNU Compiler Collection compatibility version
+ *   __ghs__         :  Green Hills ARM Compiler
+ *   __ICCARM__      :  IAR ARM Compiler
+ *   __DCC__         :  Wind River Diab Compiler
+ *   __ARMCC_VERSION :  ARM Compiler
  */
 
 #ifndef CORE_COMMON_H
@@ -36,16 +36,30 @@
 extern "C" {
 #endif
 
-/** \brief  BKPT_ASM
- *
- *   Macro to be used to trigger an debug interrupt
+/*!
+ * @addtogroup devices_core_common
+ * @brief Shared compiler, CPU, and section-placement helpers.
+ * @details
+ * This header centralizes low-level macros used by the shared startup code,
+ * device headers, and peripheral drivers. It covers debug traps, interrupt
+ * control, byte-swapping helpers, RAM-section annotations, and compiler
+ * attributes shared across toolchains.
+ * @{
+ */
+
+/*!
+ * @name Debug and Core-Control Helpers
+ * @brief Macros for breakpoints, interrupt control, and low-power entry.
+ * @{
+ */
+
+/*!
+ * @brief Trigger a breakpoint instruction on the active core.
  */
 #define BKPT_ASM __asm("BKPT #0\n\t")
-        
 
-/** \brief  Enable FPU
- *
- *   ENABLE_FPU indicates whether SystemInit will enable the Floating point unit (FPU)
+/*!
+ * @brief Mark that the active toolchain targets a hardware floating-point unit.
  */
 #if defined (__GNUC__) || defined (__ARMCC_VERSION)
 #if defined (__VFP_FP__) && !defined (__SOFTFP__)
@@ -63,16 +77,18 @@ extern "C" {
 #endif
 #endif /* if defined (__GNUC__) */
 
-/** \brief  Enable interrupts
+/*!
+ * @brief Enable IRQ handling globally.
  */
-#if defined (__GNUC__) 
+#if defined (__GNUC__)
 #define ENABLE_INTERRUPTS() __asm volatile ("cpsie i" : : : "memory");
 #else
 #define ENABLE_INTERRUPTS() __asm("cpsie i")
 #endif
 
 
-/** \brief  Disable interrupts
+/*!
+ * @brief Disable IRQ handling globally.
  */
 #if defined (__GNUC__)
 #define DISABLE_INTERRUPTS() __asm volatile ("cpsid i" : : : "memory");
@@ -81,8 +97,8 @@ extern "C" {
 #endif
 
 
-/** \brief  Enter low-power standby state
- *    WFI (Wait For Interrupt) makes the processor suspend execution (Clock is stopped) until an IRQ interrupts.
+/*!
+ * @brief Enter standby until an interrupt wakes the core.
  */
 #if defined (__GNUC__)
 #define STANDBY() __asm volatile ("wfi")
@@ -90,11 +106,21 @@ extern "C" {
 #define STANDBY() __asm("wfi")
 #endif
 
-/** \brief  No-op
+/*!
+ * @brief Execute a single no-operation instruction.
  */
 #define NOP() __asm volatile ("nop")
 
-/** \brief  Reverse byte order in a word.
+/*! @} */ /* End of Debug and Core-Control Helpers */
+
+/*!
+ * @name Byte-Reordering Helpers
+ * @brief Macros that reverse byte order for common word widths.
+ * @{
+ */
+
+/*!
+ * @brief Reverse the byte order of a 32-bit word.
  */
 #if defined (__GNUC__) || defined (__ICCARM__) || defined (__ghs__) || defined (__ARMCC_VERSION)
 #define REV_BYTES_32(a, b) __asm volatile ("rev %0, %1" : "=r" (b) : "r" (a))
@@ -103,7 +129,8 @@ extern "C" {
                                 | ((a & 0xFF00U) << 8U) | ((a & 0xFFU) << 24U))
 #endif
 
-/** \brief  Reverse byte order in each halfword independently.
+/*!
+ * @brief Reverse the byte order inside each 16-bit halfword of a 32-bit value.
  */
 #if defined (__GNUC__) || defined (__ICCARM__) || defined (__ghs__) || defined (__ARMCC_VERSION)
 #define REV_BYTES_16(a, b) __asm volatile ("rev16 %0, %1" : "=r" (b) : "r" (a))
@@ -112,7 +139,16 @@ extern "C" {
                                 | ((a & 0xFF00U) >> 8U) | ((a & 0xFFU) << 8U))
 #endif
 
-/** \brief  Places a function in RAM.
+/*! @} */ /* End of Byte-Reordering Helpers */
+
+/*!
+ * @name RAM Section Placement Helpers
+ * @brief Macros used to declare and define functions that must execute from RAM.
+ * @{
+ */
+
+/*!
+ * @brief Annotate a function declaration so it is placed in the RAM code section.
  */
 #if defined ( __GNUC__ ) || defined (__ARMCC_VERSION)
     #define START_FUNCTION_DECLARATION_RAMSECTION
@@ -130,17 +166,19 @@ extern "C" {
     #define END_FUNCTION_DECLARATION_RAMSECTION        ; \
                                                        _Pragma("section CODE \".text\"")
 #else
-    /* Keep compatibility with software analysis tools */
-    #define START_FUNCTION_DECLARATION_RAMSECTION      
+    /* Keep compatibility with software analysis tools. */
+    #define START_FUNCTION_DECLARATION_RAMSECTION
     #define END_FUNCTION_DECLARATION_RAMSECTION        ;
 #endif
-                                                   
-    /* For GCC, IAR, GHS, Diab and ARMC there is no need to specify the section when
-    defining a function, it is enough to specify it at the declaration. This
-    also enables compatibility with software analysis tools. */
+
+/* GCC, IAR, GHS, Diab, and Arm Compiler only need the section placement on
+ * the declaration side, which keeps the definition compatible with analysis tools. */
     #define START_FUNCTION_DEFINITION_RAMSECTION
     #define END_FUNCTION_DEFINITION_RAMSECTION
 
+/*!
+ * @brief Disable IAR diagnostics that complain about RAM-section function calls.
+ */
 #if defined (__ICCARM__)
     #define DISABLE_CHECK_RAMSECTION_FUNCTION_CALL     _Pragma("diag_suppress=Ta022, Ta023")
     #define ENABLE_CHECK_RAMSECTION_FUNCTION_CALL      _Pragma("diag_default=Ta022, Ta023")
@@ -149,29 +187,38 @@ extern "C" {
     #define ENABLE_CHECK_RAMSECTION_FUNCTION_CALL
 #endif
 
-/** \brief  Get Core ID
- *
- *   GET_CORE_ID returns the processor identification number for cm33
+/*! @} */ /* End of RAM Section Placement Helpers */
+
+/*!
+ * @name Core Identification and Attributes
+ * @brief CPU-specific helpers and common compiler attributes.
+ * @{
+ */
+
+/*!
+ * @brief Return the active core identifier on supported multicore devices.
  */
 #if defined(NUMBER_OF_CORES) && (NUMBER_OF_CORES > 1)
 #if defined(CPU_YTM32B1HB0)
-    /* Get the core ID from the CIM->CORE_NUM register */
+    /* Read the core identifier from the CIM->CORE_NUM register. */
     #define GET_CORE_ID()   (*((volatile uint32_t *)0x401ec074u) & 0x3U)
 #endif /* CPU_YTM32B1HB0 */
 #else
 #define GET_CORE_ID()	0U
 #endif /* NUMBER_OF_CORES */
 
-/** \brief  Data alignment.
+/*!
+ * @brief Request alignment for an object or type declaration.
  */
 #if defined ( __GNUC__ ) || defined ( __ghs__ ) || defined ( __DCC__ ) || defined (__ARMCC_VERSION) || defined (__ICCARM__)
     #define ALIGNED(x)      __attribute__((aligned(x)))
 #else
-    /* Keep compatibility with software analysis tools */
+    /* Keep compatibility with software analysis tools. */
     #define ALIGNED(x)
 #endif
 
-/** \brief  Weak functions.
+/*!
+ * @brief Expose common weak and packed attributes across toolchains.
  */
 #if defined ( __GNUC__ ) || defined ( __ghs__ ) || defined ( __DCC__ ) || defined (__ARMCC_VERSION)
     #ifndef __weak
@@ -181,7 +228,7 @@ extern "C" {
         #define __packed      __attribute__((packed)) /*PRQA S 0603, 0602*/
     #endif
 #else
-    /* Keep compatibility with software analysis tools */
+    /* Keep compatibility with software analysis tools. */
     #ifndef __weak
         #define __weak
     #endif
@@ -190,9 +237,14 @@ extern "C" {
     #endif
 #endif
 
-/** \brief  Endianness.
+/*!
+ * @brief Mark the core as little-endian.
  */
 #define CORE_LITTLE_ENDIAN
+
+/*! @} */ /* End of Core Identification and Attributes */
+
+/*! @} */ /* End of devices_core_common */
 
 #ifdef __cplusplus
 }
@@ -203,4 +255,3 @@ extern "C" {
 /*******************************************************************************
  * EOF
  ******************************************************************************/
-

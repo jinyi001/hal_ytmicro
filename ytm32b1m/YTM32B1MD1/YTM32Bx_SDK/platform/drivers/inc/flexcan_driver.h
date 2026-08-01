@@ -8,6 +8,27 @@
 /*!
  * @file flexcan_driver.h
  * @version 1.4.1
+ *
+ * @brief FlexCAN Driver — Public API for CAN / CAN-FD communication.
+ *
+ * This header defines the application-level interface for the FlexCAN
+ * peripheral. It wraps the low-level hardware access layer and provides
+ * a convenient, instance-based API for configuring the CAN engine, sending
+ * and receiving CAN frames, and managing interrupts and callbacks.
+ *
+ * The APIs are organized into the following functional groups:
+ *   - **Initialization & De-initialization** — Set up or tear down the module.
+ *   - **Bit Rate Configuration** — Configure standard and FD bit timing.
+ *   - **Rx Mask Configuration** — Set global, individual, and FIFO masks.
+ *   - **Transmit Operations** — Configure Tx MBs and send frames.
+ *   - **Receive Operations** — Configure Rx MBs/FIFO and receive frames.
+ *   - **Transfer Status & Error** — Abort, query, and read error status.
+ *   - **Callback & Interrupt** — Install event/error callbacks.
+ *   - **Transceiver Delay Compensation** — TDC offset and measurement.
+ *   - **Pretended Networking** — Low-power wake-up configuration.
+ *
+ * @note The FlexCAN peripheral clock must be enabled (via clock_manager)
+ *       before calling any function in this module.
  */
 
 /*!
@@ -30,9 +51,12 @@
 #endif
 
 /*!
- * @defgroup flexcan_driver FlexCAN Driver
- * @ingroup flexcan
- * @addtogroup flexcan_driver
+ * @addtogroup flexcan
+ * @brief FlexCAN Peripheral Driver — Public API.
+ * @details Provides instance-based APIs for CAN / CAN-FD configuration,
+ *          transmission, reception, and interrupt management. Supports
+ *          message buffers, Rx FIFO, Enhanced Rx FIFO, DMA, Pretended
+ *          Networking, and Transceiver Delay Compensation.
  * @{
  */
 
@@ -44,8 +68,8 @@
 #define FLEXCAN_MB_HANDLE_ENHANCE_RXFIFO    (128U)
 #endif
 
-/*! @brief The type of the RxFIFO transfer (interrupts/DMA).
- * Implements : flexcan_rxfifo_transfer_type_t_Class
+/*!
+ * @brief Rx FIFO transfer type (interrupt-driven or DMA-driven).
  */
 typedef enum
 {
@@ -55,8 +79,8 @@ typedef enum
 #endif
 } flexcan_rxfifo_transfer_type_t;
 
-/*! @brief The type of the event which occurred when the callback was invoked.
- * Implements : flexcan_event_type_t_Class
+/*!
+ * @brief Event types reported to the user event callback.
  */
 typedef enum
 {
@@ -82,8 +106,8 @@ typedef enum
     FLEXCAN_EVENT_ERROR
 } flexcan_event_type_t;
 
-/*! @brief The type of the error event which occurred when the callback was invoked.
- * Implements : flexcan_error_event_type_t_Class
+/*!
+ * @brief Error event types reported to the user error callback.
  */
 typedef enum
 {
@@ -102,8 +126,8 @@ typedef enum
 #endif
 } flexcan_error_event_type_t;
 
-/*! @brief The state of a given MB (idle/Rx busy/Tx busy).
- * Implements : flexcan_mb_state_t_Class
+/*!
+ * @brief Runtime state of a message buffer (idle / Rx busy / Tx busy).
  */
 typedef enum
 {
@@ -115,8 +139,8 @@ typedef enum
 #endif
 } flexcan_mb_state_t;
 
-/*! @brief FlexCAN Message Buffer ID type
- * Implements : flexcan_msgbuff_id_type_t_Class
+/*!
+ * @brief CAN message identifier type (standard 11-bit or extended 29-bit).
  */
 typedef enum
 {
@@ -125,8 +149,8 @@ typedef enum
 } flexcan_msgbuff_id_type_t;
 
 #if FEATURE_CAN_HAS_PE_CLKSRC_SELECT
-/*! @brief FlexCAN PE clock sources
- * Implements : flexcan_clk_source_t_Class
+/*!
+ * @brief Protocol Engine (PE) clock source selection.
  */
 typedef enum
 {
@@ -135,8 +159,10 @@ typedef enum
 } flexcan_clk_source_t;
 #endif
 
-/*! @brief FlexCAN message buffer structure
- * Implements : flexcan_msgbuff_t_Class
+/*!
+ * @brief FlexCAN message buffer data structure.
+ *
+ * Contains the Code/Status word, message ID, data payload, and data length.
  */
 typedef struct
 {
@@ -146,8 +172,8 @@ typedef struct
     uint8_t dataLen;                    /*!< Length of data in bytes */
 } flexcan_msgbuff_t;
 
-/*! @brief Information needed for internal handling of a given MB.
- * Implements : flexcan_mb_handle_t_Class
+/*!
+ * @brief Internal handle for managing a single message buffer transfer.
  */
 typedef struct
 {
@@ -162,10 +188,9 @@ typedef struct
 /*!
  * @brief Internal driver state information.
  *
- * @note The contents of this structure are internal to the driver and should not be
- *      modified by users. Also, contents of the structure are subject to change in
- *      future releases.
- * Implements : flexcan_state_t_Class
+ * @note The contents of this structure are internal to the driver and should
+ *       not be modified by users. Contents are subject to change in future
+ *       releases.
  */
 typedef struct FlexCANState
 {
@@ -196,8 +221,8 @@ typedef struct FlexCANState
     uint32_t max_num_mb;                                       /*!< The maximum number of Message Buffers */
 } flexcan_state_t;
 
-/*! @brief FlexCAN data info from user
- * Implements : flexcan_data_info_t_Class
+/*!
+ * @brief Data information structure provided by the user for Tx/Rx operations.
  */
 typedef struct
 {
@@ -212,8 +237,8 @@ typedef struct
     bool is_remote;                         /*!< Specifies if the frame is standard or remote */
 } flexcan_data_info_t;
 
-/*! @brief FlexCAN Rx FIFO filters number
- * Implements : flexcan_rx_fifo_id_filter_num_t_Class
+/*!
+ * @brief Number of Rx FIFO ID filter elements.
  */
 typedef enum
 {
@@ -235,8 +260,8 @@ typedef enum
     FLEXCAN_RX_FIFO_ID_FILTERS_128 = 0xF          /*!< 128 Rx FIFO Filters. */
 } flexcan_rx_fifo_id_filter_num_t;
 
-/*! @brief FlexCAN Rx mask type.
- * Implements : flexcan_rx_mask_type_t_Class
+/*!
+ * @brief Rx acceptance mask type (global or per-MB individual).
  */
 typedef enum
 {
@@ -244,8 +269,8 @@ typedef enum
     FLEXCAN_RX_MASK_INDIVIDUAL   /*!< Rx individual mask*/
 } flexcan_rx_mask_type_t;
 
-/*! @brief ID formats for Rx FIFO
- * Implements : flexcan_rx_fifo_id_element_format_t_Class
+/*!
+ * @brief Rx FIFO ID filter table element format.
  */
 typedef enum
 {
@@ -256,8 +281,8 @@ typedef enum
     FLEXCAN_RX_FIFO_ID_FORMAT_D  /*!< All frames rejected.*/
 } flexcan_rx_fifo_id_element_format_t;
 
-/*! @brief FlexCAN Rx FIFO ID filter table structure
- * Implements : flexcan_id_table_t_Class
+/*!
+ * @brief Rx FIFO ID filter table element.
  */
 typedef struct
 {
@@ -266,8 +291,8 @@ typedef struct
     uint32_t id;             /*!< Rx FIFO ID filter element*/
 } flexcan_id_table_t;
 
-/*! @brief FlexCAN operation modes
- * Implements : flexcan_operation_modes_t_Class
+/*!
+ * @brief FlexCAN operation modes.
  */
 typedef enum
 {
@@ -279,8 +304,8 @@ typedef enum
 } flexcan_operation_modes_t;
 
 #if FEATURE_CAN_HAS_FD
-/*! @brief FlexCAN payload sizes
- * Implements : flexcan_fd_payload_size_t_Class
+/*!
+ * @brief CAN FD payload sizes (8 / 16 / 32 / 64 bytes).
  */
 typedef enum
 {
@@ -291,8 +316,8 @@ typedef enum
 } flexcan_fd_payload_size_t;
 #endif
 
-/*! @brief FlexCAN bitrate related structures
- * Implements : flexcan_time_segment_t_Class
+/*!
+ * @brief Bit timing segment structure for CAN / CAN FD.
  */
 typedef struct
 {
@@ -305,8 +330,8 @@ typedef struct
 
 
 #if FEATURE_CAN_HAS_ENHANCE_RX_FIFO
-/*! @brief FlexCAN enhanced rx fifo filter scheme
- * Implements : flexcan_enchance_rx_fifo_filter_scheme_t_Class
+/*!
+ * @brief Enhanced Rx FIFO filter matching scheme.
  */
 typedef enum{
     FLEXCAN_ENAHNCE_RXFIFO_FSCH_FILTER_MASK,
@@ -314,8 +339,8 @@ typedef enum{
     FLEXCAN_ENAHNCE_RXFIFO_FSCH_DOUBLE_FILTER,
 }flexcan_enchance_rx_fifo_filter_scheme_t;
 
-/*! @brief FlexCAN enhanced rx fifo filter table ralated structures
- * Implements : flexcan_enhance_rx_fifo_filter_table_t_Class
+/*!
+ * @brief Enhanced Rx FIFO filter table element.
  */
 typedef struct {
     bool isRemoteFrame;      /*!< Remote frame*/
@@ -342,8 +367,10 @@ typedef struct {
 } flexcan_enhance_rx_fifo_filter_table_t;
 #endif /* FEATURE_CAN_HAS_ENHANCE_RX_FIFO */
 
-/*! @brief FlexCAN configuration
- * Implements : flexcan_user_config_t_Class
+/*!
+ * @brief FlexCAN user configuration structure.
+ *
+ * Passed to FLEXCAN_DRV_Init() to configure the FlexCAN instance.
  */
 typedef struct
 {
@@ -416,8 +443,8 @@ typedef enum {
                                       equal to a specified upper limit. */
 } flexcan_pn_filter_selection_t;
 
-/*! @brief Pretended Networking configuration structure
- * Implements : flexcan_pn_config_t_Class
+/*!
+ * @brief Pretended Networking configuration structure.
  */
 typedef struct {
     bool wakeUpTimeout;                               /*!< Specifies if an wake up event is triggered on timeout. */
@@ -435,14 +462,14 @@ typedef struct {
 #endif /* FEATURE_CAN_HAS_PRETENDED_NETWORKING */
 
 
-/*! @brief FlexCAN Driver callback function type
- * Implements : flexcan_callback_t_Class
+/*!
+ * @brief User event callback function type for Tx/Rx/FIFO completion events.
  */
 typedef void (*flexcan_callback_t)(uint8_t instance, flexcan_event_type_t eventType,
                                    uint32_t buffIdx, flexcan_state_t *flexcanState);
 
-/*! @brief FlexCAN Driver error callback function type
- * Implements : flexcan_error_callback_t_Class
+/*!
+ * @brief User error callback function type for error and status events.
  */
 typedef void (*flexcan_error_callback_t)(uint8_t instance, flexcan_error_event_type_t eventType,
                                          flexcan_state_t *flexcanState);
@@ -456,45 +483,101 @@ extern "C" {
 #endif
 
 /*!
- * @name Bit rate
+ * @name Initialization & De-initialization
  * @{
  */
 
 /*!
- * @brief Sets the FlexCAN bit rate for standard frames or the arbitration phase of FD frames.
+ * @brief Get the default FlexCAN configuration.
  *
- * @param   instance    A FlexCAN instance number
- * @param   bitrate     A pointer to the FlexCAN bit rate settings.
+ * Fills the configuration structure with sensible defaults:
+ * - 16 message buffers
+ * - Flexible Data Rate disabled
+ * - Rx FIFO disabled
+ * - Normal operation mode
+ * - 8-byte payload size
+ * - PE clock = Oscillator clock
+ * - Bit rate ≈ 500 Kbit/s (sample point ≈ 87.5 %)
+ *
+ * @param[out] config  Pointer to the configuration structure to populate.
+ * @return Actual bit rate (Hz) computed for the PE clock frequency.
+ */
+uint32_t FLEXCAN_DRV_GetDefaultConfig(flexcan_user_config_t *config);
+
+/*!
+ * @brief Initialize a FlexCAN peripheral instance.
+ *
+ * Configures the FlexCAN module according to the user configuration,
+ * enables interrupts, and stores the runtime state.
+ *
+ * @param[in]  instance  FlexCAN peripheral instance index (0-based).
+ * @param[out] state     Pointer to the driver state structure (allocated by caller).
+ * @param[in]  data      Pointer to the user configuration structure.
+ * @return STATUS_SUCCESS if successful;
+ *         STATUS_CAN_BUFF_OUT_OF_RANGE if a message buffer index is invalid;
+ *         STATUS_ERROR if another error occurred.
+ * @pre  The FlexCAN peripheral clock must be enabled.
+ * @post The FlexCAN instance is ready for Tx/Rx operations.
+ */
+status_t FLEXCAN_DRV_Init(
+    uint8_t instance,
+    flexcan_state_t *state,
+    const flexcan_user_config_t *data);
+
+/*!
+ * @brief Shut down a FlexCAN peripheral instance.
+ *
+ * Disables all FlexCAN interrupts, disables the module, and releases
+ * internal resources.
+ *
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ * @return STATUS_SUCCESS if successful;
+ *         STATUS_ERROR if de-initialization failed.
+ */
+status_t FLEXCAN_DRV_Deinit(uint8_t instance);
+
+/*@}*/
+
+/*!
+ * @name Bit Rate Configuration
+ * @{
+ */
+
+/*!
+ * @brief Set the bit timing for standard frames or the arbitration phase of FD frames.
+ *
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ * @param[in] bitrate   Pointer to the bit timing segment structure.
  */
 void FLEXCAN_DRV_SetBitrate(uint8_t instance, const flexcan_time_segment_t *bitrate);
 
 #if FEATURE_CAN_HAS_FD
 
 /*!
- * @brief Sets the FlexCAN bit rate for the data phase of FD frames (BRS enabled).
+ * @brief Set the bit timing for the data phase of FD frames (BRS enabled).
  *
- * @param   instance    A FlexCAN instance number
- * @param   bitrate     A pointer to the FlexCAN bit rate settings.
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ * @param[in] bitrate   Pointer to the bit timing segment structure.
  */
 void FLEXCAN_DRV_SetBitrateCbt(uint8_t instance, const flexcan_time_segment_t *bitrate);
 
 #endif
 
 /*!
- * @brief Gets the FlexCAN bit rate for standard frames or the arbitration phase of FD frames.
+ * @brief Get the current bit timing for standard frames / arbitration phase.
  *
- * @param   instance    A FlexCAN instance number
- * @param   bitrate     A pointer to a variable for returning the FlexCAN bit rate settings
+ * @param[in]  instance  FlexCAN peripheral instance index (0-based).
+ * @param[out] bitrate   Pointer to store the current bit timing settings.
  */
 void FLEXCAN_DRV_GetBitrate(uint8_t instance, flexcan_time_segment_t *bitrate);
 
 #if FEATURE_CAN_HAS_FD
 
 /*!
- * @brief Gets the FlexCAN bit rate for the data phase of FD frames (BRS enabled).
+ * @brief Get the current bit timing for FD data phase (BRS enabled).
  *
- * @param   instance    A FlexCAN instance number
- * @param   bitrate     A pointer to a variable for returning the FlexCAN bit rate settings
+ * @param[in]  instance  FlexCAN peripheral instance index (0-based).
+ * @param[out] bitrate   Pointer to store the current bit timing settings.
  */
 void FLEXCAN_DRV_GetBitrateFD(uint8_t instance, flexcan_time_segment_t *bitrate);
 
@@ -503,27 +586,28 @@ void FLEXCAN_DRV_GetBitrateFD(uint8_t instance, flexcan_time_segment_t *bitrate)
 /*@}*/
 
 /*!
- * @name Rx MB and Rx FIFO masks
+ * @name Rx Mask Configuration
  * @{
  */
 
 /*!
- * @brief Sets the Rx masking type.
+ * @brief Set the Rx acceptance mask type (global or individual).
  *
- * @param   instance     A FlexCAN instance number
- * @param   type         The FlexCAN RX mask type
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ * @param[in] type      Mask type: FLEXCAN_RX_MASK_GLOBAL or FLEXCAN_RX_MASK_INDIVIDUAL.
  */
 void FLEXCAN_DRV_SetRxMaskType(uint8_t instance, flexcan_rx_mask_type_t type);
 
 /*!
- * @brief Sets the FlexCAN Rx FIFO global mask (standard or extended).
- * This mask is applied to all filters ID regardless the ID Filter format.
+ * @brief Set the Rx FIFO global acceptance mask.
  *
- * @param   instance    A FlexCAN instance number
- * @param   id_type     Standard ID or extended ID mask type
- * @param   mask        Mask Value. In FIFO mode, when using ID Format A or B, 
-                        bit 31 encodes RTR check and bit 30 encodes IDE check respectively. 
-                        For ID Format C, bits 31 and 30 are ignored.
+ * This mask is applied to all Rx FIFO filter elements regardless of format.
+ *
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ * @param[in] id_type   Standard or extended ID mask type.
+ * @param[in] mask      Mask value. In FIFO mode with Format A or B, bit 31
+ *                      encodes RTR check and bit 30 encodes IDE check.
+ *                      For Format C, bits 31 and 30 are ignored.
  */
 void FLEXCAN_DRV_SetRxFifoGlobalMask(
     uint8_t instance,
@@ -531,11 +615,11 @@ void FLEXCAN_DRV_SetRxFifoGlobalMask(
     uint32_t mask);
 
 /*!
- * @brief Sets the FlexCAN Rx MB global mask (standard or extended).
+ * @brief Set the Rx MB global acceptance mask (standard or extended).
  *
- * @param   instance    A FlexCAN instance number
- * @param   id_type     Standard ID or extended ID
- * @param   mask        Mask value
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ * @param[in] id_type   Standard or extended ID.
+ * @param[in] mask      Mask value.
  */
 void FLEXCAN_DRV_SetRxMbGlobalMask(
     uint8_t instance,
@@ -543,11 +627,11 @@ void FLEXCAN_DRV_SetRxMbGlobalMask(
     uint32_t mask);
 
 /*!
- * @brief Sets the FlexCAN Rx MB 14 mask (standard or extended).
+ * @brief Set the Rx MB 14 acceptance mask (standard or extended).
  *
- * @param   instance    A FlexCAN instance number
- * @param   id_type     Standard ID or extended ID
- * @param   mask        Mask value
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ * @param[in] id_type   Standard or extended ID.
+ * @param[in] mask      Mask value.
  */
 void FLEXCAN_DRV_SetRxMb14Mask(
     uint8_t instance,
@@ -555,11 +639,11 @@ void FLEXCAN_DRV_SetRxMb14Mask(
     uint32_t mask);
 
 /*!
- * @brief Sets the FlexCAN Rx MB 15 mask (standard or extended).
+ * @brief Set the Rx MB 15 acceptance mask (standard or extended).
  *
- * @param   instance    A FlexCAN instance number
- * @param   id_type     Standard ID or extended ID
- * @param   mask        Mask value
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ * @param[in] id_type   Standard or extended ID.
+ * @param[in] mask      Mask value.
  */
 void FLEXCAN_DRV_SetRxMb15Mask(
     uint8_t instance,
@@ -567,17 +651,16 @@ void FLEXCAN_DRV_SetRxMb15Mask(
     uint32_t mask);
 
 /*!
- * @brief Sets the FlexCAN Rx individual mask (standard or extended).
+ * @brief Set an individual Rx acceptance mask for a specific MB.
  *
- * @param   instance  A FlexCAN instance number
- * @param   id_type   A standard ID or an extended ID
- * @param   mb_idx    Index of the message buffer
- * @param   mask      Mask Value. In FIFO mode, when using ID Format A or B, 
-                      bit 31 encodes RTR check and bit 30 encodes IDE check respectively. 
-                      For ID Format C, bits 31 and 30 are ignored.
- * @return  STATUS_SUCCESS if successful;
- *          STATUS_CAN_BUFF_OUT_OF_RANGE if the index of the
- *          message buffer is invalid.
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ * @param[in] id_type   Standard or extended ID.
+ * @param[in] mb_idx    Message buffer index.
+ * @param[in] mask      Mask value. In FIFO mode with Format A or B, bit 31
+ *                      encodes RTR check and bit 30 encodes IDE check.
+ *                      For Format C, bits 31 and 30 are ignored.
+ * @return STATUS_SUCCESS if successful;
+ *         STATUS_CAN_BUFF_OUT_OF_RANGE if the MB index is invalid.
  */
 status_t FLEXCAN_DRV_SetRxIndividualMask(
     uint8_t instance,
@@ -585,143 +668,102 @@ status_t FLEXCAN_DRV_SetRxIndividualMask(
     uint8_t mb_idx,
     uint32_t mask);
 
-/*
- * @brief Sets the FlexCAN Rx FIFO global mask (standard or extended) in raw mode.
+/*!
+ * @brief Set the Rx FIFO global mask using a raw (pre-computed) value.
  *
- * @param   instance    A FlexCAN instance number
- * @param   mask        Raw mask Value in FIFO mode. Customer must calculate the mask value
- *                      based on the reference manual.
+ * The caller is responsible for computing the mask value according to the
+ * reference manual format.
+ *
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ * @param[in] mask      Raw mask value.
  */
 void FLEXCAN_DRV_SetRawRxFifoGlobalMask(
     uint8_t instance,
     uint32_t mask);
 
-/*
- * @brief Sets the FlexCAN Rx individual mask (standard or extended) in raw mode.
+/*!
+ * @brief Set an individual Rx mask using a raw (pre-computed) value.
  *
- * @param   instance    A FlexCAN instance number
- * @param   mb_idx      Index of the message buffer
- * @param   mask        Raw mask Value in FIFO mode. Customer must calculate the mask value
- *                      based on the reference manual.
- * @return  STATUS_SUCCESS if successful;
- *          STATUS_CAN_BUFF_OUT_OF_RANGE if the index of the
- *          message buffer is invalid.
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ * @param[in] mb_idx    Message buffer index.
+ * @param[in] mask      Raw mask value.
+ * @return STATUS_SUCCESS if successful;
+ *         STATUS_CAN_BUFF_OUT_OF_RANGE if the MB index is invalid.
  */
 status_t FLEXCAN_DRV_SetRawRxIndividualMask(
     uint8_t instance,
     uint8_t mb_idx,
     uint32_t mask);
 
-
-
 /*@}*/
-
-/*!
- * @name Initialization and Shutdown
- * @{
- */
-
-/*!
- * @brief Gets the default configuration structure
- *
- * This function gets the default configuration structure, with the following settings:
- * - 16 message buffers
- * - flexible data rate disabled
- * - Rx FIFO disabled
- * - normal operation mode
- * - 8 byte payload size
- * - Protocol Engine clock = Oscillator clock
- * - bitrate of 500 Kbit/s (computed for sample point = 87.5)
- *
- * @param[out] config The configuration structure
- * @return The bitrate for generated configuration structure.
- */
-uint32_t FLEXCAN_DRV_GetDefaultConfig(flexcan_user_config_t *config);
-
-/*!
- * @brief Initializes the FlexCAN peripheral.
- *
- * This function initializes
- * @param   instance                   A FlexCAN instance number
- * @param   state                      Pointer to the FlexCAN driver state structure.
- * @param   data                       The FlexCAN platform data
- * @return  STATUS_SUCCESS if successful;
- *          STATUS_CAN_BUFF_OUT_OF_RANGE if the index of a message buffer is invalid;
- *          STATUS_ERROR if other error occurred
- */
-status_t FLEXCAN_DRV_Init(
-    uint8_t instance,
-    flexcan_state_t *state,
-    const flexcan_user_config_t *data);
-
-/*!
- * @brief Shuts down a FlexCAN instance.
- *
- * @param   instance    A FlexCAN instance number
- * @return  STATUS_SUCCESS if successful;
- *          STATUS_ERROR if failed
- */
-status_t FLEXCAN_DRV_Deinit(uint8_t instance);
 
 #if FEATURE_CAN_HAS_FD
 
 /*!
- * @brief Enables/Disables the Transceiver Delay Compensation feature and sets
- * the Transceiver Delay Compensation Offset (offset value to be added to the
- * measured transceiver's loop delay in order to define the position of the
- * delayed comparison point when bit rate switching is active).
- *
- * @param   instance    A FlexCAN instance number
- * @param   enable Enable/Disable Transceiver Delay Compensation
- * @param   offset Transceiver Delay Compensation Offset
- */
-void FLEXCAN_DRV_SetTDCOffset(uint8_t instance, bool enable, uint8_t offset);
-
-/*!
- * @brief Gets the value of the Transceiver Delay Compensation.
- *
- * @param   base  The FlexCAN base address
- * @return  The value of the transceiver loop delay measured from the transmitted
- * EDL to R0 transition edge to the respective received one added to the TDCOFF
- * value specified by FLEXCAN_HAL_SetTDCOffset.
- */
-uint8_t FLEXCAN_DRV_GetTDCValue(uint8_t instance);
-
-/*!
- * @brief Gets the value of the TDC Fail flag.
- *
- * @param   base  The FlexCAN base address
- * @return  If true, indicates that the TDC mechanism is out of range, unable to
- * compensate the transceiver's loop delay and successfully compare the delayed
- * received bits to the transmitted ones.
- */
-bool FLEXCAN_DRV_GetTDCFail(uint8_t instance);
-
-/*!
- * @brief Clears the TDC Fail flag.
- *
- * @param   base  The FlexCAN base address
- */
-void FLEXCAN_DRV_ClearTDCFail(uint8_t instance);
-
-#endif
-
-/*@}*/
-
-/*!
- * @name Send configuration
+ * @name Transceiver Delay Compensation (FD only)
  * @{
  */
 
 /*!
- * @brief FlexCAN transmit message buffer field configuration.
+ * @brief Enable/disable Transceiver Delay Compensation and set the TDC offset.
  *
- * @param   instance                   A FlexCAN instance number
- * @param   mb_idx                     Index of the message buffer
- * @param   tx_info                    Data info
- * @param   msg_id                     ID of the message to transmit
- * @return  STATUS_SUCCESS if successful;
- *          STATUS_CAN_BUFF_OUT_OF_RANGE if the index of the message buffer is invalid
+ * The offset value is added to the measured transceiver loop delay to define
+ * the position of the delayed comparison point when BRS is active.
+ *
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ * @param[in] enable    true to enable TDC, false to disable.
+ * @param[in] offset    TDC offset value (in CAN clock cycles).
+ */
+void FLEXCAN_DRV_SetTDCOffset(uint8_t instance, bool enable, uint8_t offset);
+
+/*!
+ * @brief Get the measured Transceiver Delay Compensation value.
+ *
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ * @return Measured TDC value (transceiver loop delay + offset).
+ */
+uint8_t FLEXCAN_DRV_GetTDCValue(uint8_t instance);
+
+/*!
+ * @brief Check whether the TDC Fail flag is set.
+ *
+ * When true, the TDC mechanism is out of range and cannot compensate
+ * the transceiver loop delay.
+ *
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ * @retval true   TDC measurement failed (out of range).
+ * @retval false  TDC operating normally.
+ */
+bool FLEXCAN_DRV_GetTDCFail(uint8_t instance);
+
+/*!
+ * @brief Clear the TDC Fail flag.
+ *
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ */
+void FLEXCAN_DRV_ClearTDCFail(uint8_t instance);
+
+/*@}*/
+
+#endif
+
+/*!
+ * @name Transmit Configuration & Data Transfer
+ * @{
+ */
+
+/*!
+ * @brief Configure a message buffer for transmission.
+ *
+ * Sets up the specified MB with the given data info and message ID,
+ * and marks it as inactive (ready for a subsequent Send call).
+ *
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ * @param[in] mb_idx    Message buffer index.
+ * @param[in] tx_info   Pointer to the data information structure.
+ * @param[in] msg_id    CAN message identifier.
+ * @return STATUS_SUCCESS if successful;
+ *         STATUS_CAN_BUFF_OUT_OF_RANGE if the MB index is invalid.
  */
 status_t FLEXCAN_DRV_ConfigTxMb(
     uint8_t instance,
@@ -730,16 +772,15 @@ status_t FLEXCAN_DRV_ConfigTxMb(
     uint32_t msg_id);
 
 /*!
- * @brief Configures a transmit message buffer for remote frame response.
+ * @brief Configure a Tx message buffer for automatic remote frame response.
  *
- * @param   instance                   A FlexCAN instance number
- * @param   mb_idx                     Index of the message buffer
- * @param   tx_info                    Data info
- * @param   msg_id                     ID of the message to transmit
- * @param   mb_data                    Bytes of the FlexCAN message
- * @return  STATUS_SUCCESS if successful;
- *          STATUS_CAN_BUFF_OUT_OF_RANGE if the index of the message buffer
- *          is invalid
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ * @param[in] mb_idx    Message buffer index.
+ * @param[in] tx_info   Pointer to the data information structure.
+ * @param[in] msg_id    CAN message identifier.
+ * @param[in] mb_data   Pointer to the response payload data.
+ * @return STATUS_SUCCESS if successful;
+ *         STATUS_CAN_BUFF_OUT_OF_RANGE if the MB index is invalid.
  */
 status_t FLEXCAN_DRV_ConfigRemoteResponseMb(
     uint8_t instance,
@@ -749,21 +790,21 @@ status_t FLEXCAN_DRV_ConfigRemoteResponseMb(
     const uint8_t *mb_data);
 
 /*!
- * @brief Sends a CAN frame using the specified message buffer, in a blocking manner.
+ * @brief Send a CAN frame (blocking with timeout).
  *
- * This function sends a CAN frame using a configured message buffer. The function
- * blocks until either the frame was sent, or the specified timeout expired.
+ * Transmits a CAN frame using the specified message buffer. The function
+ * blocks until the frame is sent or the timeout expires.
  *
- * @param   instance   A FlexCAN instance number
- * @param   mb_idx     Index of the message buffer
- * @param   tx_info    Data info
- * @param   msg_id     ID of the message to transmit
- * @param   mb_data    Bytes of the FlexCAN message
- * @param   timeout_ms A timeout for the transfer in milliseconds.
- * @return  STATUS_SUCCESS if successful;
- *          STATUS_CAN_BUFF_OUT_OF_RANGE if the index of a message buffer is invalid;
- *          STATUS_BUSY if a resource is busy;
- *          STATUS_TIMEOUT if the timeout is reached
+ * @param[in] instance    FlexCAN peripheral instance index (0-based).
+ * @param[in] mb_idx      Message buffer index.
+ * @param[in] tx_info     Pointer to the data information structure.
+ * @param[in] msg_id      CAN message identifier.
+ * @param[in] mb_data     Pointer to the payload data.
+ * @param[in] timeout_ms  Timeout in milliseconds.
+ * @return STATUS_SUCCESS if successful;
+ *         STATUS_CAN_BUFF_OUT_OF_RANGE if the MB index is invalid;
+ *         STATUS_BUSY if the MB is already in use;
+ *         STATUS_TIMEOUT if the timeout expired.
  */
 status_t FLEXCAN_DRV_SendBlocking(
     uint8_t instance,
@@ -774,20 +815,20 @@ status_t FLEXCAN_DRV_SendBlocking(
     uint32_t timeout_ms);
 
 /*!
- * @brief Sends a CAN frame using the specified message buffer.
+ * @brief Send a CAN frame (non-blocking, callback-based).
  *
- * This function sends a CAN frame using a configured message buffer. The function
- * returns immediately. If a callback is installed, it will be invoked after
- * the frame was sent.
+ * Transmits a CAN frame using the specified message buffer. The function
+ * returns immediately. If an event callback is installed, it will be
+ * invoked with FLEXCAN_EVENT_TX_COMPLETE upon successful transmission.
  *
- * @param   instance   A FlexCAN instance number
- * @param   mb_idx     Index of the message buffer
- * @param   tx_info    Data info
- * @param   msg_id     ID of the message to transmit
- * @param   mb_data    Bytes of the FlexCAN message.
- * @return  STATUS_SUCCESS if successful;
- *          STATUS_CAN_BUFF_OUT_OF_RANGE if the index of a message buffer is invalid;
- *          STATUS_BUSY if a resource is busy
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ * @param[in] mb_idx    Message buffer index.
+ * @param[in] tx_info   Pointer to the data information structure.
+ * @param[in] msg_id    CAN message identifier.
+ * @param[in] mb_data   Pointer to the payload data.
+ * @return STATUS_SUCCESS if successful;
+ *         STATUS_CAN_BUFF_OUT_OF_RANGE if the MB index is invalid;
+ *         STATUS_BUSY if the MB is already in use.
  */
 status_t FLEXCAN_DRV_Send(
     uint8_t instance,
@@ -799,19 +840,19 @@ status_t FLEXCAN_DRV_Send(
 /*@}*/
 
 /*!
- * @name Receive configuration
+ * @name Receive Configuration & Data Transfer
  * @{
  */
 
 /*!
- * @brief FlexCAN receive message buffer field configuration
+ * @brief Configure a message buffer for reception.
  *
- * @param   instance                   A FlexCAN instance number
- * @param   mb_idx                     Index of the message buffer
- * @param   rx_info                    Data info
- * @param   msg_id                     ID of the message to transmit
- * @return  STATUS_SUCCESS if successful;
- *          STATUS_CAN_BUFF_OUT_OF_RANGE if the index of a message buffer is invalid;
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ * @param[in] mb_idx    Message buffer index.
+ * @param[in] rx_info   Pointer to the data information structure.
+ * @param[in] msg_id    CAN message identifier to accept.
+ * @return STATUS_SUCCESS if successful;
+ *         STATUS_CAN_BUFF_OUT_OF_RANGE if the MB index is invalid.
  */
 status_t FLEXCAN_DRV_ConfigRxMb(
     uint8_t instance,
@@ -856,6 +897,13 @@ void FLEXCAN_DRV_ConfigRxFifo(
 
 
 #if FEATURE_CAN_HAS_ENHANCE_RX_FIFO
+/*!
+ * @brief Configure Enhanced Rx FIFO ID filter table elements.
+ *
+ * @param[in] instance               FlexCAN peripheral instance index (0-based).
+ * @param[in] id_filter_table        Pointer to the Enhanced Rx FIFO filter table.
+ * @param[in] id_filter_table_length Number of elements in the filter table.
+ */
 void FLEXCAN_DRV_ConfigEnhanceRxFifo(
     uint8_t instance,
     const flexcan_enhance_rx_fifo_filter_table_t *id_filter_table,
@@ -940,6 +988,15 @@ status_t FLEXCAN_DRV_RxFifo(
 
 
 #if FEATURE_CAN_HAS_ENHANCE_RX_FIFO
+/*!
+ * @brief Receive a CAN frame via the Enhanced Rx FIFO (non-blocking).
+ *
+ * @param[in]  instance  FlexCAN peripheral instance index (0-based).
+ * @param[out] data      Pointer to the message buffer to store the received frame.
+ * @return STATUS_SUCCESS if successful;
+ *         STATUS_BUSY if a transfer is already in progress;
+ *         STATUS_ERROR if Enhanced Rx FIFO is not enabled.
+ */
 status_t FLEXCAN_DRV_EnhanceRxFifo(
     uint8_t instance,
     flexcan_msgbuff_t *data);
@@ -948,17 +1005,17 @@ status_t FLEXCAN_DRV_EnhanceRxFifo(
 /*@}*/
 
 /*!
- * @name Transfer status
+ * @name Transfer Status & Error
  * @{
  */
 
 /*!
- * @brief Ends a non-blocking FlexCAN transfer early.
+ * @brief Abort an ongoing transfer on the specified message buffer.
  *
- * @param   instance   A FlexCAN instance number
- * @param   mb_idx     The index of the message buffer
- * @return  STATUS_SUCCESS if successful;
- *          STATUS_CAN_NO_TRANSFER_IN_PROGRESS if no transfer was running
+ * @param[in] instance  FlexCAN peripheral instance index (0-based).
+ * @param[in] mb_idx    Message buffer index.
+ * @return STATUS_SUCCESS if the transfer was aborted;
+ *         STATUS_CAN_NO_TRANSFER_IN_PROGRESS if no transfer was active.
  */
 status_t FLEXCAN_DRV_AbortTransfer(uint8_t instance, uint8_t mb_idx);
 
@@ -990,7 +1047,7 @@ uint32_t FLEXCAN_DRV_GetErrorStatus(uint8_t instance);
 /*@}*/
 
 /*!
- * @name IRQ handler callback
+ * @name Callback & Interrupt Management
  * @{
  */
 

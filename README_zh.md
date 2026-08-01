@@ -6,6 +6,8 @@
 
 本仓库仅包含原厂提供的 YTMicro HAL SDK 解压快照，作为 YTM32 Zephyr 集成使用的原始输入。
 
+原厂软件包来源和已导入的 hotfix 记录在 [VENDOR_SNAPSHOT.md](VENDOR_SNAPSHOT.md) 中。
+
 ## 不要修改 HAL 快照
 
 不要修改、重构 `ytm32b1m/` 目录下的文件，也不要在其中加入应用代码。请将本仓库视为只读的原厂 HAL 输入。

@@ -8,6 +8,16 @@
 /*!
  * @file adc_hw_access.h
  * @version 1.4.1
+ *
+ * @brief ADC Hardware Access Layer.
+ *
+ * This header provides low-level inline helpers for the ADC registers. The
+ * APIs are organized into functional groups for converter timing and control,
+ * trigger / DMA programming, watchdog setup, sequence programming, interrupt
+ * and flag handling, and FIFO runtime control.
+ *
+ * @note This is an internal helper layer used by `adc_driver.h` and
+ *       `adc_driver.c`. Application code should prefer the `ADC_DRV_*` APIs.
  */
 
 #ifndef ADC_HW_ACCESS_H
@@ -19,33 +29,37 @@
 #include "adc_driver.h"
 
 /*******************************************************************************
+ * API
+ ******************************************************************************/
+
+/*!
+ * @defgroup adc_hw_access ADC Hardware Access
+ * @ingroup adc
+ * @brief Low-level register access helpers for the ADC peripheral.
+ * @{
+ */
+
+/*******************************************************************************
  * Definitions
  ******************************************************************************/
 #define ADC_WAIT_TIMEOUT (1000U)
-
-/*******************************************************************************
- * API
- ******************************************************************************/
 
 #if defined (__cplusplus)
 extern "C" {
 #endif
 
 /*!
- * @name Converter
- * General ADC functions.
+ * @name Converter Control & Timing
+ * @brief Functions for reading converter state and programming timing-related
+ *        fields.
  */
 /*! @{*/
 
 /*!
- * @brief Gets the Conversion Active Flag
+ * @brief Get the conversion-active flag state.
  *
- * This function checks whether a conversion is currently
- * taking place on the ADC module.
- *
- *
- * @param[in] baseAddr adc base pointer
- * @return Conversion Active Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @return `true` if a conversion is currently active; `false` otherwise.
  */
 static inline bool ADC_GetConvActiveFlag(const ADC_Type *const baseAddr)
 {
@@ -55,14 +69,10 @@ static inline bool ADC_GetConvActiveFlag(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Gets the Adc Enable Flag
+ * @brief Get the ADC-enable flag state.
  *
- * This function checks whether a conversion is currently
- * enabled on the ADC module.
- *
- *
- * @param[in] baseAddr adc base pointer
- * @return Conversion Active Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @return `true` if the ADC is enabled; `false` otherwise.
  */
 static inline bool ADC_GetEnableFlag(const ADC_Type *const baseAddr)
 {
@@ -73,13 +83,10 @@ static inline bool ADC_GetEnableFlag(const ADC_Type *const baseAddr)
 
 
 /*!
- * @brief Gets the Sequence Conversion Done Flag
+ * @brief Get the sequence-done flag state.
  *
- * This function checks whether a sequence conversion is finished.
- *
- *
- * @param[in] baseAddr adc base pointer
- * @return Sequence Conversion Done Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @return `true` if the programmed sequence has completed; `false` otherwise.
  */
 static inline bool ADC_GetSequenceDoneFlag(const ADC_Type *const baseAddr)
 {
@@ -89,38 +96,25 @@ static inline bool ADC_GetSequenceDoneFlag(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Gets the current ADC clock divider configuration.
+ * @brief Read the ADC input clock divider setting.
  *
- * This function returns the configured clock divider
- * bitfield value for the ADC instance.
- *
- * @param[in] baseAddr adc base pointer
- * @return the clock divider value. Possible values:
- *        - ADC_CLK_DIVIDE_1 : Divider set to 1.
- *        - ADC_CLK_DIVIDE_2 : Divider set to 2.
- *        - ADC_CLK_DIVIDE_4 : Divider set to 4.
- *        - ADC_CLK_DIVIDE_8 : Divider set to 8.
+ * @param[in] baseAddr ADC base pointer.
+ * @return Encoded divider value stored in the hardware field.
  */
 static inline adc_clk_divide_t ADC_GetClockDivide(const ADC_Type *const baseAddr)
 {
     uint32_t tmp = baseAddr->CFG1;
     tmp = (tmp & ADC_CFG1_PRS_MASK) >> ADC_CFG1_PRS_SHIFT;
 
-    /* Enum defines all possible values, so casting is safe */
+    /* The register field uses the same encoding as the public divider type. */
     return (adc_clk_divide_t) (tmp);
 }
 
 /*!
- * @brief Sets the ADC clock divider configuration.
+ * @brief Program the ADC input clock divider field.
  *
- * This functions configures the ADC instance clock divider.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] clockDivide clk divider
- *        - ADC_CLK_DIVIDE_1 : Divider set to 1.
- *        - ADC_CLK_DIVIDE_2 : Divider set to 2.
- *        - ADC_CLK_DIVIDE_4 : Divider set to 4.
- *        - ADC_CLK_DIVIDE_8 : Divider set to 8.
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] clockDivide Encoded divider value to write.
  */
 static inline void ADC_SetClockDivide(ADC_Type *const baseAddr,
                                       const adc_clk_divide_t clockDivide)
@@ -132,13 +126,10 @@ static inline void ADC_SetClockDivide(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the Start time in AD clock cycles
+ * @brief Read the ADC startup delay field.
  *
- * This function gets the start time (in AD clocks)
- * configured for the ADC.
- * 
- * @param[in] baseAddr adc base pointer
- * @return the Start Time in AD Clocks
+ * @param[in] baseAddr ADC base pointer.
+ * @return Startup delay value encoded in ADC clock cycles.
  */
 static inline uint8_t ADC_GetStartTime(const ADC_Type *const baseAddr)
 {
@@ -148,19 +139,15 @@ static inline uint8_t ADC_GetStartTime(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Sets the Start time in AD clock cycles
+ * @brief Program the ADC startup delay field.
  *
- * This function configures the start time for the ADC (in
- * ADCK clocks). The actual start time will be the value
- * provided plus 1.  
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] sampletime Start time in AD Clocks
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] starttime Startup delay value in ADC clock cycles.
  */
 static inline void ADC_SetStartTime(ADC_Type *const baseAddr,
                                     uint8_t starttime)
 {
-    /* Clip start time to minimum value */
+    /* Write the startup-delay field directly. */
     uint32_t tmp = baseAddr->CFG1;
     tmp &= ~(ADC_CFG1_STCNT_MASK);
     tmp |= ADC_CFG1_STCNT(starttime);
@@ -168,15 +155,10 @@ static inline void ADC_SetStartTime(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the Sample time in AD clock cycles
+ * @brief Read the primary sample-time field.
  *
- * This function gets the sample time (in AD clocks)
- * configured for the ADC. Selection of 2 to 256 ADCK is
- * possible. The value returned by this function is the
- * sample time minus 1. A sample time of 1 is not supported.
- *
- * @param[in] baseAddr adc base pointer
- * @return the Sample Time in AD Clocks
+ * @param[in] baseAddr ADC base pointer.
+ * @return Encoded sample-time value in ADC clock cycles.
  */
 static inline uint8_t ADC_GetSampleTime(const ADC_Type *const baseAddr)
 {
@@ -186,21 +168,18 @@ static inline uint8_t ADC_GetSampleTime(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Sets the Sample time in AD clock cycles
+ * @brief Program the primary sample-time field.
  *
- * This function configures the sample time for the ADC (in
- * ADCK clocks). The actual sample time will be the value
- * provided plus 1.  Selection of 2 to 256 ADCK is possible.
- * A real sample time of 1 is not supported (a parameter value of 0
- * will be automatically be changed to 1).
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] sampletime Sample-time value in ADC clock cycles.
  *
- * @param[in] baseAddr adc base pointer
- * @param[in] sampletime Sample time in AD Clocks
+ * @note A value of `0` is clamped to `1` because the hardware does not
+ *       support an effective sample time of one ADC clock.
  */
 static inline void ADC_SetSampleTime(ADC_Type *const baseAddr,
                                      uint8_t sampletime)
 {
-    /* Clip sample time to minimum value */
+    /* Clamp the programmed sample time to the minimum supported value. */
     uint8_t rsampletime = (uint8_t) ((sampletime > 0U) ? sampletime : 1U);
     uint32_t tmp = baseAddr->SMP;
     tmp &= ~(ADC_SMP_SMP_MASK);
@@ -209,13 +188,10 @@ static inline void ADC_SetSampleTime(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the overrun mode Flag state
+ * @brief Get the overrun-overwrite mode state.
  *
- * This function returns the state of the ADC overrun mode flag.
- * ADC overrun mode feature will overwrite the result register when overrun is detected.
- *
- * @param[in] baseAddr adc base pointer
- * @return the overrun mode Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @return `true` if new data overwrites existing FIFO contents on overrun.
  */
 static inline bool ADC_GetOverrunModeFlag(const ADC_Type *const baseAddr)
 {
@@ -225,13 +201,10 @@ static inline bool ADC_GetOverrunModeFlag(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Sets the overrun mode Flag state
+ * @brief Enable or disable overwrite-on-overrun behavior.
  *
- * This function configures the ADC overrun mode Flag. 
- * ADC overrun mode feature will overwrite the result register when overrun is detected.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] state the overrun mode Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] state `true` to overwrite on overrun; `false` to preserve existing data.
  */
 static inline void ADC_SetOverrunModeFlag(ADC_Type *const baseAddr,
                                           const bool state)
@@ -243,13 +216,10 @@ static inline void ADC_SetOverrunModeFlag(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the autoff Enable Flag state
+ * @brief Get the auto-off enable state.
  *
- * This function returns the state of the ADC autoff enable flag.
- * ADC autoff feature will power off ADC automatically.
- *
- * @param[in] baseAddr adc base pointer
- * @return the autoff mode Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @return `true` if auto-off mode is enabled; `false` otherwise.
  */
 static inline bool ADC_GetautoOffEnableFlag(const ADC_Type *const baseAddr)
 {
@@ -259,13 +229,10 @@ static inline bool ADC_GetautoOffEnableFlag(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Sets the autoff Enable Flag state
+ * @brief Enable or disable auto-off mode.
  *
- * This function configures the ADC autoff Enable Flag. 
- * ADC autoff feature will power off ADC automatically.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] state the overrun mode Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] state `true` to enable auto-off mode; `false` otherwise.
  */
 static inline void ADC_SetautoOffEnableFlag(ADC_Type *const baseAddr,
                                             const bool state)
@@ -278,13 +245,10 @@ static inline void ADC_SetautoOffEnableFlag(ADC_Type *const baseAddr,
 
 
 /*!
- * @brief Gets the Wait Flag state
+ * @brief Get the FIFO-wait enable state.
  *
- * This function returns the state of the ADC wait flag.
- * ADC wait feature will hold adc convert when FIFO is full.
- *
- * @param[in] baseAddr adc base pointer
- * @return the Wait Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @return `true` if conversion waits when the FIFO is full; `false` otherwise.
  */
 static inline bool ADC_GetWaitEnableFlag(const ADC_Type *const baseAddr)
 {
@@ -294,13 +258,10 @@ static inline bool ADC_GetWaitEnableFlag(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Sets the Wait Flag state
+ * @brief Enable or disable FIFO wait behavior.
  *
- * This function configures the ADC Wait Flag. 
- * ADC wait feature will hold adc convert when FIFO is full.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] state the new Wait Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] state `true` to stall when the FIFO is full; `false` otherwise.
  */
 static inline void ADC_SetWaitEnableFlag(ADC_Type *const baseAddr,
                                          const bool state)
@@ -312,13 +273,11 @@ static inline void ADC_SetWaitEnableFlag(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Sets the Low Power state
+ * @brief Control the low-power-keep setting when supported.
  *
- * This function configures the ADC Low power Flag. 
- * Keep working enabled/disabled in low power mode..
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] state the new Low Power Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] state `true` to keep the ADC active in low-power mode; `false`
+ *                  to disable that behavior.
  */
 static inline void ADC_SetLowPowerEnableFlag(ADC_Type *const baseAddr,
                                              const bool state)
@@ -335,24 +294,10 @@ static inline void ADC_SetLowPowerEnableFlag(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the ADC Trigger Source
+ * @brief Read the hardware trigger source selector.
  *
- * This function returns the configured triggering source
- * for the ADC.  When in Hardware trigger mode,  a conversion
- * is started by another peripheral (like TMU).
- * @param[in] baseAddr adc base pointer
- * @return the hardware trigger mode. Possible values:
- * in case of YTM32B1LD0:
- *        - 0 : trigger 0.
- *        - 1 : trigger 1.
- *        - 2 : trigger 2.
- *        - 3 : trigger 3.
- *        - 4 : trigger 4.
- *        - 5 : trigger 5.
- *        - 6 : trigger 6.
- *        - 7 : trigger 7.
- * in case of YTM32B1MD0
- *        - not defined !
+ * @param[in] baseAddr ADC base pointer.
+ * @return Raw trigger-source selector encoded in the register field.
  */
 static inline adc_trigger_t ADC_GetTriggerSource(const ADC_Type *const baseAddr)
 {
@@ -360,37 +305,22 @@ static inline adc_trigger_t ADC_GetTriggerSource(const ADC_Type *const baseAddr)
     uint32_t tmp = baseAddr->CFG0;
     tmp = (tmp & ADC_CFG0_TRIGSRC_MASK) >> ADC_CFG0_TRIGSRC_SHIFT;
 
-    /* Enum defines all possible values, so casting is safe */
+    /* The register field is returned as the raw trigger-source selector. */
     return (adc_trigger_t)(tmp);
 #else
     uint32_t tmp = baseAddr->CFG0;
     tmp = 0;
 
-    /* Enum defines all possible values, so casting is safe */
+    /* Unsupported devices report the selector as zero. */
     return (adc_trigger_t) (tmp);
 #endif
 }
 
 /*!
- * @brief Sets the ADC Trigger Source
+ * @brief Program the hardware trigger source selector.
  *
- * This function configures the ADC triggering source. 
- * When in Hardware trigger mode, a conversion is started
- * by another peripheral (like TMU).
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] trigger the desired trigger source
- * in case of YTM32B1LD0:
- *        - 0 : trigger 0.
- *        - 1 : trigger 1.
- *        - 2 : trigger 2.
- *        - 3 : trigger 3.
- *        - 4 : trigger 4.
- *        - 5 : trigger 5.
- *        - 6 : trigger 6.
- *        - 7 : trigger 7.
- * in case of YTM32B1MD1,YTM32B1ME0
- *        - not defined !
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] trigsrc Raw trigger-source selector value to write.
  */
 static inline void ADC_SetTriggerSource(ADC_Type *const baseAddr,
                                         uint8_t trigsrc)
@@ -409,19 +339,10 @@ static inline void ADC_SetTriggerSource(ADC_Type *const baseAddr,
 
 
 /*!
- * @brief Gets the ADC Trigger Mode
+ * @brief Read the trigger-mode field.
  *
- * This function returns the configured triggering mode
- * for the ADC. In Software Triggering Mode, the user can
- * start conversions by setting an input channel in the
- * ADC measurement channel A (index 0). When in Hardware
- * trigger mode, a conversion is started by another peripheral (
- * like PTU or TMU).
- *
- * @param[in] baseAddr adc base pointer
- * @return the current trigger mode. Possible values:
- *        - ADC_TRIGGER_SOFTWARE : Software triggering.
- *        - ADC_TRIGGER_HARDWARE : Hardware triggering.
+ * @param[in] baseAddr ADC base pointer.
+ * @return Current normal/injected trigger mode setting.
  */
 
 static inline adc_trigger_t ADC_GetTriggerMode(const ADC_Type *const baseAddr)
@@ -437,32 +358,16 @@ static inline adc_trigger_t ADC_GetTriggerMode(const ADC_Type *const baseAddr)
 #endif /* defined (ADC_CFG0_NORTMD_MASK) */
 #endif /* FEATURE_ADC_SUPPORT_INJECTION_MODE */
 
-    /* Enum defines all possible values, so casting is safe */
+    /* The trigger-mode bitfield maps directly to the public trigger type. */
     return (adc_trigger_t) (tmp);
 }
 
 
 /*!
- * @brief Sets the ADC Trigger Mode
+ * @brief Program the trigger-mode field.
  *
- * This function configures the ADC triggering mode. In
- * Software Triggering Mode, the user can start conversions
- * by setting an input channel in the ADC measurement channel
- * A (index 0). When in Hardware trigger mode, a conversion
- * is started by another peripheral (like PTU or TMU).
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] trigger the desired trigger mode
- * in case of YTM32B1LD0:
- *        - 0 : Software trigger
- *        - 1 : Hardware trigger on rising edge
- *        - 2 : Hardware trigger on falling edge
- *        - 3 : Hardware trigger on both rising and falling edge
- *        - 4 : Hardware trigger on high level voltage
- *        - 5 : Hardware trigger on low level voltage
- * in case of YTM32B1MD0:
- *        - 0 : Software triggering.
- *        - 1 : Hardware triggering on rising edge.
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] trigger Trigger mode value to write.
  */
 static inline void ADC_SetTriggerMode(ADC_Type *const baseAddr,
                                       const adc_trigger_t trigger)
@@ -484,17 +389,10 @@ static inline void ADC_SetTriggerMode(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the Resolution Mode configuration
+ * @brief Read the conversion-resolution setting.
  *
- * This function returns the configured resolution mode for
- * the ADC.
- *
- * @param[in] baseAddr adc base pointer
- * @return the ADC resolution mode. Possible values:
- *        - ADC_RESOLUTION_12BIT : 12-bit resolution mode.
- *        - ADC_RESOLUTION_10BIT : 10-bit resolution mode.
- *        - ADC_RESOLUTION_8BIT  :  8-bit resolution mode.
- *        - ADC_RESOLUTION_6BIT  :  6-bit resolution mode.
+ * @param[in] baseAddr ADC base pointer.
+ * @return Current ADC resolution setting.
  */
 static inline adc_resolution_t ADC_GetResolution(const ADC_Type *const baseAddr)
 {
@@ -504,16 +402,10 @@ static inline adc_resolution_t ADC_GetResolution(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Sets the Resolution Mode configuration
+ * @brief Program the conversion-resolution setting.
  *
- * This function configures the ADC resolution mode.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] resolution the adc resolution mode
- *        - ADC_RESOLUTION_12BIT : 12-bit resolution mode.
- *        - ADC_RESOLUTION_10BIT : 10-bit resolution mode.
- *        - ADC_RESOLUTION_8BIT  :  8-bit resolution mode.
- *        - ADC_RESOLUTION_6BIT  :  6-bit resolution mode.
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] resolution Resolution mode value to write.
  */
 static inline void ADC_SetResolution(ADC_Type *const baseAddr,
                                      const adc_resolution_t resolution)
@@ -525,14 +417,10 @@ static inline void ADC_SetResolution(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the DMA Watermark
+ * @brief Read the DMA FIFO watermark setting.
  *
- * This function returns the watermark setting of ADC FIFO.
- * DMA can be used to transfer completed conversion values
- * from the result registers to RAM without CPU intervention.
- *
- * @param[in] baseAddr adc base pointer
- * @return FIFO watermark value
+ * @param[in] baseAddr ADC base pointer.
+ * @return Encoded FIFO watermark value.
  */
 static inline uint8_t ADC_GetDMAWatermark(const ADC_Type *const baseAddr)
 {
@@ -543,14 +431,10 @@ static inline uint8_t ADC_GetDMAWatermark(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Sets the DMA Watermark
+ * @brief Program the DMA FIFO watermark setting.
  *
- * This function configures the DMA FIFO watermark. DMA can be
- * used to transfer completed conversion values from the
- * result registers to RAM without CPU intervention.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] state the new DMA watermark value
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] value Encoded FIFO watermark value to write.
  */
 static inline void ADC_SetDMAWatermark(ADC_Type *const baseAddr,
                                        const uint8_t value)
@@ -562,14 +446,10 @@ static inline void ADC_SetDMAWatermark(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the DMA Enable Flag state
+ * @brief Get the DMA-request enable state.
  *
- * This function returns the state of the DMA Enable flag.
- * DMA can be used to transfer completed conversion values
- * from the result registers to RAM without CPU intervention.
- *
- * @param[in] baseAddr adc base pointer
- * @return the DMA Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @return `true` if DMA requests are enabled; `false` otherwise.
  */
 static inline bool ADC_GetDMAEnableFlag(const ADC_Type *const baseAddr)
 {
@@ -579,14 +459,10 @@ static inline bool ADC_GetDMAEnableFlag(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Sets the DMA Enable Flag state
+ * @brief Enable or disable DMA requests.
  *
- * This function configures the DMA Enable Flag. DMA can be
- * used to transfer completed conversion values from the
- * result registers to RAM without CPU intervention.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] state the new DMA Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] state `true` to enable DMA requests; `false` otherwise.
  */
 static inline void ADC_SetDMAEnableFlag(ADC_Type *const baseAddr,
                                         const bool state)
@@ -600,49 +476,39 @@ static inline void ADC_SetDMAEnableFlag(ADC_Type *const baseAddr,
 /*! @}*/
 
 /*!
- * @name Hardware Compare.
- * Functions to configure the Hardware Compare feature.
+ * @name Hardware Compare Control
+ * @brief Functions for programming the analog watchdog / hardware compare path.
  */
 /*! @{*/
 
 /*!
- * @brief Gets the Hardware Compare Enable Flag state
+ * @brief Get the watchdog enable state for one watchdog channel.
  *
- * This function returns the state of the Hardware Compare
- * Enable Flag. Hardware Compare can be used to check if the
- * ADC result is within or outside of a predefined range.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] wdgChannel adc wdg channel
- * @return the Hardware Compare Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] wdgChannel Watchdog channel index.
+ * @return `true` if the watchdog channel is enabled; `false` otherwise.
  */
 static inline bool ADC_GetHwCompareEnableFlag(const ADC_Type *const baseAddr, const uint8_t wdgChannel)
 {
     uint32_t tmp = (uint32_t) baseAddr->WDCTRL;
-    /* Channel Enable Bit Shift */
-    /* Channel 0: 7u, Channel 1: 15u, Channel 2: 23u, Channel 3: 31u */
+    /* Enable bits are packed at bit positions 7, 15, 23, and 31. */
     uint8_t channelEnableBitShift = (uint8_t) (((wdgChannel + 1u) << 3U) - 1u);
     tmp = (tmp >> channelEnableBitShift) & 0x01U;
     return (tmp != 0u) ? true : false;
 }
 
 /*!
- * @brief Sets the Hardware Compare Enable Flag state
+ * @brief Enable or disable one watchdog channel.
  *
- * This functions configures the Hardware Compare Enable Flag.
- * Hardware Compare can be used to check if the ADC result
- * is within or outside of a predefined range.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] wdgChannel adc wdg channel
- * @param[in] state the new Hardware Compare Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] state `true` to enable the watchdog channel; `false` otherwise.
+ * @param[in] wdgChannel Watchdog channel index.
  */
 static inline void ADC_SetHwCompareEnableFlag(ADC_Type *const baseAddr,
                                               const bool state, const uint8_t wdgChannel)
 {
     uint32_t tmp = (uint32_t) baseAddr->WDCTRL;
-    /* Channel Enable Bit Shift */
-    /* Channel 0: 7u, Channel 1: 15u, Channel 2: 23u, Channel 3: 31u */
+    /* Enable bits are packed at bit positions 7, 15, 23, and 31. */
     uint8_t channelEnableBitShift = (uint8_t) ((wdgChannel << 3U) + 7u);
     tmp &= (~(((uint32_t)1U << channelEnableBitShift)));
     tmp |= (state ? (uint32_t) 1u : (uint32_t) 0u) << channelEnableBitShift;
@@ -650,14 +516,11 @@ static inline void ADC_SetHwCompareEnableFlag(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the Hardware Compare All Channel Enable Flag state
+ * @brief Get the all-channel watchdog mode state.
  *
- * This function returns the Hardware Compare All Channel
- * Enable Flag. Using this feature, the ADC can be configured
- * to enable hardware compare on all channels.
- *
- * @param[in] baseAddr adc base pointer
- * @return the Hardware Compare All Channel Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @return `true` if the watchdog monitors all channels; `false` if it monitors
+ *         only the selected channel.
  */
 static inline bool ADC_GetHwCompareAllEnableFlag(const ADC_Type *const baseAddr)
 {
@@ -671,14 +534,11 @@ static inline bool ADC_GetHwCompareAllEnableFlag(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Sets the Hardware Compare All Channel Enable Flag state
+ * @brief Enable or disable all-channel watchdog monitoring.
  *
- * This function configures the Hardware Compare All Channel
- * Enable Flag. Using this feature, the ADC can be configured
- * to enable hardware compare on all channels.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] state the new Hardware Compare Greater Than Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] state `true` to monitor all channels; `false` to monitor the
+ *                  selected channel only.
  */
 static inline void ADC_SetHwCompareAllEnableFlag(ADC_Type *const baseAddr,
                                                  const bool state)
@@ -695,41 +555,34 @@ static inline void ADC_SetHwCompareAllEnableFlag(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the Hardware Compare Channel
+ * @brief Read the channel assigned to a watchdog comparator.
  *
- * This function returns the channel index of the Hardware Compare.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] wdgChannel adc watch dog channel
- * @return the Hardware Compare Compare Channel
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] wdgChannel Watchdog channel index.
+ * @return Input channel selected for the watchdog comparator.
  */
 static inline adc_inputchannel_t ADC_GetHwCompareChannel(const ADC_Type *const baseAddr, const uint8_t wdgChannel)
 {
     uint32_t tmp = (uint32_t) baseAddr->WDCTRL;
-    /* Channel Compare Bit Shift */
-    /* Channel 0: 0u, Channel 1: 8u, Channel 2: 16u, Channel 3: 24u */
-    uint8_t channelCmpValBitShift = (uint8_t) ((wdgChannel + 1u) << 3u);
+    /* Channel-select fields are packed at bit positions 0, 8, 16, and 24. */
+    uint8_t channelCmpValBitShift = (uint8_t) (wdgChannel << 3u);
     tmp = (tmp >> channelCmpValBitShift) & 0x3FU;
     return (adc_inputchannel_t)tmp;
 }
 
 /*!
- * @brief Sets the Hardware Compare Channel
+ * @brief Program the channel monitored by a watchdog comparator.
  *
- * This function configures the channel index of the Hardware Compare.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] channel adc input channel
- * @param[in] wdgChannel adc watch dog channel
- * @param[in] state the new Hardware Compare channel
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] channel ADC input channel assigned to the watchdog comparator.
+ * @param[in] wdgChannel Watchdog channel index.
  */
 static inline void ADC_SetHwCompareRangeEnableFlag(ADC_Type *const baseAddr,
                                                    const adc_inputchannel_t channel,
                                                    const uint8_t wdgChannel)
 {
     uint32_t tmp = baseAddr->WDCTRL;
-    /* Channel Compare Bit Shift */
-    /* Channel 0: 0u, Channel 1: 8u, Channel 2: 16u, Channel 3: 24u */
+    /* Channel-select fields are packed at bit positions 0, 8, 16, and 24. */
     uint8_t channelCmpValBitShift = (uint8_t) (wdgChannel << 3);
     tmp &= ~((uint32_t)0x3FU << channelCmpValBitShift);
     tmp |= (uint32_t)((uint32_t)channel & 0x3FU) << channelCmpValBitShift;
@@ -737,17 +590,11 @@ static inline void ADC_SetHwCompareRangeEnableFlag(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the Compare Register High value
+ * @brief Read the upper watchdog threshold.
  *
- * This function returns the value written in the Hardware
- * Compare Register High. This value defines the upper
- * limit for the Hardware Compare Range. This value is always
- * 12-bit resolution value (for lower resolution modes, internal
- * bit shifting will take place).
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] wdgChannel adc watch dog channel
- * @return the Compare Register High value
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] wdgChannel Watchdog channel index.
+ * @return Upper threshold value in 12-bit scaling.
  */
 static inline uint16_t ADC_GetHwCompareCompHighValue(const ADC_Type *const baseAddr, const uint8_t wdgChannel)
 {
@@ -763,17 +610,11 @@ static inline uint16_t ADC_GetHwCompareCompHighValue(const ADC_Type *const baseA
 }
 
 /*!
- * @brief Sets the Compare Register High value
+ * @brief Program the upper watchdog threshold.
  *
- * This function writes a 12-bit value in the Hardware
- * Compare Register High. This value defines the upper 
- * limit for the Hardware Compare Range. This value is always
- * 12-bit resolution (for lower resolution modes, internal
- * bit shifting will take place).
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] value the new Compare Register High value
- * @param[in] wdgChannel adc watch dog channel
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] value Upper threshold value in 12-bit scaling.
+ * @param[in] wdgChannel Watchdog channel index.
  */
 static inline void ADC_SetHwCompareCompHighValue(ADC_Type *const baseAddr,
                                                  const uint16_t value,
@@ -794,17 +635,11 @@ static inline void ADC_SetHwCompareCompHighValue(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the Compare Register Low value
+ * @brief Read the lower watchdog threshold.
  *
- * This function returns the value written in the Hardware
- * Compare Register Low. This value defines the lower
- * limit for the Hardware Compare Range. This value is always
- * 12-bit resolution (for lower resolution modes, internal
- * bit shifting will take place).
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] wdgChannel adc watch dog channel
- * @return the Compare Register Low value
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] wdgChannel Watchdog channel index.
+ * @return Lower threshold value in 12-bit scaling.
  */
 static inline uint16_t ADC_GetHwCompareCompLowValue(const ADC_Type *const baseAddr, const uint8_t wdgChannel)
 {
@@ -821,17 +656,11 @@ static inline uint16_t ADC_GetHwCompareCompLowValue(const ADC_Type *const baseAd
 }
 
 /*!
- * @brief Sets the Compare Register Low value
+ * @brief Program the lower watchdog threshold.
  *
- * This function writes a 12-bit value in the Hardware
- * Compare Register Low. This value defines the lower
- * limit for the Hardware Compare Range. This value is always
- * 12-bit resolution value (for lower resolution modes, internal
- * bit shifting will take place).
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] value the new Compare Register Low value
- * @param[in] wdgChannel adc watch dog channel
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] value Lower threshold value in 12-bit scaling.
+ * @param[in] wdgChannel Watchdog channel index.
  */
 static inline void ADC_SetHwCompareCompLowValue(ADC_Type *const baseAddr,
                                                 const uint16_t value,
@@ -854,19 +683,17 @@ static inline void ADC_SetHwCompareCompLowValue(ADC_Type *const baseAddr,
 /*! @}*/
 
 /*!
- * @name Sequence Config.
- * Functions to configure the ADC convert sequence feature.
+ * @name Sequence Programming
+ * @brief Functions for programming normal and injected conversion sequences.
  */
 /*! @{*/
 
 /*!
- * @brief Gets the inject sequence channel ID by sequence index
+ * @brief Read the injected-sequence channel at one slot index.
  *
- * This function returns the inject channel ID of given sequence index.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] idx Sequence index
- * @return the inject Channel ID of given sequence index
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] idx Sequence slot index.
+ * @return Injected-sequence channel assigned to the selected slot.
  */
 static inline adc_inputchannel_t ADC_GetInjectChannel(const ADC_Type *const baseAddr,
                                                        uint8_t idx)
@@ -883,15 +710,13 @@ static inline adc_inputchannel_t ADC_GetInjectChannel(const ADC_Type *const base
 }
 
 /*!
- * @brief Gets the sequence channel ID by sequence index
+ * @brief Read the normal-sequence channel at one slot index.
  *
- * This function returns the channel ID of given sequence index.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] idx Sequence index
- * @return the Channel ID of given sequence index
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] idx Sequence slot index.
+ * @return Normal-sequence channel assigned to the selected slot.
  */
-static inline adc_inputchannel_t ADC_GetSequeceChannel(const ADC_Type *const baseAddr,
+static inline adc_inputchannel_t ADC_GetSequenceChannel(const ADC_Type *const baseAddr,
                                                        uint8_t idx)
 {
     uint8_t tmp = (uint8_t) baseAddr->CHSEL[idx];
@@ -900,13 +725,11 @@ static inline adc_inputchannel_t ADC_GetSequeceChannel(const ADC_Type *const bas
 }
 
 /*!
- * @brief Sets the inject sequence channel ID by sequence index
+ * @brief Program one injected-sequence channel slot.
  *
- * This function set the channel ID of given sequence index.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] idx Sequence index
- * @param[in] channel channel id
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] idx Sequence slot index.
+ * @param[in] channel Channel assigned to the selected injected slot.
  */
 static inline void ADC_SetInjectChannel(ADC_Type *const baseAddr,
                                          uint8_t idx,
@@ -925,15 +748,13 @@ static inline void ADC_SetInjectChannel(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Sets the sequence channel ID by sequence index
+ * @brief Program one normal-sequence channel slot.
  *
- * This function set the channel ID of given sequence index.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] idx Sequence index
- * @param[in] channel channel id
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] idx Sequence slot index.
+ * @param[in] channel Channel assigned to the selected normal-sequence slot.
  */
-static inline void ADC_SetSequeceChannel(ADC_Type *const baseAddr,
+static inline void ADC_SetSequenceChannel(ADC_Type *const baseAddr,
                                          uint8_t idx,
                                          adc_inputchannel_t channel)
 {
@@ -944,12 +765,10 @@ static inline void ADC_SetSequeceChannel(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the inject sequence total channel count
+ * @brief Read the injected-sequence channel count.
  *
- * This function returns the inject channel count of convert sequence.
- *
- * @param[in] baseAddr adc base pointer
- * @return the inject Channel counts of convert sequence
+ * @param[in] baseAddr ADC base pointer.
+ * @return Number of active injected-sequence entries.
  */
 static inline uint8_t ADC_GetInjectTotalChannel(const ADC_Type *const baseAddr)
 {
@@ -964,14 +783,12 @@ static inline uint8_t ADC_GetInjectTotalChannel(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Gets the sequence total channel count
+ * @brief Read the normal-sequence channel count.
  *
- * This function returns the channel count of convert sequence.
- *
- * @param[in] baseAddr adc base pointer
- * @return the Channel counts of convert sequence
+ * @param[in] baseAddr ADC base pointer.
+ * @return Number of active normal-sequence entries.
  */
-static inline uint8_t ADC_GetSequeceTotalChannel(const ADC_Type *const baseAddr)
+static inline uint8_t ADC_GetSequenceTotalChannel(const ADC_Type *const baseAddr)
 {
     uint32_t tmp = (uint32_t) baseAddr->CFG0;
     tmp = (tmp & ADC_CFG0_SEQLEN_MASK) >> ADC_CFG0_SEQLEN_SHIFT;
@@ -979,12 +796,10 @@ static inline uint8_t ADC_GetSequeceTotalChannel(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Sets the inject sequence total channel count
+ * @brief Program the injected-sequence channel count.
  *
- * This function sets the channel count of convert sequence.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] value Channel counts of inject convert sequence
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] value Number of active injected-sequence entries.
  */
 static inline void ADC_SetInjectTotalChannel(ADC_Type *const baseAddr, uint8_t value)
 {
@@ -1000,14 +815,12 @@ static inline void ADC_SetInjectTotalChannel(ADC_Type *const baseAddr, uint8_t v
 }
 
 /*!
- * @brief Sets the sequence total channel count
+ * @brief Program the normal-sequence channel count.
  *
- * This function sets the channel count of convert sequence.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] value Channel counts of convert sequence
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] value Number of active normal-sequence entries.
  */
-static inline void ADC_SetSequeceTotalChannel(ADC_Type *const baseAddr, uint8_t value)
+static inline void ADC_SetSequenceTotalChannel(ADC_Type *const baseAddr, uint8_t value)
 {
     uint32_t tmp = (uint32_t) baseAddr->CFG0;
     tmp &= ~ADC_CFG0_SEQLEN_MASK;
@@ -1016,13 +829,10 @@ static inline void ADC_SetSequeceTotalChannel(ADC_Type *const baseAddr, uint8_t 
 }
 
 /*!
- * @brief Gets the Sequence mode state
+ * @brief Read the normal-sequence execution mode.
  *
- * This functions returns the state of the Sequence Conversion
- * Mode. 
- *
- * @param[in] baseAddr adc base pointer
- * @return the Sequence Mode state
+ * @param[in] baseAddr ADC base pointer.
+ * @return Sequence execution mode derived from the hardware control bits.
  */
 static inline adc_sequence_mode_t ADC_GetSequenceMode(const ADC_Type *const baseAddr)
 {
@@ -1051,7 +861,7 @@ static inline adc_sequence_mode_t ADC_GetSequenceMode(const ADC_Type *const base
         sequenceMode = ADC_CONV_LOOP;
     }
 #else
-    /* Only for YTM32B1LE0x */
+    /* Legacy conversion-mode bit layout used by YTM32B1LE0x devices. */
     if ((((ADC_CFG0_CONVMD_MASK & (baseAddr->CFG0)) >> ADC_CFG0_CONVMD_SHIFT) & 0x01u) != 0u)
     {
         sequenceMode = ADC_CONV_CONTINUOUS;
@@ -1069,12 +879,10 @@ static inline adc_sequence_mode_t ADC_GetSequenceMode(const ADC_Type *const base
 }
 
 /*!
- * @brief Sets the Sequence Conversion Mode
+ * @brief Program the normal-sequence execution mode.
  *
- * This function configures the Sequence Conversion.
- * 
- * @param[in] baseAddr adc base pointer
- * @param[in] state the new Sequence Conversion Mode
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] sequenceMode Sequence execution mode to write.
  */
 static inline void ADC_SetSequenceMode(ADC_Type *const baseAddr,
                                        adc_sequence_mode_t sequenceMode)
@@ -1119,7 +927,7 @@ static inline void ADC_SetSequenceMode(ADC_Type *const baseAddr,
             break;
     }
 #else
-    /* Only for YTM32B1LE0x */
+    /* Legacy conversion-mode bit layout used by YTM32B1LE0x devices. */
     switch (sequenceMode)
     {
         case ADC_CONV_CONTINUOUS:
@@ -1145,13 +953,17 @@ static inline void ADC_SetSequenceMode(ADC_Type *const baseAddr,
 /*! @}*/
 
 /*!
- * @brief Gets the End Of Convert Interrupt Enable Flag state
+ * @name Interrupt & Flag Management
+ * @brief Functions for interrupt enables, sticky-flag control, and status
+ *        servicing.
+ * @{
+ */
+
+/*!
+ * @brief Get the end-of-conversion interrupt-enable state.
  *
- * This function returns the state of the End Of Convert 
- * Interrupt Enable flag.
- *
- * @param[in] baseAddr adc base pointer
- * @return the End Of Convert Interrupt Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @return `true` if end-of-conversion interrupts are enabled; `false` otherwise.
  */
 static inline bool ADC_GetEocIntEnableFlag(const ADC_Type *const baseAddr)
 {
@@ -1161,13 +973,10 @@ static inline bool ADC_GetEocIntEnableFlag(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Sets the Analog Watchdog Interrupt Enable Flag state
+ * @brief Enable or disable analog-watchdog interrupts.
  *
- * This function configures the Analog Watchdog Interrupt Enable
- * Flag.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] state the Analog Watchdog Interrupt Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] state `true` to enable watchdog interrupts; `false` otherwise.
  */
 static inline void ADC_SetAwdIntEnableFlag(ADC_Type *const baseAddr,
                                            const bool state)
@@ -1179,14 +988,12 @@ static inline void ADC_SetAwdIntEnableFlag(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Sets the Analog Watchdog Effective Mode
+ * @brief Program the effective-mode bit for one watchdog channel.
  *
- * This function configures the Analog Watchdog Effective Mode
- * Flag.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] state the Analog Watchdog Effective Mode state
- * @param[in] wdgChannel adc watch dog channel
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] effective_mode `true` for inside-window matching; `false` for
+ *                           outside-window matching.
+ * @param[in] wdgChannel Watchdog channel index.
  */
 static inline void ADC_SetAwdEffectiveMode(ADC_Type *const baseAddr,
                                            const bool effective_mode,
@@ -1207,13 +1014,10 @@ static inline void ADC_SetAwdEffectiveMode(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the Analog Watchdog Interrupt Enable Flag state
+ * @brief Get the analog-watchdog interrupt-enable state.
  *
- * This function returns the state of the Analog Watchdog 
- * Interrupt Enable flag.
- *
- * @param[in] baseAddr adc base pointer
- * @return the Analog Watchdog Interrupt Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @return `true` if watchdog interrupts are enabled; `false` otherwise.
  */
 static inline bool ADC_GetAwdIntEnableFlag(const ADC_Type *const baseAddr)
 {
@@ -1223,13 +1027,10 @@ static inline bool ADC_GetAwdIntEnableFlag(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Sets the Overrun Interrupt Enable Flag state
+ * @brief Enable or disable FIFO-overrun interrupts.
  *
- * This function configures the Overrun Interrupt Enable
- * Flag.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] state the Overrun Interrupt Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] state `true` to enable overrun interrupts; `false` otherwise.
  */
 static inline void ADC_SetOvrIntEnableFlag(ADC_Type *const baseAddr,
                                            const bool state)
@@ -1241,13 +1042,10 @@ static inline void ADC_SetOvrIntEnableFlag(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the Overrun Interrupt Enable Flag state
+ * @brief Get the FIFO-overrun interrupt-enable state.
  *
- * This function returns the state of the Overrun 
- * Interrupt Enable flag.
- *
- * @param[in] baseAddr adc base pointer
- * @return the Overrun Interrupt Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @return `true` if overrun interrupts are enabled; `false` otherwise.
  */
 static inline bool ADC_GetOvrIntEnableFlag(const ADC_Type *const baseAddr)
 {
@@ -1257,13 +1055,10 @@ static inline bool ADC_GetOvrIntEnableFlag(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Sets the Ready Interrupt Enable Flag state
+ * @brief Enable or disable ADC-ready interrupts.
  *
- * This function configures the Ready Interrupt Enable
- * Flag.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] state the Ready Interrupt Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] state `true` to enable ready interrupts; `false` otherwise.
  */
 static inline void ADC_SetReadyIntEnableFlag(ADC_Type *const baseAddr,
                                            const bool state)
@@ -1275,13 +1070,10 @@ static inline void ADC_SetReadyIntEnableFlag(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the Ready Interrupt Enable Flag state
+ * @brief Get the ADC-ready interrupt-enable state.
  *
- * This function returns the state of the Ready 
- * Interrupt Enable flag.
- *
- * @param[in] baseAddr adc base pointer
- * @return the Ready Interrupt Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @return `true` if ready interrupts are enabled; `false` otherwise.
  */
 static inline bool ADC_GetReadyIntEnableFlag(const ADC_Type *const baseAddr)
 {
@@ -1291,13 +1083,10 @@ static inline bool ADC_GetReadyIntEnableFlag(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Sets the Sample End Interrupt Enable Flag state
+ * @brief Enable or disable sample-end interrupts.
  *
- * This function configures the Sample End Interrupt Enable
- * Flag.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] state the Sample End Interrupt Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] state `true` to enable sample-end interrupts; `false` otherwise.
  */
 static inline void ADC_SetSampEndIntEnableFlag(ADC_Type *const baseAddr,
                                            const bool state)
@@ -1309,13 +1098,10 @@ static inline void ADC_SetSampEndIntEnableFlag(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the Sample End Interrupt Enable Flag state
+ * @brief Get the sample-end interrupt-enable state.
  *
- * This function returns the state of the Sample End 
- * Interrupt Enable flag.
- *
- * @param[in] baseAddr adc base pointer
- * @return the Sample End Interrupt Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @return `true` if sample-end interrupts are enabled; `false` otherwise.
  */
 static inline bool ADC_GetSampEndIntEnableFlag(const ADC_Type *const baseAddr)
 {
@@ -1325,13 +1111,11 @@ static inline bool ADC_GetSampEndIntEnableFlag(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Sets the End Of Convert Interrupt Enable Flag state
+ * @brief Enable or disable end-of-conversion interrupts.
  *
- * This function configures the End Of Convert Interrupt Enable
- * Flag.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] state the End Of Convert Interrupt Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] state `true` to enable end-of-conversion interrupts; `false`
+ *                  otherwise.
  */
 static inline void ADC_SetEocIntEnableFlag(ADC_Type *const baseAddr,
                                            const bool state)
@@ -1343,13 +1127,10 @@ static inline void ADC_SetEocIntEnableFlag(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the End Of Sequence Interrupt Enable Flag state
+ * @brief Get the end-of-sequence interrupt-enable state.
  *
- * This function returns the state of the End Of Sequence
- * Interrupt Enable flag.
- *
- * @param[in] baseAddr adc base pointer
- * @return the End Of Sequence Interrupt Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @return `true` if end-of-sequence interrupts are enabled; `false` otherwise.
  */
 static inline bool ADC_GetEoSeqIntEnableFlag(const ADC_Type *const baseAddr)
 {
@@ -1359,13 +1140,11 @@ static inline bool ADC_GetEoSeqIntEnableFlag(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Sets the inject Convert Interrupt Enable Flag state
+ * @brief Enable or disable injected-conversion interrupts.
  *
- * This function configures the inject Convert Interrupt Enable
- * Flag.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] state the inject Convert Interrupt Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] state `true` to enable injected-conversion interrupts; `false`
+ *                  otherwise.
  */
 static inline void ADC_SetInjectIntEnableFlag(ADC_Type *const baseAddr,
                                            const bool state)
@@ -1382,13 +1161,11 @@ static inline void ADC_SetInjectIntEnableFlag(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the Inject Sequence Interrupt Enable Flag state
+ * @brief Get the injected-conversion interrupt-enable state.
  *
- * This function returns the state of the Inject Sequence
- * Interrupt Enable flag.
- *
- * @param[in] baseAddr adc base pointer
- * @return the Inject Sequence Interrupt Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @return `true` if injected-conversion interrupts are enabled; `false`
+ *         otherwise.
  */
 static inline bool ADC_GetInjectIntEnableFlag(const ADC_Type *const baseAddr)
 {
@@ -1403,13 +1180,11 @@ static inline bool ADC_GetInjectIntEnableFlag(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Sets the inject Convert Error Interrupt Enable Flag state
+ * @brief Enable or disable injected-conversion error interrupts.
  *
- * This function configures the inject Convert Error Interrupt Enable
- * Flag.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] state the inject Convert Error Interrupt Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] state `true` to enable injected error interrupts; `false`
+ *                  otherwise.
  */
 static inline void ADC_SetInjectErrIntEnableFlag(ADC_Type *const baseAddr,
                                            const bool state)
@@ -1426,13 +1201,10 @@ static inline void ADC_SetInjectErrIntEnableFlag(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Gets the Inject Sequence Error Interrupt Enable Flag state
+ * @brief Get the injected-conversion error interrupt-enable state.
  *
- * This function returns the state of the Inject Sequence Error
- * Interrupt Enable flag.
- *
- * @param[in] baseAddr adc base pointer
- * @return the Inject Sequence Error Interrupt Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @return `true` if injected error interrupts are enabled; `false` otherwise.
  */
 static inline bool ADC_GetInjectErrIntEnableFlag(const ADC_Type *const baseAddr)
 {
@@ -1447,13 +1219,11 @@ static inline bool ADC_GetInjectErrIntEnableFlag(const ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Sets the End Of Sequence Interrupt Enable Flag state
+ * @brief Enable or disable end-of-sequence interrupts.
  *
- * This function configures the End Of Sequence Interrupt Enable
- * Flag.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] state the End Of Sequence Interrupt Enable Flag state
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] state `true` to enable end-of-sequence interrupts; `false`
+ *                  otherwise.
  */
 static inline void ADC_SetEoSeqIntEnableFlag(ADC_Type *const baseAddr,
                                              const bool state)
@@ -1465,19 +1235,16 @@ static inline void ADC_SetEoSeqIntEnableFlag(ADC_Type *const baseAddr,
 }
 
 /*!
- * @brief Clear the End Of Conversion Interrupt Flag
+ * @brief Clear the end-of-conversion status flag.
  *
- * This function is used to clear EOC flag.
- * Flag.
- *
- * @param[in] baseAddr adc base pointer
+ * @param[in] baseAddr ADC base pointer.
  */
 static inline void ADC_ClearEocFlagCmd(ADC_Type *const baseAddr)
 {
     uint16_t timeout_cnt = 0U;
-    /* W1C to coresponding bit in STS because of W1C each */
+    /* Write-one-to-clear the EOC bit, then wait for the hardware to drop it. */
     baseAddr->STS = ADC_STS_EOC_MASK;
-    /* E600005: Wait status clear */
+    /* E600005: wait until the flag is observed as cleared. */
     while((baseAddr->STS & ADC_STS_EOC_MASK) != 0u)
     {
         if(timeout_cnt > ADC_WAIT_TIMEOUT)
@@ -1489,19 +1256,16 @@ static inline void ADC_ClearEocFlagCmd(ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Clear the End Of Sequence Interrupt Flag
+ * @brief Clear the end-of-sequence status flag.
  *
- * This function is used to clear EOSEQ flag.
- * Flag.
- *
- * @param[in] baseAddr adc base pointer
+ * @param[in] baseAddr ADC base pointer.
  */
 static inline void ADC_ClearEoseqFlagCmd(ADC_Type *const baseAddr)
 {
     uint16_t timeout_cnt = 0U;
-    /* W1C to coresponding bit in STS because of W1C each */
+    /* Write-one-to-clear the EOSEQ bit, then wait for the hardware to drop it. */
     baseAddr->STS = (uint32_t) ADC_STS_EOSEQ_MASK;
-    /* E600005: Wait status clear */
+    /* E600005: wait until the flag is observed as cleared. */
     while((baseAddr->STS & ADC_STS_EOSEQ_MASK) != 0u)
     {
         if(timeout_cnt > ADC_WAIT_TIMEOUT)
@@ -1513,19 +1277,16 @@ static inline void ADC_ClearEoseqFlagCmd(ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Clear the OverRun Interrupt Flag
+ * @brief Clear the FIFO-overrun status flag.
  *
- * This function is used to clear OVR flag.
- * Flag.
- *
- * @param[in] baseAddr adc base pointer
+ * @param[in] baseAddr ADC base pointer.
  */
 static inline void ADC_ClearOvrFlagCmd(ADC_Type *const baseAddr)
 {
     uint16_t timeout_cnt = 0U;
-    /* W1C to coresponding bit in STS because of W1C each */
+    /* Write-one-to-clear the OVR bit, then wait for the hardware to drop it. */
     baseAddr->STS = (uint32_t) ADC_STS_OVR_MASK;
-    /* E600005: Wait status clear */
+    /* E600005: wait until the flag is observed as cleared. */
     while((baseAddr->STS & ADC_STS_OVR_MASK) != 0u)
     {
         if(timeout_cnt > ADC_WAIT_TIMEOUT)
@@ -1537,21 +1298,18 @@ static inline void ADC_ClearOvrFlagCmd(ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Clear the Watchdog Interrupt Flag
+ * @brief Clear the watchdog status flag for one watchdog channel.
  *
- * This function is used to clear WD flag.
- * Flag.
- *
- * @param[in] baseAddr adc base pointer
- * @param[in] wdgChannel adc watch dog channel
+ * @param[in] baseAddr ADC base pointer.
+ * @param[in] wdgChannel Watchdog channel index.
  */
 static inline void ADC_ClearWdFlagCmd(ADC_Type *const baseAddr, const uint8_t wdgChannel)
 {
     uint16_t timeout_cnt = 0U;
-    /* W1C to coresponding bit in STS because of W1C each */
+    /* Write-one-to-clear the watchdog bit, then wait for the hardware to drop it. */
 #if defined(FEATURE_ADC_WDG_CHANNEL_COUNT) && (FEATURE_ADC_WDG_CHANNEL_COUNT > 1)
     baseAddr->STS = (uint32_t) (ADC_STS_WD0_MASK << wdgChannel);
-    /* E600005: Wait status clear */
+    /* E600005: wait until the flag is observed as cleared. */
     while((baseAddr->STS & (ADC_STS_WD0_MASK << wdgChannel)) != 0u)
     {
         if(timeout_cnt > ADC_WAIT_TIMEOUT)
@@ -1562,7 +1320,7 @@ static inline void ADC_ClearWdFlagCmd(ADC_Type *const baseAddr, const uint8_t wd
     }
 #else
     baseAddr->STS = (uint32_t) ADC_STS_WD_MASK;
-    /* E600005: Wait status clear */
+    /* E600005: wait until the flag is observed as cleared. */
     while((baseAddr->STS & ADC_STS_WD_MASK) != 0u)
     {
         if(timeout_cnt > ADC_WAIT_TIMEOUT)
@@ -1576,19 +1334,16 @@ static inline void ADC_ClearWdFlagCmd(ADC_Type *const baseAddr, const uint8_t wd
 }
 
 /*!
- * @brief Clear the Ready Interrupt Flag
+ * @brief Clear the ADC-ready status flag.
  *
- * This function is used to clear Ready flag.
- * Flag.
- *
- * @param[in] baseAddr adc base pointer
+ * @param[in] baseAddr ADC base pointer.
  */
 static inline void ADC_ClearReadyFlagCmd(ADC_Type *const baseAddr)
 {
     uint16_t timeout_cnt = 0U;
-    /* W1C to coresponding bit in STS because of W1C each */
+    /* Write-one-to-clear the ready bit, then wait for the hardware to drop it. */
     baseAddr->STS = (uint32_t) ADC_STS_ADRDY_MASK;
-    /* E600005: Wait status clear */
+    /* E600005: wait until the flag is observed as cleared. */
     while((baseAddr->STS & ADC_STS_ADRDY_MASK) != 0u)
     {
         if(timeout_cnt > ADC_WAIT_TIMEOUT)
@@ -1600,19 +1355,16 @@ static inline void ADC_ClearReadyFlagCmd(ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Clear the Sample End Interrupt Flag
+ * @brief Clear the sample-end status flag.
  *
- * This function is used to clear Sample End flag.
- * Flag.
- *
- * @param[in] baseAddr adc base pointer
+ * @param[in] baseAddr ADC base pointer.
  */
 static inline void ADC_ClearSampEndFlagCmd(ADC_Type *const baseAddr)
 {
     uint16_t timeout_cnt = 0U;
-    /* W1C to coresponding bit in STS because of W1C each */
+    /* Write-one-to-clear the sample-end bit, then wait for the hardware to drop it. */
     baseAddr->STS = (uint32_t) ADC_STS_EOSMP_MASK;
-    /* E600005: Wait status clear */
+    /* E600005: wait until the flag is observed as cleared. */
     while((baseAddr->STS & ADC_STS_EOSMP_MASK) != 0u)
     {
         if(timeout_cnt > ADC_WAIT_TIMEOUT)
@@ -1623,13 +1375,20 @@ static inline void ADC_ClearSampEndFlagCmd(ADC_Type *const baseAddr)
     }
 }
 
+/*! @}*/ /* End of Interrupt & Flag Management */
+
 /*!
- * @brief Gets the result from result FIFO
+ * @name FIFO & Runtime Control
+ * @brief Functions for FIFO reads and direct runtime control of the ADC state
+ *        machine.
+ * @{
+ */
+
+/*!
+ * @brief Read one conversion result from the FIFO.
  *
- * This function returns the conversion result from FIFO.
- * Flag.
- *
- * @param[in] baseAddr adc base pointer
+ * @param[in] baseAddr ADC base pointer.
+ * @return Raw FIFO sample value.
  */
 static inline uint16_t ADC_ReadFIFO(ADC_Type *const baseAddr)
 {
@@ -1637,12 +1396,10 @@ static inline uint16_t ADC_ReadFIFO(ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Gets the Conversion Complete flag
+ * @brief Get the conversion-complete status flag.
  *
- * This function returns the state of the Conversion Complete
- * flag for a control channel.
- *
- * @param[in] baseAddr adc base pointer
+ * @param[in] baseAddr ADC base pointer.
+ * @return `true` if the conversion-complete flag is set; `false` otherwise.
  */
 static inline bool ADC_GetConvCompleteFlag(ADC_Type *const baseAddr)
 {
@@ -1652,11 +1409,9 @@ static inline bool ADC_GetConvCompleteFlag(ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Stop ADC
+ * @brief Request the ADC to stop the active sequence.
  *
- * This function stop the ADC
- *
- * @param[in] baseAddr adc base pointer
+ * @param[in] baseAddr ADC base pointer.
  */
 static inline void ADC_Stop(ADC_Type *const baseAddr)
 {
@@ -1665,17 +1420,15 @@ static inline void ADC_Stop(ADC_Type *const baseAddr)
         baseAddr->CTRL |= ADC_CTRL_ADSTOP_MASK;
         while ((ADC_CTRL_ADSTOP_MASK & baseAddr->CTRL) != 0u)
         {
-            /* wait ADC sequence stop */
+            /* Wait until the hardware acknowledges the stop request. */
         }
     }
 }
 
 /*!
- * @brief Start ADC
+ * @brief Request the ADC to start conversion processing.
  *
- * This function start the ADC
- *
- * @param[in] baseAddr adc base pointer
+ * @param[in] baseAddr ADC base pointer.
  */
 static inline void ADC_Start(ADC_Type *const baseAddr)
 {
@@ -1686,41 +1439,36 @@ static inline void ADC_Start(ADC_Type *const baseAddr)
 }
 
 /*!
- * @brief Disable ADC
+ * @brief Disable the ADC hardware.
  *
- * This function disable ADC and let ADC enter low power mode
- *
- * @param[in] baseAddr adc base pointer
+ * @param[in] baseAddr ADC base pointer.
  */
 static inline void ADC_Disable(ADC_Type *const baseAddr)
 {
     baseAddr->CTRL |= ADC_CTRL_ADDIS_MASK;
     while ((ADC_CTRL_ADDIS_MASK & baseAddr->CTRL) != 0u)
     {
-        /* wait ADC diabled */
+        /* Wait until the hardware acknowledges the disable request. */
     }
 }
 
 /*!
- * @brief Enable ADC
+ * @brief Enable the ADC hardware.
  *
- * This function enable the ADC
- *
- * @param[in] baseAddr adc base pointer
+ * @param[in] baseAddr ADC base pointer.
  */
 static inline void ADC_Enable(ADC_Type *const baseAddr)
 {
 #ifdef ADC_ERRATA_E0002
-    /* Workarounds */
+    /* Preserve the converter register image before issuing the erratum reset sequence. */
     uint32_t adcRegister[8];
     uint8_t chsel[8], i;
-    /* Copy all register */
     for(i = 0; i < 8U; i ++)
     {
         adcRegister[i] = *(volatile uint32_t *)((uint32_t)baseAddr + (0x4UL * i));
         chsel[i] = baseAddr->CHSEL[i];
     }
-    /* Software reset ADC */
+    /* Perform the IPC-driven software reset required by the erratum workaround. */
 #if (ADC_INSTANCE_COUNT > 1)
     if(ADC0 == baseAddr)
     {
@@ -1735,7 +1483,7 @@ static inline void ADC_Enable(ADC_Type *const baseAddr)
     IPC->CTRL[IPC_ADC0_INDEX] |= IPC_CTRL_SWREN_MASK;
     IPC->CTRL[IPC_ADC0_INDEX] &= ~IPC_CTRL_SWREN_MASK;
 #endif
-    /* Set register value saved */
+    /* Restore the saved register image after the software reset completes. */
     for(i = 0; i < 8U; i ++)
     {
         *(volatile uint32_t *)((uint32_t)baseAddr + (0x4UL * i)) = adcRegister[i];
@@ -1748,11 +1496,14 @@ static inline void ADC_Enable(ADC_Type *const baseAddr)
     }
 }
 
+/*! @}*/ /* End of FIFO & Runtime Control */
+
 
 #if defined (__cplusplus)
 }
 #endif
 
+/*! @} */ /* End of adc_hw_access group */
 
 #endif /* ADC_HW_ACCESS_H */
 /*******************************************************************************

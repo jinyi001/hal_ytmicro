@@ -1,149 +1,325 @@
 /*!
-    @defgroup sent Single Edge Nibble Transmission Receiver (SENT)
-    @brief Single Edge Nibble Transmission Receiver (SENT) Peripheral Driver
-    <p>
-        The SENT driver allows reception of messages on the SENT bus.
-    </p>
-     ## Features ##
-    - Support for the reception of Fast and Slow SENT messages.
-    - Polled, Interrupt or DMA driven transfers.
-    - Configurable FIFO mode for Fast messages.
-    - Configurable number of nibbles.
-    - Support for standard or extended Slow messages.
-    - Support for standard diagnostics events.
-    - Configurable tick duration.
-    <p>
-        In order to use the SENT driver, it must be first initialized using the SENT_DRV_Init function.
-        Once initialized, it must be reinitialized with SENT_DRV_Deinit before any configuration
-        settings are to be changed. Different SENT module instances can be configured independently.
-    </p>
-    <p>
-        The driver can be used in multiple modes, the choice between modes is made through data
-        passed in the configuration structure. Or by changing the callbacks function during runtime by use of the
-        "SENT_DRV_SetRxCallback" function.
-        The following cases are possible:
-    </p>    
-        ## Modes ##
-        - Polled mode:
-        <p>
-            This is entered as long as no notification function is provided and DMA activation
-            flags are disabled for the given channel. In this mode the application shall poll any
-            incoming data available flags, then read the data.
- 
-            ## Polling functions ##
-            - Polling for data availability
-            <p>
-                bool SENT_DRV_GetFastRxStatus(uint32_t instance, uint32_t channel);
-                bool SENT_DRV_GetSlowRxStatus(uint32_t instance, uint32_t channel);
-            </p>
-            
-            - Getting the actual messages
-            <p>
-                status_t SENT_DRV_GetFastMsg(uint32_t instance, uint32_t channel, sent_fast_msg_t * message);
-                status_t SENT_DRV_GetSlowMsg(uint32_t instance, uint32_t channel, sent_slow_msg_t * message);
-            </p>
-            
-            - Getting the diagnostics event flags
-            <p>
-                status_t SENT_DRV_GetEvents(uint32_t instance, uint32_t channel, sent_event_t * events)
-            </p>
-        </p>    
-        - Interrupt mode:
-        <p>
-            This is entered as long as a notification function is provided and DMA activation
-            flags are disabled for the given channel. The driver will call the notification function
-            back to the application with flags indicating the event that occurred. The application
-            should read the data when the notification comes. Same functions used in the polling mode should be used to get the data.
-            For example:
-            
-            ## Notification functions ##
-            - Getting the actual messages
-            <p>
-            	case SENT_CALLBACK_SLOW_RX_COMPLETE:
-                    SENT_DRV_GetSlowMsg(instance, channel, &slowMessage);
-                    break;
+@defgroup sent
+@ingroup mod_communication Single Edge Nibble Transmission Receiver (SENT)
+@brief SAE J2716 SENT receiver peripheral driver for the YTMicro SDK.
 
-                case SENT_CALLBACK_FAST_RX_COMPLETE:
-                    SENT_DRV_GetFastMsg(instance, channel, &fastMessage);
-                    break;
-            </p>
-            
-            - Getting the diagnostics event flags
-            <p>
-                case SENT_CALLBACK_RX_ERROR:
-                    SENT_DRV_GetEvents(instance, channel, &activeEvents);
-                    break;   
-            </p> 
-        </p>
-        - DMA mode:
-        <p>
-            This is active as long as DMA activation flags are enabled for the given channels. In this mode,
-            based on the given configuration, the peripheral will transfer the data to the given buffers.
-            This mode will also call the notification function (if provided) with a suitable event flag.   
-        </p>
-    ## Important Notes ###    
-    </p>
-        - The driver configures interrupt states, but the interrupt priority should be set by the application.
-    <p>
-    </p>
-        The driver uses the interrupt manager and the DMA peripheral as shared resources. 
-        These should be configured and initialized before the driver.
-    <p>
-	<p>
-		In MPC574xP devices, SENT module has errata e7204. "Number of Expected Edges Error status flag spuriously set when
-		operating with Option 1 of the Successive Calibration Check method". For this errata, possible workarounds are to be
-		implemented in the application software, and they consist of the following actions:
-			- Sensor should be enabled before the peripheral driver (i.e. power or output enabling). This means that first transmitted message wil not be received.
-			- Ignore the error at startup.
-		This issue should be taken care of when using the SENT module.
-	</p>
-    ## Example code ###
-    @code
-    sent_state_t sentState;
-    sent_event_t activeEvents;
-    sent_raw_msg_t fastMessageBuffer[32];
-    sent_raw_msg_t slowMessageBuffer;
-    sent_fast_msg_t fastMessage;
-    sent_slow_msg_t slowMessage;
+@details
+The SENT module provides a hardware-based receiver for the SAE J2716 Single
+Edge Nibble Transmission protocol. SENT is a point-to-point, unidirectional
+communication scheme commonly used for transmitting sensor data (e.g.,
+pressure, position, temperature) in automotive applications. The driver
+supports multi-channel reception with configurable diagnostics, DMA offload,
+and callback-driven event notification.
 
-    void sentNotification(uint32_t instance, uint32_t channel, sent_callback_type_t type, void * param)
+@section sent_features Key Features
+- Reception of **Fast** (data) and **Slow** (serial) SENT messages per SAE J2716.
+- Three operating modes: **Polled**, **Interrupt**, and **DMA**.
+- Configurable number of data nibbles per Fast message (1–6).
+- Standard and Extended Slow serial message decoding (Short 4-bit ID,
+  Enhanced 4-bit ID, Enhanced 8-bit ID).
+- Configurable tick duration (channel prescaler derived from peripheral clock).
+- CRC verification for both Fast and Slow messages, with legacy/recommended
+  CRC type selection.
+- Comprehensive diagnostics: bus idle detection, calibration pulse monitoring,
+  nibble value errors, CRC errors, and edge count errors.
+- Pause pulse detection with configurable diagnostics.
+- Successive calibration check with low-latency or preferred method.
+- Hardware input filter (glitch filter) on supported devices.
+- Receive polarity selection (negative/positive edge) on supported devices.
+- SPC (Short PWM Code) pulse generation with software/hardware trigger on
+  supported devices.
+- FIFO mode for Fast message DMA transfers on supported devices.
+
+@section sent_modes Operating Modes
+
+The operating mode is determined by the configuration passed to SENT_DRV_Init()
+and can be changed at runtime via SENT_DRV_SetRxCallbackFunction().
+
+| Mode      | Condition                                              | Data Retrieval Method                              |
+|-----------|--------------------------------------------------------|----------------------------------------------------|
+| Polled    | No callback function, DMA disabled                     | Poll SENT_DRV_GetFastRxStatus() / SENT_DRV_GetSlowRxStatus(), then read messages |
+| Interrupt | Callback function provided, DMA disabled               | Read messages inside callback on SENT_CALLBACK_FAST_RX_COMPLETE / SENT_CALLBACK_SLOW_RX_COMPLETE |
+| DMA       | DMA flags enabled in channel config                    | Data transferred to user buffer automatically; callback notified with SENT_CALLBACK_FAST_DMA_RX_COMPLETE / SENT_CALLBACK_SLOW_DMA_RX_COMPLETE |
+
+@section sent_config Configuration Parameters
+
+@subsection sent_config_channel sent_channel_config_t Fields
+| Field           | Type                              | Description                                              |
+|-----------------|-----------------------------------|----------------------------------------------------------|
+| channelId       | uint8_t                           | Hardware channel number (0..SENT_CH_COUNT-1).            |
+| tickDuration    | uint8_t                           | Tick duration in microseconds (prescaler derived).       |
+| recvPol         | sent_channel_recv_polarity_t      | Receive edge polarity (negative/positive). Feature-gated.|
+| inputFilter     | sent_channel_input_filter_t       | Glitch filter width in protocol clocks. Feature-gated.   |
+| diagConfig      | sent_diag_config_t                | Diagnostics configuration sub-structure.                 |
+| fastMsgConfig   | sent_fast_msg_config_t            | Fast message channel configuration.                      |
+| slowMsgConfig   | sent_slow_msg_config_t            | Slow message channel configuration.                      |
+| spcConfig       | sent_spc_config_t                 | SPC pulse configuration. Feature-gated.                  |
+
+@subsection sent_config_driver sent_driver_user_config_t Fields
+| Field             | Type                          | Description                                            |
+|-------------------|-------------------------------|--------------------------------------------------------|
+| fastMsgDmaPtr     | sent_raw_msg_t *              | DMA target buffer pointer for Fast messages.           |
+| slowMsgDmaPtr     | sent_raw_msg_t *              | DMA target buffer pointer for Slow messages.           |
+| callbackFunc      | sent_callback_t               | Callback function and user parameter for notifications.|
+| slowDmaChannel    | uint8_t                       | DMA channel number for Slow message transfers.         |
+| fastDmaChannel    | uint8_t                       | DMA channel number for Fast message transfers.         |
+| fastDmaFIFOEnable | bool                          | Enable FIFO mode for Fast DMA transfers.               |
+| fastDmaFIFOSize   | uint8_t                       | FIFO watermark (minimum messages before DMA trigger).  |
+| channelConfig     | const sent_channel_config_t * | Pointer to array of channel configurations.            |
+| numOfConfigs      | uint8_t                       | Number of entries in channelConfig array.               |
+
+@subsection sent_config_events Diagnostic Event Masks
+| Macro                  | Description                                                            |
+|------------------------|------------------------------------------------------------------------|
+| SENT_EV_BUS_IDLE       | Channel idle longer than allowed.                                      |
+| SENT_EV_SPC_END        | SPC end event occurred.                                                |
+| SENT_EV_CAL_RESYNC     | Successive calibration check failed three times.                       |
+| SENT_EV_CAL_20_25      | Calibration pulse variation 20–25% from 56 ticks.                      |
+| SENT_EV_SMSG_OFLW      | Slow message overflow.                                                 |
+| SENT_EV_FMSG_OFLW      | Fast message overflow.                                                 |
+| SENT_EV_PP_DIAG_ERR    | Pause pulse ratio exceeds 1.5625% between messages.                    |
+| SENT_EV_CAL_LEN_ERR    | Calibration pulse exceeds 56 ticks ± 25%.                              |
+| SENT_EV_CAL_DIAG_ERR   | Successive calibration pulses differ by > 1.56%.                       |
+| SENT_EV_NIB_VAL_ERR    | Nibble data value out of range (< 0 or > 15).                          |
+| SENT_EV_SMSG_CRC_ERR   | Slow serial message CRC error.                                        |
+| SENT_EV_FMSG_CRC_ERR   | Fast serial message CRC error.                                        |
+| SENT_EV_NUM_EDGES_ERR  | Unexpected number of negative edges between calibration pulses.        |
+| SENT_EV_FIFO_OVERFLOW  | FIFO queue overflow.                                                   |
+| SENT_EV_FDMA_UNDERFLOW | Fast message DMA register underflow.                                   |
+| SENT_EV_SDMA_UNDERFLOW | Slow message DMA register underflow.                                   |
+
+@section sent_usage Usage Patterns
+
+@subsection sent_usage_polled Pattern 1: Polled Mode Reception
+Poll for available messages and read them when ready.
+
+@code{.c}
+#define INST_SENT (0U)
+
+sent_state_t sentState;
+sent_fast_msg_t fastMessage;
+sent_slow_msg_t slowMessage;
+
+/* Step 1: Prepare configuration (no callback = polled mode) */
+sent_channel_config_t chCfg;
+sent_driver_user_config_t driverCfg;
+driverCfg.channelConfig = &chCfg;
+SENT_DRV_GetDefaultConfig(&driverCfg);
+
+/* Step 2: Initialize */
+SENT_DRV_Init(INST_SENT, &driverCfg, &sentState);
+
+/* Step 3: Poll and read */
+while (1)
+{
+    if (SENT_DRV_GetFastRxStatus(INST_SENT, 0U))
     {
-        switch(type)
-        {
-        case SENT_CALLBACK_SLOW_DMA_RX_COMPLETE:
-            break;
-
-        case SENT_CALLBACK_FAST_DMA_RX_COMPLETE:
-            break;
-
-        case SENT_CALLBACK_SLOW_RX_COMPLETE:
-            SENT_DRV_GetSlowMsg(instance, channel, &slowMessage);
-            break;
-
-        case SENT_CALLBACK_FAST_RX_COMPLETE:
-            SENT_DRV_GetFastMsg(instance, channel, &fastMessage);
-            break;
-
-        case SENT_CALLBACK_RX_ERROR:
-            SENT_DRV_GetEvents(instance, channel, &activeEvents);
-            break;
-
-        default:
-            break;
-        }
+        SENT_DRV_GetFastMsg(INST_SENT, 0U, &fastMessage);
+        /* Process fastMessage.data, fastMessage.statusField, etc. */
     }
-    
-    sent_driver_user_config_t def_cfg;
-    sent_channel_config_t def_chn_cfg;
-    def_cfg.channelConfig = &def_chn_cfg;
-    
-    SENT_DRV_GetDefaultConfig(&def_cfg);
 
-    void main(void)
+    if (SENT_DRV_GetSlowRxStatus(INST_SENT, 0U))
     {
-        SENT_DRV_Init(0, &driverConfig1, &sentState);
-        INT_SYS_EnableIRQGlobal();
-        while(1);
-    }     
-    @endcode
-@}*/
+        SENT_DRV_GetSlowMsg(INST_SENT, 0U, &slowMessage);
+        /* Process slowMessage.data, slowMessage.id, slowMessage.type, etc. */
+    }
+}
+@endcode
+
+@subsection sent_usage_interrupt Pattern 2: Interrupt Mode Reception
+Provide a callback function to be notified of incoming messages.
+
+@code{.c}
+#define INST_SENT (0U)
+
+sent_state_t sentState;
+sent_fast_msg_t fastMessage;
+sent_slow_msg_t slowMessage;
+sent_event_t activeEvents;
+
+void sentCallback(uint32_t instance, uint32_t channel,
+                  sent_callback_type_t type, void * param)
+{
+    (void)param;
+    switch (type)
+    {
+    case SENT_CALLBACK_FAST_RX_COMPLETE:
+        SENT_DRV_GetFastMsg(instance, channel, &fastMessage);
+        break;
+
+    case SENT_CALLBACK_SLOW_RX_COMPLETE:
+        SENT_DRV_GetSlowMsg(instance, channel, &slowMessage);
+        break;
+
+    case SENT_CALLBACK_RX_ERROR:
+        SENT_DRV_GetEvents(instance, channel, &activeEvents);
+        break;
+
+    default:
+        break;
+    }
+}
+
+int main(void)
+{
+    sent_channel_config_t chCfg;
+    sent_driver_user_config_t driverCfg;
+    driverCfg.channelConfig = &chCfg;
+    SENT_DRV_GetDefaultConfig(&driverCfg);
+
+    /* Set callback for interrupt mode */
+    driverCfg.callbackFunc.function = sentCallback;
+    driverCfg.callbackFunc.param = NULL;
+
+    SENT_DRV_Init(INST_SENT, &driverCfg, &sentState);
+    INT_SYS_EnableIRQGlobal();
+
+    while (1)
+    {
+        /* Messages are received asynchronously via callback */
+    }
+}
+@endcode
+
+@subsection sent_usage_dma Pattern 3: DMA Mode Reception
+Enable DMA for automatic data transfer to user buffers.
+
+@code{.c}
+#define INST_SENT (0U)
+
+sent_state_t sentState;
+sent_raw_msg_t fastDmaBuffer[32];
+sent_raw_msg_t slowDmaBuffer;
+sent_fast_msg_t fastMessage;
+
+void sentDmaCallback(uint32_t instance, uint32_t channel,
+                     sent_callback_type_t type, void * param)
+{
+    (void)param;
+    if (type == SENT_CALLBACK_FAST_DMA_RX_COMPLETE)
+    {
+        /* Convert raw DMA data to structured message */
+        SENT_DRV_GetFastMsgFromRaw(&fastMessage, &fastDmaBuffer[0]);
+    }
+}
+
+int main(void)
+{
+    sent_channel_config_t chCfg;
+    sent_driver_user_config_t driverCfg;
+    driverCfg.channelConfig = &chCfg;
+    SENT_DRV_GetDefaultConfig(&driverCfg);
+
+    /* Enable DMA */
+    chCfg.fastMsgConfig.dmaEnable = true;
+    driverCfg.fastMsgDmaPtr = fastDmaBuffer;
+    driverCfg.slowMsgDmaPtr = &slowDmaBuffer;
+    driverCfg.fastDmaChannel = 0U;
+    driverCfg.slowDmaChannel = 1U;
+    driverCfg.callbackFunc.function = sentDmaCallback;
+    driverCfg.callbackFunc.param = NULL;
+
+    SENT_DRV_Init(INST_SENT, &driverCfg, &sentState);
+    INT_SYS_EnableIRQGlobal();
+
+    while (1) { }
+}
+@endcode
+
+@section sent_api API Quick Reference
+
+@subsection sent_api_init Initialization & De-initialization
+| Function                    | Description                                              |
+|-----------------------------|----------------------------------------------------------|
+| SENT_DRV_Init()             | Initialize SENT instance with user configuration.        |
+| SENT_DRV_Deinit()           | De-initialize SENT instance and reset registers.         |
+| SENT_DRV_GetDefaultConfig() | Populate config struct with TLE4998 sensor defaults.     |
+
+@subsection sent_api_fast Fast Message Operations
+| Function                       | Description                                           |
+|--------------------------------|-------------------------------------------------------|
+| SENT_DRV_GetFastRxStatus()     | Check if a new Fast message is available.             |
+| SENT_DRV_GetFastMsg()          | Read last received Fast message (clears Rx flag).     |
+| SENT_DRV_GetFastMsgFromRaw()   | Convert a raw Fast message to structured format.      |
+| SENT_DRV_SetFastMsgDmaBuffer() | Set/change DMA target buffer for Fast messages.       |
+
+@subsection sent_api_slow Slow Message Operations
+| Function                       | Description                                           |
+|--------------------------------|-------------------------------------------------------|
+| SENT_DRV_GetSlowRxStatus()     | Check if a new Slow message is available.             |
+| SENT_DRV_GetSlowMsg()          | Read last received Slow message (clears Rx flag).     |
+| SENT_DRV_GetSlowMsgFromRaw()   | Convert a raw Slow message to structured format.      |
+| SENT_DRV_SetSlowMsgDmaBuffer() | Set/change DMA target buffer for Slow messages.       |
+
+@subsection sent_api_callback Callback & Notification
+| Function                         | Description                                         |
+|----------------------------------|-----------------------------------------------------|
+| SENT_DRV_SetRxCallbackFunction() | Set/change Rx callback and notification mode.       |
+
+@subsection sent_api_diag Diagnostics & Events
+| Function                | Description                                              |
+|-------------------------|----------------------------------------------------------|
+| SENT_DRV_GetEvents()    | Read and clear active diagnostic event flags.            |
+
+@subsection sent_api_spc SPC Control (Feature-gated)
+| Function               | Description                                               |
+|------------------------|-----------------------------------------------------------|
+| SENT_DRV_SwTrigger()   | Generate software trigger for SPC pulse.                  |
+
+@section sent_notes Important Notes
+
+@warning The driver configures interrupt states, but the **interrupt priority
+must be set by the application** before calling SENT_DRV_Init().
+
+@warning The driver uses the **interrupt manager** and **DMA peripheral** as
+shared resources. These must be configured and initialized before the SENT
+driver.
+
+@warning On MPC574xP devices, SENT module has **errata e7204**: "Number of
+Expected Edges Error status flag spuriously set when operating with Option 1
+of the Successive Calibration Check method." Workarounds:
+- Enable the sensor before the peripheral driver (first message will not be received).
+- Ignore the NUM_EDGES_ERR at startup.
+
+@note The SENT peripheral clock must be enabled via the clock_manager
+**before** calling SENT_DRV_Init(). The clock frequency must be at least
+1 MHz.
+
+@note Multiple SENT peripheral instances can be configured independently.
+Each instance requires its own sent_state_t structure.
+
+@note When using DMA mode, the DMA driver must be initialized and channels
+allocated before calling SENT_DRV_Init().
+
+@section sent_integration Integration Guide
+
+@subsection sent_integration_files Compilation Units
+The following source files must be added to the project build:
+@verbatim
+${SDK_PATH}/platform/drivers/src/sent/sent_driver.c
+${SDK_PATH}/platform/drivers/src/sent/sent_hw_access.c
+${SDK_PATH}/platform/drivers/src/sent/sent_irq.c
+@endverbatim
+
+@subsection sent_integration_include Include Paths
+Add the following directories to the toolchain include path:
+@verbatim
+${SDK_PATH}/platform/drivers/inc/
+${SDK_PATH}/platform/drivers/src/sent/
+@endverbatim
+
+@subsection sent_integration_symbols Compile Symbols
+| Symbol                      | Description                                         |
+|-----------------------------|-----------------------------------------------------|
+| FEATURE_SENT_HAS_INPUT_FILTER | Enables hardware glitch filter support.            |
+| FEATURE_SENT_HAS_RECV_POLARITY| Enables receive polarity selection.                |
+| FEATURE_SENT_HAS_SPC        | Enables SPC pulse generation support.               |
+| FEATURE_SENT_DMA_HAS_FIFO   | Enables FIFO mode for Fast DMA transfers.           |
+| ERRATA_E7425                | Enables workaround for errata E7425.                |
+
+@subsection sent_integration_deps Dependencies
+- @ref clock_manager — Required for enabling the SENT peripheral clock.
+- DMA driver — Required when using DMA mode for message reception.
+- Interrupt manager — Required for interrupt-driven and DMA modes.
+
+*/

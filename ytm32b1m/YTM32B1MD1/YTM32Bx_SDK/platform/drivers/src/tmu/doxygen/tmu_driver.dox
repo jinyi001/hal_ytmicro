@@ -1,54 +1,269 @@
 /*!
- * @defgroup tmu Trigger MUX Control (TMU)
- * @brief Trigger MUX Control Peripheral Driver. The TMU introduces an extremely flexible methodology
-   for connecting various trigger sources to multiple pins/peripherals.
- * @details The YTMicro SDK provides Peripheral Drivers for the Trigger MUX Unit (TMU) module of YTMicro SDK devices.
+@defgroup tmu
+@ingroup mod_system Trigger Mux Unit (TMU)
+@brief Configurable trigger-routing matrix for YTMicro peripherals.
 
- * ## Overview ##
- *
- * This section describes the programing interface of the TMU driver. The TMU driver configures the TMU (Trigger Mux Control).
-   The Trigger MUX module allows software to configure the trigger inputs for various peripherals.
- *
- * ## TMU Driver model building ##
- *
- * TMU can be seen as a collection of MUXes, each mux allowing to select one output from a list of input signals
-   that are common to all MUXes. The TMU registers are identical as structure and all bitfields can be read/written
-   using the TMU driver API.
- *
- * ## TMU Initialization ##
- *
- * The <b>TMU_DRV_Init()</b> function is used to initialize the TMU IP. The function receives as parameter
-   a pointer to the tmu_user_config_t structure. This structure contains a variable number of mappings between
-   a tmu trigger source and a tmu target modules.
- *
- * ## Integration guideline ##
- *
- * ### Compilation units ###
- *
- * The following files need to be compiled in the project:
- * \verbatim
-   ${SDK_PATH}\platform\drivers\src\tmu\tmu_driver.c
-   ${SDK_PATH}\platform\drivers\src\tmu\tmu_hw_access.c
-   \endverbatim
- *
- * ### Include path ###
- *
- * The following paths need to be added to the include path of the toolchain:
- * \verbatim
-   ${SDK_PATH}\platform\drivers\inc\
-   \endverbatim
- *
- * ### Compile symbols ###
- *
- * No special symbols are required for this component
- *
- * ### Dependencies ###
- * 
- * There are no dependencies with other components 
- * 
- * ## TMU API ##
- * After initialization, the driver allows the reconfiguration of the source trigger for a given target
-   module using <b>TMU_DRV_SetTrigSourceForTargetModule()</b>.
-   Also, by using <b>TMU_DRV_SetLockForTargetModule()</b>, a given target module can be locked,
-   such that it cannot be updated until a reset.
- */
+@details
+The TMU module connects device-specific trigger sources to configurable target
+modules such as TMU output pins and peripheral trigger inputs. Each target
+selects one source from a device-dependent list, allowing software to build
+trigger paths between timers, comparators, ADCs, communication peripherals,
+and external TMU inputs.
+
+The SDK exposes the TMU through a two-layer design:
+- The **driver layer** (`tmu_driver.h/.c`) provides instance-based APIs for
+  batch initialization, single-route updates, and route readback.
+- The **hardware access layer** (`tmu_hw_access.h/.c`) provides direct register
+  helpers for reset, route programming, route readback, and shared lock-bit
+  control.
+
+@section tmu_features Key Features
+- Routes one trigger source to each TMU target module.
+- Supports batch route programming through `tmu_user_config_t`.
+- Supports runtime reconfiguration of individual target modules.
+- Supports route readback for software verification and diagnostics.
+- Exposes register-level lock control through the HW access layer.
+- Uses device-specific trigger source and target enumerations generated in the
+  active `<device>_features.h` file.
+- Supports instance-based access through `TMU_DRV_*` APIs.
+
+@section tmu_modes Supported Modes
+
+| Mode | APIs | Description |
+|------|------|-------------|
+| Batch routing initialization | TMU_DRV_Init() | Clears the TMU matrix, then applies an array of source-to-target mappings. |
+| Runtime single-target update | TMU_DRV_SetTrigSourceForTargetModule() | Changes the source assigned to one target module. |
+| Route readback | TMU_DRV_GetTrigSourceForTargetModule() | Reads the source currently selected for one target module. |
+| Register reset | TMU_DRV_Deinit(), TMU_Init() | Writes reset values to all TMU MUX registers. |
+| Lock control (internal layer) | TMU_SetLockForTargetModule(), TMU_GetLockForTargetModule() | Sets or reads the shared lock bit for the MUX register that owns a target module. |
+
+@section tmu_arch Module Architecture
+
+The TMU module is organized in a two-layer architecture:
+
+@verbatim
++----------------------------------------------+
+|              Application Code                |
+|         (calls TMU_DRV_* functions)          |
++----------------------------------------------+
+|          TMU Driver Layer (tmu_driver.h/c)   |
+|  - Instance-based API (TMU_DRV_Init, etc.)   |
+|  - Applies user-defined mapping arrays       |
+|  - Resolves base address through TMU_BASE_PTRS |
++----------------------------------------------+
+|     TMU HW Access Layer (tmu_hw_access.h/c)  |
+|  - Direct MUX register access                |
+|  - Route programming / readback              |
+|  - Shared lock-bit control                   |
++----------------------------------------------+
+|             TMU Peripheral Hardware          |
+|        (MUX[n] registers, SELx, LOCK)        |
++----------------------------------------------+
+@endverbatim
+
+@subsection tmu_arch_driver Driver Layer (tmu_driver.h)
+Application code should normally use the `TMU_DRV_*` functions. The driver
+accepts a zero-based instance index, resolves the TMU base address internally,
+and applies route mappings described by `tmu_user_config_t`.
+
+@subsection tmu_arch_hw HW Access Layer (tmu_hw_access.h)
+This internal layer provides direct register operations for:
+- **Initialization** - TMU_Init()
+- **Routing Configuration** - TMU_SetTrigSourceForTargetModule()
+- **Routing Query** - TMU_GetTrigSourceForTargetModule()
+- **Lock Control** - TMU_SetLockForTargetModule(), TMU_GetLockForTargetModule()
+
+@section tmu_config Configuration Parameters
+
+@subsection tmu_config_mapping tmu_inout_mapping_config_t Fields
+| Field | Type | Description | Default |
+|-------|------|-------------|---------|
+| triggerSource | tmu_trigger_source_t | Trigger source that will drive the route. | User supplied |
+| targetModule | tmu_target_module_t | Target module that receives the selected source. | User supplied |
+
+@subsection tmu_config_user tmu_user_config_t Fields
+| Field | Type | Description | Default |
+|-------|------|-------------|---------|
+| numInOutMappingConfigs | uint8_t | Number of valid entries in `inOutMappingConfig`. | 0 |
+| inOutMappingConfig | const tmu_inout_mapping_config_t * | Pointer to the mapping array consumed by TMU_DRV_Init(). | NULL |
+
+@subsection tmu_config_features Device Definitions
+| Definition | Description |
+|------------|-------------|
+| TMU_INSTANCE_COUNT | Number of TMU peripheral instances available on the device. |
+| TMU_MUX_COUNT | Number of TMU MUX registers implemented by the device. |
+| TMU_MUX_SEL0_WIDTH | Width of each source-selection field; used to validate trigger source values. |
+| TMU_BASE_PTRS | Peripheral base-address table used by the driver layer. |
+| FEATURE_TMU_TARGET_MODULE | Device-specific list of supported TMU target modules. |
+| tmu_trigger_source_e | Device-generated enumeration containing all valid trigger sources. |
+| tmu_target_module_e | Device-generated enumeration containing all valid target modules. |
+
+@section tmu_usage Usage Patterns
+
+@subsection tmu_usage_basic Pattern 1: Batch Initialization With Two Routes
+Use `tmu_user_config_t` to reset the TMU matrix and then program multiple
+routes in one call.
+
+@code{.c}
+#define INST_TMU (0U)
+
+static const tmu_inout_mapping_config_t tmuRoutes[] =
+{
+    { TMU_TRIG_SOURCE_TMU_IN0, TMU_TARGET_MODULE_TMU_OUT0 },
+    { TMU_TRIG_SOURCE_TMU_IN1, TMU_TARGET_MODULE_TMU_OUT1 }
+};
+
+tmu_user_config_t tmuConfig =
+{
+    .numInOutMappingConfigs = (uint8_t)(sizeof(tmuRoutes) / sizeof(tmuRoutes[0])),
+    .inOutMappingConfig = tmuRoutes
+};
+
+/* Enable the TMU peripheral clock before this call. */
+TMU_DRV_Init(INST_TMU, &tmuConfig);
+@endcode
+
+@subsection tmu_usage_update Pattern 2: Runtime Route Update and Readback
+Update one target module at runtime and read back the selected source.
+
+@code{.c}
+#define INST_TMU (0U)
+
+tmu_trigger_source_t activeSource;
+
+TMU_DRV_SetTrigSourceForTargetModule(INST_TMU,
+                                     TMU_TRIG_SOURCE_TMU_IN1,
+                                     TMU_TARGET_MODULE_TMU_OUT0);
+
+activeSource = TMU_DRV_GetTrigSourceForTargetModule(INST_TMU,
+                                                    TMU_TARGET_MODULE_TMU_OUT0);
+@endcode
+
+@subsection tmu_usage_lock Pattern 3: Lock a Shared MUX Register Through HW Access
+Use the internal HW access layer when software must set or inspect the TMU
+lock bit directly.
+
+@code{.c}
+#define INST_TMU (0U)
+
+static TMU_Type *const s_tmuBase[] = TMU_BASE_PTRS;
+TMU_Type *base = s_tmuBase[INST_TMU];
+bool locked;
+
+TMU_SetLockForTargetModule(base, TMU_TARGET_MODULE_TMU_OUT0);
+
+/* TMU_OUT0 and TMU_OUT1 may share the same MUX register on the device. */
+locked = TMU_GetLockForTargetModule(base, TMU_TARGET_MODULE_TMU_OUT1);
+@endcode
+
+@subsection tmu_usage_reset Pattern 4: Restore Reset Routing
+Reset every TMU route to its register reset value.
+
+@code{.c}
+#define INST_TMU (0U)
+
+TMU_DRV_Deinit(INST_TMU);
+@endcode
+
+@section tmu_api API Quick Reference
+
+@subsection tmu_api_driver Driver Layer
+
+@subsubsection tmu_api_driver_init Initialization & De-initialization
+| Function | Description |
+|----------|-------------|
+| TMU_DRV_Init() | Reset the TMU matrix and apply a user-defined mapping array. |
+| TMU_DRV_Deinit() | Restore all TMU MUX registers to reset values. |
+
+@subsubsection tmu_api_driver_config Routing Configuration
+| Function | Description |
+|----------|-------------|
+| TMU_DRV_SetTrigSourceForTargetModule() | Change the source assigned to one target module. |
+
+@subsubsection tmu_api_driver_query Routing Query
+| Function | Description |
+|----------|-------------|
+| TMU_DRV_GetTrigSourceForTargetModule() | Read back the source currently assigned to one target module. |
+
+@subsection tmu_api_hw HW Access Layer
+
+@subsubsection tmu_api_hw_init Initialization
+| Function | Description |
+|----------|-------------|
+| TMU_Init() | Issue reset-value writes to all TMU MUX registers. |
+
+@subsubsection tmu_api_hw_config Routing Configuration
+| Function | Description |
+|----------|-------------|
+| TMU_SetTrigSourceForTargetModule() | Program one TMU source-selection field directly. |
+
+@subsubsection tmu_api_hw_query Routing Query
+| Function | Description |
+|----------|-------------|
+| TMU_GetTrigSourceForTargetModule() | Read one TMU source-selection field directly. |
+
+@subsubsection tmu_api_hw_lock Lock Control
+| Function | Description |
+|----------|-------------|
+| TMU_SetLockForTargetModule() | Set the shared lock bit of the owning TMU MUX register. |
+| TMU_GetLockForTargetModule() | Read the shared lock bit of the owning TMU MUX register. |
+
+@section tmu_notes Important Notes
+
+@subsection tmu_notes_clock Clock Dependency
+The TMU driver does not enable clocks internally. The TMU peripheral clock must
+be enabled by the clock manager before calling TMU_DRV_Init(),
+TMU_DRV_Deinit(), or any HW access function.
+
+@subsection tmu_notes_device Device-Specific Enumerations
+The valid values of `tmu_trigger_source_t` and `tmu_target_module_t` depend on
+the selected device. Always consult the active `<device>_features.h` file when
+choosing source and target constants.
+
+@subsection tmu_notes_lock Shared Register Lock Behavior
+The TMU lock bit is stored per MUX register, while each register contains four
+target selections. Locking one target therefore affects the other three target
+slots that share the same register.
+
+@warning After a TMU MUX register is locked, later route updates issued through
+TMU_DRV_SetTrigSourceForTargetModule() or TMU_SetTrigSourceForTargetModule()
+may be ignored by hardware.
+
+@subsection tmu_notes_return Driver Return Behavior
+The current TMU driver implementation returns `STATUS_SUCCESS` after issuing
+reset or route-write requests. It does not perform a software readback or
+explicit lock-state check before returning.
+
+@subsection tmu_notes_config Mapping Array Constraints
+If `numInOutMappingConfigs` is non-zero, `inOutMappingConfig` must point to a
+valid array of route descriptors. Passing a NULL pointer with a non-zero count
+causes invalid memory access in the driver loop.
+
+@section tmu_integration Integration Guide
+
+@subsection tmu_integration_units Compilation Units
+Compile the following files into the application:
+
+@verbatim
+${SDK_PATH}/platform/drivers/src/tmu/tmu_driver.c
+${SDK_PATH}/platform/drivers/src/tmu/tmu_hw_access.c
+@endverbatim
+
+@subsection tmu_integration_include Include Path
+Add the driver include directory to the toolchain include path:
+
+@verbatim
+${SDK_PATH}/platform/drivers/inc/
+@endverbatim
+
+@subsection tmu_integration_symbols Compile Symbols
+No special compile symbols are required for the TMU driver itself. The active
+device selection must provide the matching `device_registers.h` and
+`<device>_features.h` definitions.
+
+@subsection tmu_integration_dependencies Dependencies
+- Clock manager configuration for enabling the TMU peripheral clock
+- Device register and feature headers selected by the build target
+- `tmu_hw_access.h` only if the application uses direct lock control or other
+  internal-layer helpers
+*/

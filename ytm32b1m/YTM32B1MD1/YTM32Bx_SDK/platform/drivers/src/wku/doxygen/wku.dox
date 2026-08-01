@@ -1,127 +1,294 @@
-
 /*!
-@defgroup wku Wakeup Unit (WKU)
-@brief The YTMicro SDK provides Peripheral Drivers for the Wakeup Unit module. @details The Wakeup Unit (WKU) supports
-external GPIOs or reset pin or internal low power modules to wakeup system under power down mode.
+@defgroup wku
+@ingroup mod_system Wakeup Unit (WKU)
+@brief Wakeup-source management module for power-down recovery in the YTMicro SDK.
 
-## The WKU supports features:
+@details
+The Wakeup Unit (WKU) monitors external wakeup pins, the reset pin, and a set
+of internal low-power module requests so the system can exit power-down mode.
+The driver layer provides instance-based configuration APIs, while the hardware
+access layer exposes register-level helpers used internally by the driver.
 
-- Support upto 32 external pins wakeup source
-- Support pin edge selection.
-- Support digital filter for pin wakeup.
-- Support wakeup pin flag and interrupt when system recovery from power down mode.
+@section wku_features Key Features
+- Supports device-dependent external wakeup channel counts through
+  `FEATURE_WKU_MAX_CHANNEL_COUNT`.
+- Supports rising-edge, falling-edge, both-edge, or disabled detection per
+  external wakeup channel.
+- Supports optional digital filtering for external wakeup pins.
+- Supports reset-pin wakeup configuration with optional digital filtering.
+- Supports enabling wakeup requests from internal low-power modules such as
+  RTC, lpTMR0, and ACMP.
+- Supports optional pin isolation on devices that define
+  `FEATURE_WKU_SUPPORT_PIN_ISOLATION`.
 
-## Integration guideline
+@section wku_standards Supported Modes
 
-The following files need to be compiled in the project:
+The following table summarizes the wakeup paths handled by the WKU driver:
 
-```sh
-${SDK_PATH}\platform\drivers\src\wku\wku_driver.c
-```
+| Wakeup Path           | Primary APIs                                      | Key Parameters                                       | Notes |
+|-----------------------|---------------------------------------------------|------------------------------------------------------|-------|
+| External pin wakeup   | WKU_DRV_InitPinWakeup(), WKU_DRV_SetPinWakeupConfig() | `hwChannel`, `edgeEvent`, `filterEn`, `filterClkSrc` | Channel count is device-dependent. |
+| Reset-pin wakeup      | WKU_DRV_InitReset(), WKU_DRV_GetResetDefaultConfig() | `wakeupEn`, `filterEn`, `filterClkSrc`               | Filter clock selection is optional by feature macro. |
+| Internal module wakeup| WKU_DRV_EnableModuleWakeup(), WKU_DRV_DisableModuleWakeup() | `moduleID` from `wku_wakeup_module_t`                | Module availability depends on the device. |
+| Pin isolation         | WKU_DRV_SetPinIsolation()                         | `enable`                                             | Available only when `FEATURE_WKU_SUPPORT_PIN_ISOLATION` is enabled. |
 
-## Include path
+@subsection wku_filter_clock Shared Filter Clock Sources
+When `FEATURE_WKU_SUPPORT_FILTER_CLOCK_SEL` is enabled, the WKU filtering logic
+can select one of the following clock sources:
 
-The following paths need to be added to the include path of the toolchain:
+| Clock Source          | Description |
+|-----------------------|-------------|
+| WKU_FILTER_CLK_SIRC   | Use the SIRC clock as filter input. |
+| WKU_FILTER_CLK_SXOSC  | Use the SXOSC clock as filter input. |
 
-```sh
-${SDK_PATH}\platform\drivers\inc\
-```
+@section wku_arch Module Architecture
 
-## Preprocessor symbols
+The WKU module is organized as a two-layer driver:
 
-No special symbols are required for this component
+@verbatim
++----------------------------------------------+
+|              Application Code                |
+|         (calls WKU_DRV_* functions)          |
++----------------------------------------------+
+|          WKU Driver Layer (wku_driver.h/c)   |
+|  - Instance-based configuration APIs         |
+|  - Pin wakeup, reset wakeup, and module      |
+|    wakeup orchestration                      |
++----------------------------------------------+
+|     WKU HW Access Layer (wku_hw_access.h)    |
+|  - Inline register access helpers            |
+|  - Pin flags, PCR/RPCR/MER bit control       |
++----------------------------------------------+
+|           WKU Peripheral Hardware            |
+|      (PCR[], PFR[], RPCR, MER registers)     |
++----------------------------------------------+
+@endverbatim
 
-## Dependencies
+@subsection wku_arch_driver Driver Layer (wku_driver.h)
+Application code should use the `WKU_DRV_*` APIs declared in wku_driver.h.
+These functions accept a zero-based WKU instance index and resolve the
+peripheral base address internally through `WKU_BASE_PTRS`.
 
-- \ref clock_manager
-- \ref power_manager
+@subsection wku_arch_hw Hardware Access Layer (wku_hw_access.h)
+This internal layer provides register-level inline helpers that are grouped into
+four capability areas:
+- **Pin Flag Management** - WKU_ClearPinWakeupFlag()
+- **Pin Wakeup Control** - WKU_SetWakeueEdgeEvent(), WKU_EnableFilter(), WKU_EnablePinInterrupt()
+- **Reset Wakeup Control** - WKU_EnableResetPin(), WKU_EnableResetPinFilter(), WKU_SetResetPinFilterClock()
+- **Module Wakeup Control** - WKU_EnableModuleWakeup()
 
-@defgroup wku_driver WKU Driver
-@ingroup wku
+@section wku_config Configuration Parameters
 
-## WKU Driver Guide
+@subsection wku_config_pin wku_pin_wakeup_cfg_t Fields
+| Field        | Type                      | Description | Default from WKU_DRV_GetPinWakeupDefaultConfig() |
+|--------------|---------------------------|-------------|--------------------------------------------------|
+| hwChannel    | uint8_t                   | WKU hardware channel index programmed in `PCR[]`. | Channel index of the array entry. |
+| wakeupEn     | bool                      | Requested wakeup-enable state tracked by the configuration. | Not initialized by the helper; set explicitly in application code. |
+| edgeEvent    | wku_edge_event_t          | Edge-detection mode for the selected channel. | WKU_EDGE_BOTH |
+| filterEn     | bool                      | Enables or bypasses the channel digital filter. | false |
+| filterClkSrc | wku_filter_clock_source_t | Shared filter clock source when supported. | WKU_FILTER_CLK_SIRC |
 
-When using power down mode, after waking up from power down mode, user application need to enable WKU module interrupt
-or internal wakeup module if user application needs to get wakeup reason.
+@subsection wku_config_reset wku_reset_cfg_t Fields
+| Field        | Type                      | Description | Default from WKU_DRV_GetResetDefaultConfig() |
+|--------------|---------------------------|-------------|----------------------------------------------|
+| wakeupEn     | bool                      | Enables reset-pin wakeup requests. | true |
+| filterEn     | bool                      | Enables reset-pin digital filtering. | true |
+| filterClkSrc | wku_filter_clock_source_t | Shared filter clock source when supported. | WKU_FILTER_CLK_SIRC |
 
-In order to be able to use the wakeup in your application, the first thing to do is initializing WKU with user
-configuration input.
+@subsection wku_config_features Device Feature Macros
+| Macro                                 | Description |
+|---------------------------------------|-------------|
+| FEATURE_WKU_MAX_CHANNEL_COUNT         | Number of external wakeup channels supported by the device. |
+| FEATURE_WKU_SUPPORT_FILTER_CLOCK_SEL  | Set to 1 when WKU exposes the filter clock selection field. |
+| FEATURE_WKU_SUPPORT_PIN_ISOLATION     | Set to 1 when the device supports pad-state isolation in power-down mode. |
+| WKU_INSTANCE_COUNT                    | Number of WKU peripheral instances available on the device. |
 
-## WKU Driver Operation
+@section wku_usage Usage Patterns
 
-### PinWakeup feature ###
+@subsection wku_usage_pins Pattern 1: Configure External Pin Wakeup Channels
+Use this pattern when one or more GPIO-backed wakeup channels must bring the
+device out of power-down mode:
 
-This is example code to configure the WKU driver:
+@code{.c}
+#define INST_WKU              (0U)
+#define WKU_USED_CHANNELS     (2U)
 
-```c
-/* Device instance number */
-#define INST_WKU          (0U)
+wku_pin_wakeup_cfg_t pinConfig[WKU_USED_CHANNELS] = { 0 };
 
-/* The number of channels */
-#define WKU_CHANNEL_COUNT  (3U)
-
-/* The hardware channel */
-#define WKU_HW_CHANNEL0    (0U)
-#define WKU_HW_CHANNEL1    (1U)
-#define WKU_HW_CHANNEL2    (2U)
-
-/* Configure for NMI feature */
-const wku_pin_wakeup_cfg_t wku_pinConfig[] =
-{
-    {
-        .hwChannel     = WKU_HW_CHANNEL0,
-        .wakeupEn      = true,
-        .edgeEvent     = WKU_EDGE_RISING,
-        .interruptEn   = false,
-        .filterEn      = true,
-        .filterClkSrc  = WKU_FILTER_CLK_SIRC
-    },
-    {
-        .hwChannel     = WKU_HW_CHANNEL1,
-        .wakeupEn      = true,
-        .edgeEvent     = WKU_EDGE_RISING,
-        .interruptEn   = false,
-        .filterEn      = true,
-        .filterClkSrc  = WKU_FILTER_CLK_SIRC
-    },
-    {
-        .hwChannel     = WKU_HW_CHANNEL2,
-        .wakeupEn      = true,
-        .edgeEvent     = WKU_EDGE_RISING,
-        .interruptEn   = false,
-        .filterEn      = true,
-        .filterClkSrc  = WKU_FILTER_CLK_SIRC
-    },
-};
-
-/*! Configuration for Reset feature */
-const wku_reset_cfg_t wku_ResetPinCfg =
-{
-    .wakeupEn      = true,
-    .filterEn      = true,
-    .filterClkSrc  = WKU_FILTER_CLK_SIRC
-};
-
-/* Main */
 int main(void)
 {
-    /* Configure for STANDBY mode */
+    pinConfig[0U].hwChannel = 3U;
+    pinConfig[0U].wakeupEn = true;
+    pinConfig[0U].edgeEvent = WKU_EDGE_RISING;
+    pinConfig[0U].filterEn = true;
+#if FEATURE_WKU_SUPPORT_FILTER_CLOCK_SEL
+    pinConfig[0U].filterClkSrc = WKU_FILTER_CLK_SIRC;
+#endif
 
-    /* Initialize */
-    WKU_DRV_InitPinWakeup(INST_WKU, 
-                        WKU_CHANNEL_COUNT, 
-                        wku_pinConfig); 
-    /* Initialize for external sources */
-    WKU_DRV_InitReset(INST_WKU, &wku_ResetPinCfg);
+    pinConfig[1U].hwChannel = 7U;
+    pinConfig[1U].wakeupEn = true;
+    pinConfig[1U].edgeEvent = WKU_EDGE_FALLING;
+    pinConfig[1U].filterEn = false;
+#if FEATURE_WKU_SUPPORT_FILTER_CLOCK_SEL
+    pinConfig[1U].filterClkSrc = WKU_FILTER_CLK_SIRC;
+#endif
 
-    /* Enable External module */
-    WKU_DRV_EnableModuleWakeup(INST_WKU, WKU_lpTMR_WAKEUP);
+    WKU_DRV_InitPinWakeup(INST_WKU, WKU_USED_CHANNELS, pinConfig);
 
-    /* Enter STANDBY mode */
-
-    /* Loop forever */
-
-    return 0;
+    for (;;)
+    {
+    }
 }
-```
+@endcode
+
+@subsection wku_usage_reset Pattern 2: Enable Reset-Pin and Internal Module Wakeup
+Use this pattern when reset-pin wakeup and an internal low-power source are
+part of the low-power recovery flow:
+
+@code{.c}
+#define INST_WKU (0U)
+
+wku_reset_cfg_t resetConfig;
+
+int main(void)
+{
+    WKU_DRV_GetResetDefaultConfig(&resetConfig);
+    resetConfig.wakeupEn = true;
+    resetConfig.filterEn = true;
+#if FEATURE_WKU_SUPPORT_FILTER_CLOCK_SEL
+    resetConfig.filterClkSrc = WKU_FILTER_CLK_SIRC;
+#endif
+
+    WKU_DRV_InitReset(INST_WKU, &resetConfig);
+    WKU_DRV_EnableModuleWakeup(INST_WKU, (uint8_t)WKU_lpTMR0_WAKEUP);
+
+#if FEATURE_WKU_SUPPORT_PIN_ISOLATION
+    WKU_DRV_SetPinIsolation(true);
+#endif
+
+    for (;;)
+    {
+    }
+}
+@endcode
+
+@subsection wku_usage_service Pattern 3: Service Wakeup Flags and Clear Configuration
+Use this pattern after wakeup to acknowledge the source and release the WKU
+resources that are no longer needed:
+
+@code{.c}
+#define INST_WKU          (0U)
+#define WKU_SERVICE_CH    (3U)
+
+void WKU_AfterWakeup(void)
+{
+    WKU_DRV_ClearPinWakeupFlag(INST_WKU, WKU_SERVICE_CH);
+    WKU_DRV_ClearPinWakeupConfig(INST_WKU, WKU_SERVICE_CH);
+    WKU_DRV_DisableModuleWakeup(INST_WKU, (uint8_t)WKU_lpTMR0_WAKEUP);
+    WKU_DRV_DeinitReset(INST_WKU);
+
+#if FEATURE_WKU_SUPPORT_PIN_ISOLATION
+    WKU_DRV_SetPinIsolation(false);
+#endif
+}
+@endcode
+
+@section wku_api API Quick Reference
+
+@subsection wku_api_pin_init Pin Wakeup Initialization & De-initialization
+| Function                             | Description |
+|--------------------------------------|-------------|
+| WKU_DRV_InitPinWakeup()              | Apply a table of external pin wakeup channel configurations. |
+| WKU_DRV_DeinitPinWakeup()            | Clear all external pin wakeup channel settings. |
+| WKU_DRV_GetPinWakeupDefaultConfig()  | Populate default channel settings for all supported wakeup pins. |
+
+@subsection wku_api_pin_ctrl Pin Wakeup Channel Control
+| Function                             | Description |
+|--------------------------------------|-------------|
+| WKU_DRV_SetPinWakeupConfig()         | Apply one external pin wakeup channel configuration. |
+| WKU_DRV_ClearPinWakeupConfig()       | Clear one external pin wakeup channel configuration. |
+| WKU_DRV_SetPinWakeupNormalMode()     | Put a channel into the driver's normal operating mode. |
+| WKU_DRV_SetPinWakeupSleepMode()      | Put a channel into the driver's sleep-mode policy. |
+| WKU_DRV_SetPinWakeupEdgeEvent()      | Program the edge-detection mode for one channel. |
+| WKU_DRV_ClearPinWakeupFlag()         | Acknowledge the wakeup flag of one channel. |
+
+@subsection wku_api_reset Reset Wakeup Control
+| Function                             | Description |
+|--------------------------------------|-------------|
+| WKU_DRV_InitReset()                  | Configure reset-pin wakeup behavior. |
+| WKU_DRV_DeinitReset()                | Clear reset-pin wakeup settings. |
+| WKU_DRV_GetResetDefaultConfig()      | Populate the default reset-pin wakeup configuration. |
+
+@subsection wku_api_module Internal Module Wakeup Control
+| Function                             | Description |
+|--------------------------------------|-------------|
+| WKU_DRV_EnableModuleWakeup()         | Enable a selected internal module wakeup source. |
+| WKU_DRV_DisableModuleWakeup()        | Disable a selected internal module wakeup source. |
+
+@subsection wku_api_hw Internal HW Access Helpers
+| Function                             | Description |
+|--------------------------------------|-------------|
+| WKU_ClearPinWakeupFlag()             | Clear the flag bit for one pin wakeup channel. |
+| WKU_SetWakeueEdgeEvent()             | Program the edge-selection bits for one channel. |
+| WKU_EnableFilter()                   | Enable or bypass channel filtering. |
+| WKU_EnablePinInterrupt()             | Enable or disable the pin interrupt path. |
+| WKU_EnableResetPin()                 | Enable or disable reset-pin wakeup requests. |
+| WKU_EnableResetPinFilter()           | Enable or disable reset-pin digital filtering. |
+| WKU_SetResetPinFilterClock()         | Select the shared WKU filter clock source. |
+| WKU_EnableModuleWakeup()             | Set or clear an internal module wakeup enable bit. |
+
+@section wku_notes Important Notes
+
+@subsection wku_notes_power Low-Power Flow Dependency
+Configure the WKU module as part of the system's low-power entry and exit flow.
+Clocking and wakeup sequencing are coordinated with @ref clock_manager and
+@ref power_manager.
+
+@subsection wku_notes_defaults Default Configuration Caveat
+@warning WKU_DRV_GetPinWakeupDefaultConfig() initializes `hwChannel`,
+`edgeEvent`, `filterEn`, and `filterClkSrc` (when supported), but it does
+not initialize `wakeupEn`. The application must set that field explicitly
+before reusing the configuration entry.
+
+@subsection wku_notes_channels Device Variations
+The number of external pin wakeup channels is not fixed across devices.
+Always size channel-related logic around `FEATURE_WKU_MAX_CHANNEL_COUNT`.
+
+@subsection wku_notes_filter Shared Filter Clock
+@note The filter clock source is configured through a shared WKU register field.
+Changing the filter clock affects the filtering logic used by WKU wakeup paths
+that rely on that shared setting.
+
+@subsection wku_notes_isolation Pin Isolation
+@warning If pin isolation is enabled before entering power-down mode, disable
+it after the MCU reinitializes its pin configuration on wakeup. Leaving pad
+isolation enabled can prevent the application from restoring normal pin behavior.
+
+@section wku_integration Integration Guide
+
+@subsection wku_integration_files Compilation Units
+The following source file must be added to the project build:
+@verbatim
+${SDK_PATH}/platform/drivers/src/wku/wku_driver.c
+@endverbatim
+
+The low-level helper layer is header-only and is pulled in through:
+@verbatim
+${SDK_PATH}/platform/drivers/src/wku/wku_hw_access.h
+@endverbatim
+
+@subsection wku_integration_include Include Paths
+Add the following directory to the toolchain include path:
+@verbatim
+${SDK_PATH}/platform/drivers/inc/
+@endverbatim
+
+@subsection wku_integration_symbols Compile Symbols
+No special compile-time symbols are required for this module. Device feature
+macros such as `FEATURE_WKU_*` are supplied by the selected device header.
+
+@subsection wku_integration_deps Dependencies
+- @ref clock_manager - Required for clock and wakeup sequencing setup.
+- @ref power_manager - Required for low-power entry and recovery integration.
+
 */

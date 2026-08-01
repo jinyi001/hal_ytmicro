@@ -39,6 +39,11 @@ void VectorTableCopy(){
 
 void DefaultISR(void)
 {
+{{#isTruthy this.data.enableHFReset}}
+#ifndef YTM32_DEVELOPMENT_MODE
+   SystemSoftwareReset();
+#endif /* YTM32_DEVELOPMENT_MODE */
+{{/isTruthy}}
    while(1){};
 }
 

@@ -8,6 +8,13 @@
 /*!
  * @file ewdg_hw_access.h
  * @version 1.4.1
+ *
+ * @brief EWDG HW Access Layer — inline register-level helper functions.
+ *
+ * This internal header provides static-inline helpers for direct access to the
+ * EWDG peripheral registers. These helpers are used by the driver layer to
+ * refresh the watchdog, program the startup window, query enable state, and
+ * restore reset-like values.
  */
 
 #ifndef EWDG_HW_ACCESS_H
@@ -29,12 +36,13 @@ extern "C" {
 #endif
 
 /*!
- * @brief Refresh EWDG
+ * @brief Refresh the EWDG counter.
  *
- * This method needs to be called within the window period
- * specified by the Compare Low and Compare High registers
+ * This helper writes the two-key watchdog service sequence. It must be called
+ * while the counter is inside the valid refresh window defined by the compare
+ * registers.
  *
- * @param[in] base EWDG base pointer
+ * @param[in] base  EWDG base pointer.
  */
 static inline void EWDG_Refresh(EWDG_Type * const base)
 {
@@ -45,12 +53,10 @@ static inline void EWDG_Refresh(EWDG_Type * const base)
 }
 
 /*!
- * @brief Get the EWDG enable bit.
+ * @brief Read the EWDG enable bit.
  *
- * @param[in] base EWDG base pointer
- * @return The state of the device enable bit:
- *      -   false - EWDG disabled
- *      -   true  - EWDG enabled
+ * @param[in] base  EWDG base pointer.
+ * @return `true` when EWDG is enabled, or `false` otherwise.
  */
 static inline bool EWDG_IsEnabled(const EWDG_Type * base)
 {
@@ -58,12 +64,12 @@ static inline bool EWDG_IsEnabled(const EWDG_Type * base)
 }
 
 /*!
- * @brief Set the Control Value.
+ * @brief Write the EWDG control register.
  *
- * This register can be only written once after a CPU reset.
+ * This register can be written only once after a CPU reset.
  *
- * @param[in] base  EWDG base pointer
- * @param[in] value Value to write into Control register
+ * @param[in] base   EWDG base pointer.
+ * @param[in] value  Control-register value to write.
  */
 static inline void EWDG_SetControl(EWDG_Type * const base, uint32_t value)
 {
@@ -71,10 +77,10 @@ static inline void EWDG_SetControl(EWDG_Type * const base, uint32_t value)
 }
 
 /*!
- * @brief Get the Control register Value.
+ * @brief Read the EWDG control register.
  *
- * @param[in] base EWDG base pointer
- * @return Value stored in Control register
+ * @param[in] base  EWDG base pointer.
+ * @return Raw control-register value.
  */
 static inline uint32_t EWDG_GetControl(const EWDG_Type * base)
 {
@@ -82,13 +88,14 @@ static inline uint32_t EWDG_GetControl(const EWDG_Type * base)
 }
 
 /*!
- * @brief Set the Compare Low Value.
+ * @brief Write the lower refresh-window boundary.
  *
- * This register can be only written once after a CPU reset.
- * The user must make sure that the Compare High is greater than Compare Low value
+ * This register can be written only once after a CPU reset. The caller must
+ * ensure that the programmed compare-high value remains greater than
+ * compare-low.
  *
- * @param[in] base  EWDG base pointer
- * @param[in] value Value to write into Compare Low register
+ * @param[in] base   EWDG base pointer.
+ * @param[in] value  Compare-low value to write.
  */
 static inline void EWDG_SetCompareLow(EWDG_Type * const base, uint16_t value)
 {
@@ -97,14 +104,14 @@ static inline void EWDG_SetCompareLow(EWDG_Type * const base, uint16_t value)
 
 
 /*!
- * @brief Set the Compare High Value.
+ * @brief Write the upper refresh-window boundary.
  *
- * This register can be only written once after a CPU reset.
- * The user must make sure that the Compare High is greater than Compare Low value
- * Note: The maximum Compare High value is 0xFE
+ * This register can be written only once after a CPU reset. The caller must
+ * ensure that compare-high is greater than compare-low. The maximum supported
+ * compare-high value is device-dependent and validated by the driver layer.
  *
- * @param[in] base  EWDG base pointer
- * @param[in] value Value to write into Compare High register
+ * @param[in] base   EWDG base pointer.
+ * @param[in] value  Compare-high value to write.
  */
 static inline void EWDG_SetCompareHigh(EWDG_Type * const base, uint16_t value)
 {
@@ -113,13 +120,13 @@ static inline void EWDG_SetCompareHigh(EWDG_Type * const base, uint16_t value)
 
 
 /*!
- * @brief Set the Clock Prescaler Value.
+ * @brief Program the EWDG clock prescaler.
  *
- * This register can be only written once after a CPU reset and
- * it must be written before enabling the EWDG
+ * This register can be written only once after a CPU reset and must be
+ * programmed before enabling the module.
  *
- * @param[in] base  EWDG base pointer
- * @param[in] value Prescaler Value
+ * @param[in] base   EWDG base pointer.
+ * @param[in] value  Prescaler value.
  */
 static inline void EWDG_SetPrescaler(EWDG_Type * const base, uint8_t value)
 {
@@ -129,15 +136,14 @@ static inline void EWDG_SetPrescaler(EWDG_Type * const base, uint8_t value)
 
 #if defined(EWDG_CLK_CTRL_CLKSEL_MASK)
 /*!
- * @brief Set the Clock Source
+ * @brief Program the EWDG clock source.
  *
- * This register can be only written once after a CPU reset and
- * it must be written before enabling the EWDG
+ * This register can be written only once after a CPU reset and must be
+ * programmed before enabling the module.
  *
- * @param[in] base  EWDG base pointer
- * @param[in] value Clock Source
+ * @param[in] base   EWDG base pointer.
+ * @param[in] value  Clock-source selector value.
  */
-
 static inline void EWDG_SetClockSource(EWDG_Type * const base, uint8_t value)
 {
     base->CLK_CTRL &= ~(EWDG_CLK_CTRL_CLKSEL_MASK);
@@ -146,12 +152,12 @@ static inline void EWDG_SetClockSource(EWDG_Type * const base, uint8_t value)
 #endif
 
 /*!
- * @brief DeInit the EWDG.
+ * @brief Restore the EWDG register block to reset-like values.
  *
- * This function is the deinit ewdg module, 
- * and the value of each register is the same as the value of the chip reset.
+ * This helper clears the control and clock configuration, restores the compare
+ * registers to their reset defaults, and refreshes the watchdog counter.
  *
- * @param[in] base  EWDG base pointer
+ * @param[in] base  EWDG base pointer.
  */
 static inline void  EWDG_DeInit(EWDG_Type * const base)
 {

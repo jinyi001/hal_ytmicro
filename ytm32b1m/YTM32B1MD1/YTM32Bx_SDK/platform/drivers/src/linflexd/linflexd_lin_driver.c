@@ -7,7 +7,7 @@
 
 /*!
  * @file linflexd_lin_driver.c
- * @version 1.4.1
+ * @brief LINFlexD LIN driver implementation.
  */
 
 /*!
@@ -43,12 +43,7 @@ static LINFlexD_Type * const s_LINFlexDBase[LINFlexD_INSTANCE_COUNT] = LINFlexD_
 
 static const clock_names_t s_LINFlexDClkName[LINFlexD_INSTANCE_COUNT] = LINFlexD_CLOCK_NAMES;
 
-#if (FEATURE_LINFlexD_RX_TX_ERR_INT_LINES)
-/*! @brief Tables to save LINFlexD IRQ vectors defined in the header file */
-static const IRQn_Type s_LINFlexDRxIntVec[LINFlexD_INSTANCE_COUNT] = LINFlexD_RX_IRQS;
-static const IRQn_Type s_LINFlexDTxIntVec[LINFlexD_INSTANCE_COUNT] = LINFlexD_TX_IRQS;
-static const IRQn_Type s_LINFlexDErrIntVec[LINFlexD_INSTANCE_COUNT] = LINFlexD_ERR_IRQS;
-#elif (FEATURE_LINFlexD_ORED_INT_LINES)
+#if defined(FEATURE_LINFlexD_ORED_INT_LINES) && (FEATURE_LINFlexD_ORED_INT_LINES == 1U)
 /*! @brief Table to save LINFlexD IRQ vectors defined in the header file */
 static const IRQn_Type s_LINFlexDIntVec[LINFlexD_INSTANCE_COUNT] = LINFlexD_IRQS;
 #endif
@@ -60,27 +55,9 @@ static const IRQn_Type s_LINFlexDIntVec[LINFlexD_INSTANCE_COUNT] = LINFlexD_IRQS
 /*******************************************************************************
  * Code
  ******************************************************************************/
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_DRV_Init
- * Description   : This function initializes a LIN Hardware Interface for operation.
- * This function will initialize the run-time state structure to keep track of
- * the on-going transfers, ungate the clock to LIN Hardware Interface, initialize the
- * module to user defined settings and default settings, configure the IRQ state
- * structure and enable the module-level interrupt to the core, and enable the
- * LIN Hardware Interface transmitter and receiver.
- * The following is an example of how to set up the linflexd_state_t and the
- * linflexd_user_config_t parameters and how to call the LINFlexD_DRV_Init function
- * by passing in these parameters:
- *    linflexd_user_config_t linUserConfig
- *    linUserConfig.baudRate = 9600
- *    linUserConfig.nodeFunction = SLAVE
- *    linUserConfig.autobaudEnable = true
- *    linflexd_state_t linState
- *    LINFlexD_DRV_Init(instance, (linflexd_user_config_t *) &linUserConfig, (linflexd_state_t *) &linState)
- *
- * Implements    : LINFlexD_DRV_Init_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function initializes a LIN Hardware Interface for operation. This function will initialize the run-time state structure to keep track of the on-going transfers, ungate the clock to LIN Hardware Interface, initialize the module to user defined settings and default settings, configure the IRQ state structure and enable the module-level interrupt to the core, and enable the LIN Hardware Interface transmitter and receiver. The following is an example of how to set up the linflexd_state_t and the linflexd_user_config_t parameters and how to call the LINFlexD_DRV_Init function by passing in these parameters: linflexd_user_config_t linUserConfig linUserConfig.baudRate = 9600 linUserConfig.nodeFunction = SLAVE linUserConfig.autobaudEnable = true linflexd_state_t linState LINFlexD_DRV_Init(instance, (linflexd_user_config_t *) &linUserConfig, (linflexd_state_t *) &linState).
+ */
 status_t LINFlexD_DRV_Init(uint32_t instance,
                       linflexd_user_config_t * linUserConfig,
                       linflexd_state_t * linCurrentState)
@@ -155,20 +132,12 @@ status_t LINFlexD_DRV_Init(uint32_t instance,
         /* Default disable call back */
         linCurrentState->Callback = NULL;
         /* Install handlers */
-#if (FEATURE_LINFlexD_RX_TX_ERR_INT_LINES)
-        INT_SYS_InstallHandler(s_LINFlexDRxIntVec[instance], g_LINFlexDRxIsr[instance], (isr_t*) 0);
-        INT_SYS_InstallHandler(s_LINFlexDTxIntVec[instance], g_LINFlexDTxIsr[instance], (isr_t*) 0);
-        INT_SYS_InstallHandler(s_LINFlexDErrIntVec[instance], g_LINFlexDErrIsr[instance], (isr_t*) 0);
-#elif (FEATURE_LINFlexD_ORED_INT_LINES)
+#if defined(FEATURE_LINFlexD_ORED_INT_LINES) && (FEATURE_LINFlexD_ORED_INT_LINES == 1U)
         INT_SYS_InstallHandler(s_LINFlexDIntVec[instance], g_LinLINFlexDIsr[instance], (isr_t*) 0);
 #endif
 
         /* Enable LINFlexD interrupts */
-#if (FEATURE_LINFlexD_RX_TX_ERR_INT_LINES)
-        INT_SYS_EnableIRQ(s_LINFlexDRxIntVec[instance]);
-        INT_SYS_EnableIRQ(s_LINFlexDTxIntVec[instance]);
-        INT_SYS_EnableIRQ(s_LINFlexDErrIntVec[instance]);
-#elif (FEATURE_LINFlexD_ORED_INT_LINES)
+#if defined(FEATURE_LINFlexD_ORED_INT_LINES) && (FEATURE_LINFlexD_ORED_INT_LINES == 1U)
         INT_SYS_EnableIRQ(s_LINFlexDIntVec[instance]);
 #endif
         LINFlexD_EnterNormalMode(base);
@@ -177,14 +146,9 @@ status_t LINFlexD_DRV_Init(uint32_t instance,
     return retVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_DRV_Deinit
- * Description   : This function shuts down the LIN Hardware Interface by disabling interrupts and
- *                 transmitter/receiver.
- *
- * Implements    : LINFlexD_DRV_Deinit_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function shuts down the LIN Hardware Interface by disabling interrupts and transmitter/receiver.
+ */
 void LINFlexD_DRV_Deinit(uint32_t instance)
 {
     /* Assert parameters. */
@@ -203,11 +167,7 @@ void LINFlexD_DRV_Deinit(uint32_t instance)
     (void)OSIF_SemaDestroy(&linCurrentState->completed);
 
     /* Disable LINFlexD interrupts */
-#if (FEATURE_LINFlexD_RX_TX_ERR_INT_LINES)
-    INT_SYS_DisableIRQ(s_LINFlexDRxIntVec[instance]);
-    INT_SYS_DisableIRQ(s_LINFlexDTxIntVec[instance]);
-    INT_SYS_DisableIRQ(s_LINFlexDErrIntVec[instance]);
-#elif (FEATURE_LINFlexD_ORED_INT_LINES)
+#if defined(FEATURE_LINFlexD_ORED_INT_LINES) && (FEATURE_LINFlexD_ORED_INT_LINES == 1U)
     INT_SYS_DisableIRQ(s_LINFlexDIntVec[instance]);
 #endif
     /* Enter init mode */
@@ -219,13 +179,9 @@ void LINFlexD_DRV_Deinit(uint32_t instance)
     /* Clear our saved pointer to the LIN state structure */
     s_LINFlexDStatePtr[instance] = NULL;
 }
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_UART_DRV_SetBaudRate
- * Description   : This function sets the baud rate for UART communication.
- *
- * Implements    : LINFlexD_UART_DRV_SetBaudRate_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function sets the baud rate for UART communication.
+ */
 status_t LINFlexD_DRV_SetBaudRate(uint32_t instance, uint32_t baudrate)
 {
     DEV_ASSERT(instance < LINFlexD_INSTANCE_COUNT);
@@ -280,14 +236,9 @@ status_t LINFlexD_DRV_SetBaudRate(uint32_t instance, uint32_t baudrate)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_DRV_GetDefaultConfig
- * Description   : This function initializes a configuration structure received
- * from the application with default values.
- *
- * Implements    : LINFlexD_DRV_GetDefaultConfig_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function initializes a configuration structure received from the application with default values.
+ */
 void LINFlexD_DRV_GetDefaultConfig(bool isMaster,
                               linflexd_user_config_t * linUserConfig)
 {
@@ -297,14 +248,9 @@ void LINFlexD_DRV_GetDefaultConfig(bool isMaster,
 
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_DRV_InstallCallback
- * Description   : This function installs the callback function that is used for LINFlexD_DRV_IRQHandler.
- * Pass in Null pointer as callback will uninstall.
- *
- * Implements    : LINFlexD_DRV_InstallCallback_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function installs the callback function that is used for LINFlexD_DRV_IRQHandler. Pass in Null pointer as callback will uninstall.
+ */
 linflexd_callback_t LINFlexD_DRV_InstallCallback(uint32_t instance,
                                        linflexd_callback_t function)
 {
@@ -322,17 +268,9 @@ linflexd_callback_t LINFlexD_DRV_InstallCallback(uint32_t instance,
 
     return currentCallback;
 }
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_DRV_MasterTransferBlocking
- * Description   : This function sends frame through the LIN Hardware Interface using
- * non-blocking method. This function will calculate the checksum byte and send it with the
- * frame data. The function will return immediately after calling this function. If data size
- * is equal to 0 or greater than 8 then the function will return STATUS_ERROR. If isBusBusy is
- * currently true then the function will return STATUS_BUSY.
- *
- * Implements    : LIN_DRV_SendFrame_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function sends frame through the LIN Hardware Interface using blocking method. This function will calculate the checksum byte and send it with the frame data. If data size is equal to 0 or greater than 8 then the function will return STATUS_ERROR. If isBusBusy is currently true then the function will return STATUS_BUSY.
+ */
 status_t LINFlexD_DRV_MasterTransferBlocking(uint32_t instance, linflexd_frame_t *frame, uint32_t timeoutMSec)
 {
     linflexd_state_t * linState;
@@ -354,17 +292,9 @@ status_t LINFlexD_DRV_MasterTransferBlocking(uint32_t instance, linflexd_frame_t
     linState->isBlocking = false;
     return status;
 }
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_DRV_MasterTransfer
- * Description   : This function sends frame through the LIN Hardware Interface using
- * non-blocking method. This function will calculate the checksum byte and send it with the
- * frame data. The function will return immediately after calling this function. If data size
- * is equal to 0 or greater than 8 then the function will return STATUS_ERROR. If isBusBusy is
- * currently true then the function will return STATUS_BUSY.
- *
- * Implements    : LIN_DRV_SendFrame_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function sends frame through the LIN Hardware Interface using non-blocking method. This function will calculate the checksum byte and send it with the frame data. The function will return immediately after calling this function. If data size is equal to 0 or greater than 8 then the function will return STATUS_ERROR. If isBusBusy is currently true then the function will return STATUS_BUSY.
+ */
 status_t LINFlexD_DRV_MasterTransfer(uint32_t instance, linflexd_frame_t *frame)
 {
     /* Assert parameters. */
@@ -424,17 +354,9 @@ status_t LINFlexD_DRV_MasterTransfer(uint32_t instance, linflexd_frame_t *frame)
     return retVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LIN_DRV_SlaveResponse
- * Description   : This function sends out slave data through the LIN Hardware Interface
- * non-blocking method. This function will calculate the checksum byte and send it with the
- * frame data. The function will return immediately after calling this function. If data size
- * is equal to 0 or greater than 8 then the function will return STATUS_ERROR. If isBusBusy is
- * currently true then the function will return STATUS_BUSY.
- *
- * Implements    : LIN_DRV_SendFrame_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function sends out slave data through the LIN Hardware Interface non-blocking method. This function will calculate the checksum byte and send it with the frame data. The function will return immediately after calling this function. If data size is equal to 0 or greater than 8 then the function will return STATUS_ERROR. If isBusBusy is currently true then the function will return STATUS_BUSY.
+ */
 status_t LINFlexD_DRV_SlaveResponse(uint32_t instance, linflexd_frame_t *frame)
 {
     /* Assert parameters. */
@@ -479,14 +401,9 @@ status_t LINFlexD_DRV_SlaveResponse(uint32_t instance, linflexd_frame_t *frame)
     return retVal;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_DRV_DataDiscard
- * Description   : Stop data reception if the frame does not concern the node.
- * Call it after receive header, used in LIN slave mode with id software-filtered.
- *
- * Implements    : LINFlexD_DRV_DataDiscard_Activity
- *END**************************************************************************/
+/*!
+ * @brief Stop data reception if the frame does not concern the node. Call it after receive header, used in LIN slave mode with id software-filtered.
+ */
 status_t LINFlexD_DRV_DataDiscard(uint32_t instance)
 {
     /* Assert parameters. */
@@ -500,15 +417,9 @@ status_t LINFlexD_DRV_DataDiscard(uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_DRV_AbortTransferData
- * Description   : Aborts an ongoing non-blocking transmission/reception.
- * While performing a non-blocking transferring data, users can call this
- * function to terminate immediately the transferring.
- *
- * Implements    : LINFlexD_DRV_AbortTransferData_Activity
- *END**************************************************************************/
+/*!
+ * @brief Aborts an ongoing non-blocking transmission/reception. While performing a non-blocking transferring data, users can call this function to terminate immediately the transferring.
+ */
 status_t LINFlexD_DRV_AbortTransferData(uint32_t instance)
 {
     /* Assert parameters. */
@@ -531,14 +442,9 @@ status_t LINFlexD_DRV_AbortTransferData(uint32_t instance)
 }
 
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_DRV_GoToSleepMode
- * Description   : This function puts current LIN node to sleep mode.
- * This function changes current node state to LINFlexD_NODE_STATE_SLEEP_MODE.
- *
- * Implements    : LINFlexD_DRV_GoToSleepMode_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function puts current LIN node to sleep mode. This function changes current node state to LINFlexD_NODE_STATE_SLEEP_MODE.
+ */
 status_t LINFlexD_DRV_GoToSleepMode(uint32_t instance)
 {
     /* Assert parameters. */
@@ -564,13 +470,9 @@ status_t LINFlexD_DRV_GoToSleepMode(uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_DRV_GotoIdleState
- * Description   : This function puts current node to Idle state.
- *
- * Implements    : LINFlexD_DRV_GoToIdleState_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function puts current node to Idle state.
+ */
 status_t LINFlexD_DRV_GotoIdleState(uint32_t instance)
 {
     /* Assert parameters. */
@@ -585,13 +487,9 @@ status_t LINFlexD_DRV_GotoIdleState(uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_DRV_SendWakeupSignal
- * Description   : This function sends a wakeup signal through the LIN interface.
- *
- * Implements    : LINFlexD_DRV_SendWakeupSignal_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function sends a wakeup signal through the LIN interface.
+ */
 status_t LINFlexD_DRV_SendWakeupSignal(uint32_t instance)
 {
     /* Assert parameters. */
@@ -604,13 +502,9 @@ status_t LINFlexD_DRV_SendWakeupSignal(uint32_t instance)
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_DRV_GetCurrentNodeState
- * Description   : This function gets the current LIN node state.
- *
- * Implements    : LINFlexD_DRV_GetCurrentNodeState_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function gets the current LIN node state.
+ */
 linflexd_node_state_t LINFlexD_DRV_GetCurrentNodeState(uint32_t instance)
 {
     /* Assert parameters. */
@@ -621,60 +515,38 @@ linflexd_node_state_t LINFlexD_DRV_GetCurrentNodeState(uint32_t instance)
     return (linflexd_node_state_t)LINFlexD_GetLinState(base); /*PRQA S 4322*/
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_DRV_EnableIRQ
- * Description   : This function enables LIN hardware interrupts.
- *
- * Implements    : LINFlexD_DRV_EnableIRQ_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function enables LIN hardware interrupts.
+ */
 status_t LINFlexD_DRV_EnableIRQ(uint32_t instance)
 {
     /* Assert parameters. */
     DEV_ASSERT(instance < LINFlexD_INSTANCE_COUNT);
     /* Enable LINFlexD interrupts */
-#if (FEATURE_LINFlexD_RX_TX_ERR_INT_LINES)
-    INT_SYS_EnableIRQ(s_LINFlexDRxIntVec[instance]);
-    INT_SYS_EnableIRQ(s_LINFlexDTxIntVec[instance]);
-    INT_SYS_EnableIRQ(s_LINFlexDErrIntVec[instance]);
-#elif (FEATURE_LINFlexD_ORED_INT_LINES)
+#if defined(FEATURE_LINFlexD_ORED_INT_LINES) && (FEATURE_LINFlexD_ORED_INT_LINES == 1U)
     INT_SYS_EnableIRQ(s_LINFlexDIntVec[instance]);
 #endif
 
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_DRV_DisableIRQ
- * Description   : This function disables LIN hardware interrupts.
- *
- * Implements    : LINFlexD_DRV_DisableIRQ_Activity
- *END**************************************************************************/
+/*!
+ * @brief This function disables LIN hardware interrupts.
+ */
 status_t LINFlexD_DRV_DisableIRQ(uint32_t instance)
 {
     /* Assert parameters. */
     DEV_ASSERT(instance < LINFlexD_INSTANCE_COUNT);
     /* Disable LINFlexD interrupts */
-#if (FEATURE_LINFlexD_RX_TX_ERR_INT_LINES)
-    INT_SYS_DisableIRQ(s_LINFlexDRxIntVec[instance]);
-    INT_SYS_DisableIRQ(s_LINFlexDTxIntVec[instance]);
-    INT_SYS_DisableIRQ(s_LINFlexDErrIntVec[instance]);
-#elif (FEATURE_LINFlexD_ORED_INT_LINES)
+#if defined(FEATURE_LINFlexD_ORED_INT_LINES) && (FEATURE_LINFlexD_ORED_INT_LINES == 1U)
     INT_SYS_DisableIRQ(s_LINFlexDIntVec[instance]);
 #endif
     return STATUS_SUCCESS;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_DRV_IRQHandler
- * Description   : Interrupt handler for LIN Hardware Interface.
- * This is not a public API as it is called by IRQ whenever an interrupt
- * occurs.
- *
- * Implements    : LINFlexD_DRV_IRQHandler_Activity
- *END**************************************************************************/
+/*!
+ * @brief Interrupt handler for LIN Hardware Interface.
+ */
 void LINFlexD_LIN_DRV_IRQHandler(uint32_t instance)
 {
     const LINFlexD_Type * base;
@@ -707,15 +579,9 @@ void LINFlexD_LIN_DRV_IRQHandler(uint32_t instance)
     LINFlexD_LIN_DRV_ErrIRQHandler(instance);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_LIN_DRV_RxIRQHandler
- * Description   : Rx interrupt handler for LIN.
- * This handler uses the rx buffer stored in the state structure to receive
- * data. This is not a public API as it is called by IRQ whenever an interrupt
- * occurs.
- *
- *END**************************************************************************/
+/*!
+ * @brief Rx interrupt handler for LIN. This handler uses the rx buffer stored in the state structure to receive data. This is not a public API as it is called by IRQ whenever an interrupt occurs.
+ */
 void LINFlexD_LIN_DRV_RxIRQHandler(uint32_t instance)
 {
     linflexd_state_t * linState;
@@ -801,15 +667,9 @@ void LINFlexD_LIN_DRV_RxIRQHandler(uint32_t instance)
     }
 #endif /* FEATURE_LINFlexD_HAS_RED_IRQ */
 }
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_LIN_DRV_TxIRQHandler
- * Description   : Tx interrupt handler for LIN.
- * This handler uses the tx buffer stored in the state structure to transmit
- * data. This is not a public API as it is called by IRQ whenever an interrupt
- * occurs.
- *
- *END**************************************************************************/
+/*!
+ * @brief Tx interrupt handler for LIN. This handler uses the tx buffer stored in the state structure to transmit data. This is not a public API as it is called by IRQ whenever an interrupt occurs.
+ */
 void LINFlexD_LIN_DRV_TxIRQHandler(uint32_t instance)
 {
     linflexd_state_t * linState;
@@ -837,15 +697,9 @@ void LINFlexD_LIN_DRV_TxIRQHandler(uint32_t instance)
     LINFlexD_ClearLinStatusFlag(base, LINFlexD_LIN_DATA_TRANSMITTED_FLAG);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_LIN_DRV_ErrIRQHandler
- * Description   : Rx interrupt handler for LIN.
- * This handler uses the rx buffer stored in the state structure to receive
- * data. This is not a public API as it is called by IRQ whenever an interrupt
- * occurs.
- *
- *END**************************************************************************/
+/*!
+ * @brief Rx interrupt handler for LIN. This handler uses the rx buffer stored in the state structure to receive data. This is not a public API as it is called by IRQ whenever an interrupt occurs.
+ */
 void LINFlexD_LIN_DRV_ErrIRQHandler(uint32_t instance)
 {
     linflexd_state_t * linState;
@@ -864,41 +718,52 @@ void LINFlexD_LIN_DRV_ErrIRQHandler(uint32_t instance)
         if (LINFlexD_GetLinErrorStatusFlag(base, LINFlexD_LIN_OUTPUT_COMPARE_FLAG))
         {
             linState->currentEventId = LINFlexD_OUTPUT_COMPARE_EVENT;
-            base->LINESR |= (uint32_t)LINFlexD_LIN_OUTPUT_COMPARE_FLAG;
-        }else if(LINFlexD_GetLinErrorStatusFlag(base, LINFlexD_LIN_BUFFER_OVERRUN_FLAG))
+            base->LINESR = (uint32_t)LINFlexD_LIN_OUTPUT_COMPARE_FLAG;
+        }
+        if (LINFlexD_GetLinErrorStatusFlag(base, LINFlexD_LIN_BUFFER_OVERRUN_FLAG))
         {
-            linState->currentEventId = LINFlexD_CHECKSUM_ERROR_EVENT;
-            base->LINESR |= (uint32_t)LINFlexD_LIN_BUFFER_OVERRUN_FLAG;
-        }else if(LINFlexD_GetLinErrorStatusFlag(base, LINFlexD_LIN_FRAMING_ERROR_FLAG))
+            linState->currentEventId = LINFlexD_RX_OVERRUN_ERROR_EVENT;
+            base->LINESR = (uint32_t)LINFlexD_LIN_BUFFER_OVERRUN_FLAG;
+        }
+        if (LINFlexD_GetLinErrorStatusFlag(base, LINFlexD_LIN_FRAMING_ERROR_FLAG))
         {
             linState->currentEventId = LINFlexD_FRAME_ERROR_EVENT;
-            base->LINESR |= (uint32_t)LINFlexD_LIN_FRAMING_ERROR_FLAG;
-        }else if(LINFlexD_GetLinErrorStatusFlag(base, LINFlexD_LIN_ID_PARITY_ERROR_FLAG))
+            base->LINESR = (uint32_t)LINFlexD_LIN_FRAMING_ERROR_FLAG;
+        }
+        if (LINFlexD_GetLinErrorStatusFlag(base, LINFlexD_LIN_ID_PARITY_ERROR_FLAG))
         {
             linState->currentEventId = LINFlexD_PID_PARITY_ERROR_EVENT;
-            base->LINESR |= (uint32_t)LINFlexD_LIN_ID_PARITY_ERROR_FLAG;
-        }else if(LINFlexD_GetLinErrorStatusFlag(base, LINFlexD_LIN_BREAK_DELIMITER_ERROR_FLAG))
+            base->LINESR = (uint32_t)LINFlexD_LIN_ID_PARITY_ERROR_FLAG;
+        }
+        if (LINFlexD_GetLinErrorStatusFlag(base, LINFlexD_LIN_BREAK_DELIMITER_ERROR_FLAG))
         {
             linState->currentEventId = LINFlexD_BREAK_DELIMITER_ERROR_EVENT;
-            base->LINESR |= (uint32_t)LINFlexD_LIN_BREAK_DELIMITER_ERROR_FLAG;
-        }else if(LINFlexD_GetLinErrorStatusFlag(base, LINFlexD_LIN_SYNC_FIELD_ERROR_FLAG))
+            base->LINESR = (uint32_t)LINFlexD_LIN_BREAK_DELIMITER_ERROR_FLAG;
+        }
+        if (LINFlexD_GetLinErrorStatusFlag(base, LINFlexD_LIN_SYNC_FIELD_ERROR_FLAG))
         {
             linState->currentEventId = LINFlexD_SYNC_ERROR_EVENT;
-            base->LINESR |= (uint32_t)LINFlexD_LIN_SYNC_FIELD_ERROR_FLAG;
-        }else if(LINFlexD_GetLinErrorStatusFlag(base, LINFlexD_LIN_CHECKSUM_ERROR_FLAG))
+            base->LINESR = (uint32_t)LINFlexD_LIN_SYNC_FIELD_ERROR_FLAG;
+        }
+        if (LINFlexD_GetLinErrorStatusFlag(base, LINFlexD_LIN_CHECKSUM_ERROR_FLAG))
         {
             linState->currentEventId = LINFlexD_CHECKSUM_ERROR_EVENT;
-            base->LINESR |= (uint32_t)LINFlexD_LIN_CHECKSUM_ERROR_FLAG;
-        }else if(LINFlexD_GetLinErrorStatusFlag(base, LINFlexD_LIN_BIT_ERROR_FLAG))
+            base->LINESR = (uint32_t)LINFlexD_LIN_CHECKSUM_ERROR_FLAG;
+        }
+        if (LINFlexD_GetLinErrorStatusFlag(base, LINFlexD_LIN_BIT_ERROR_FLAG))
         {
             linState->currentEventId = LINFlexD_BIT_ERROR_EVENT;
-            base->LINESR |= (uint32_t)LINFlexD_LIN_BIT_ERROR_FLAG;
-        }else if(LINFlexD_GetLinErrorStatusFlag(base, LINFlexD_LIN_STUCK_AT_ZERO_FLAG))
+            base->LINESR = (uint32_t)LINFlexD_LIN_BIT_ERROR_FLAG;
+        }
+        if (LINFlexD_GetLinErrorStatusFlag(base, LINFlexD_LIN_STUCK_AT_ZERO_FLAG))
         {
             linState->currentEventId = LINFlexD_STUCK_ZERO_ERROR_EVENT;
-            base->LINESR |= (uint32_t)LINFlexD_LIN_STUCK_AT_ZERO_FLAG;
-        }else {
-            /* No error event */
+            base->LINESR = (uint32_t)LINFlexD_LIN_STUCK_AT_ZERO_FLAG;
+        }
+        if (LINFlexD_GetLinErrorStatusFlag(base, LINFlexD_LIN_NOISE_FLAG))
+        {
+            linState->currentEventId = LINFlexD_NOISE_ERROR_EVENT;
+            base->LINESR = (uint32_t)LINFlexD_LIN_NOISE_FLAG;
         }
 
         if (NULL != linState->Callback)
@@ -908,13 +773,9 @@ void LINFlexD_LIN_DRV_ErrIRQHandler(uint32_t instance)
     }
 }
 
-/*FUNCTION**********************************************************************
- * 
- * Function Name : LINFlexD_LIN_DRV_FilterResponse
- * Description   : Handle ID filter for LIN.
- * This function is used when ID Filter enable and auto sending or receving.
- * 
- *END**************************************************************************/
+/*!
+ * @brief Handle ID filter for LIN. This function is used when ID Filter enable and auto sending or receving.
+ */
 void LINFlexD_LIN_DRV_FilterResponse(uint32_t instance, linflexd_direction_t direction)
 {
     uint8_t index;
@@ -957,13 +818,9 @@ void LINFlexD_LIN_DRV_FilterResponse(uint32_t instance, linflexd_direction_t dir
     }
 }
 
-/*FUNCTION**********************************************************************
- * 
- * Function Name : LINFlexD_GetFilterMatchId
- * Description   : Get current match ID.
- * This function is used when ID Filter enable and ID getting.
- * 
- *END**************************************************************************/
+/*!
+ * @brief Get current match ID. This function is used when ID Filter enable and ID getting.
+ */
 uint8_t LINFlexD_GetFilterMatchId(uint32_t instance)
 {
     uint8_t index;
@@ -977,13 +834,9 @@ uint8_t LINFlexD_GetFilterMatchId(uint32_t instance)
     return (linUserConfig->slaveFilterCfgPtr[index-1U].id);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_DRV_GetChecksumType
- * Description   : Check if frame use classic checksum.
- *
- * Implements    : LINFlexD_DRV_GetChecksumType_Activity
- *END**************************************************************************/
+/*!
+ * @brief Check if frame use classic checksum.
+ */
 linflexd_cs_t LINFlexD_DRV_GetChecksumType(uint32_t instance, uint8_t ID)
 {
     /* Get list of PIDs use classic checksum. */
@@ -1021,29 +874,18 @@ linflexd_cs_t LINFlexD_DRV_GetChecksumType(uint32_t instance, uint8_t ID)
     return type;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : BIT
- * Description   : Return bit B in byte A
- * This is not a public API as it is called by other API functions.
- *
- *END**************************************************************************/
+/*!
+ * @brief Return bit B in byte A.
+ */
 static inline uint8_t BIT(uint8_t A,
                           uint8_t B)
 {
     return (uint8_t) ((A >> B) & 0x01U);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : LINFlexD_DRV_ProcessParity
- * Description   : Makes or checks parity bits. If action is checking parity, the function
- * returns ID value if parity bits are correct or 0xFF if parity bits are incorrect. If action
- * is making parity bits, then from input value of ID, the function returns PID.
- * This is not a public API as it is called by other API functions.
- *
- * Implements    : LINFlexD_DRV_ProcessParity_Activity
- *END**************************************************************************/
+/*!
+ * @brief Makes or checks parity bits. If action is checking parity, the function returns ID value if parity bits are correct or 0xFF if parity bits are incorrect. If action is making parity bits, then from input value of ID, the function returns PID.
+ */
 uint8_t LINFlexD_DRV_ProcessParity(uint8_t PID,
                               uint8_t typeAction)
 {

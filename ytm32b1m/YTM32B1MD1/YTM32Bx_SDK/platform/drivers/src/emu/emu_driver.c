@@ -8,6 +8,13 @@
 /*!
  * @file emu_driver.c
  * @version 1.4.1
+ *
+ * @brief EMU Driver - implementation of the public EMU_DRV_* API.
+ *
+ * This file implements the application-level ECC Management Unit driver
+ * declared in emu_driver.h. Each public API resolves the EMU instance base
+ * address and delegates register programming to the internal helpers in
+ * emu_hw_access.h.
  */
 
 #include "emu_driver.h"
@@ -20,21 +27,16 @@
 static EMU_Type *g_emuBase[EMU_INSTANCE_COUNT] = EMU_BASE_PTRS;
 
 /*******************************************************************************
- * Code
+ * Internal Helpers
  ******************************************************************************/
 
-/*FUNCTION**********************************************************************
- *
- * Function Name :     EMU_DRV_SetConfig
- * Description   :     This function configures the EMU with all the user
- *  defined in-out mappings.
- * 
- *END**************************************************************************/
+/*!
+ * @brief Apply the caller-provided channel configuration to one EMU instance.
+ */
 static void EMU_DRV_SetConfig(uint32_t instance, const emu_config_t *configPtr)
 {
     DEV_ASSERT(instance < EMU_INSTANCE_COUNT);
     DEV_ASSERT(configPtr != NULL);
-
 
     uint8_t channel = (uint8_t)configPtr->channel;
     uint32_t injectErrAddr = configPtr->injectErrAddr;
@@ -47,99 +49,64 @@ static void EMU_DRV_SetConfig(uint32_t instance, const emu_config_t *configPtr)
 
     EMU_Type *const base = g_emuBase[instance];
 
-   
-    /* Set error inject address.*/
+    /* Program the target address used to trigger the ECC test event. */
     EMU_SetErrInjectAddr(base, channel, injectErrAddr);
     if (injectBitsType == EMU_INJECT_BITS_TYPE_CHK)
     {
-        /* Set error inject check bit.*/
-        if(chkBit != NO_INJECTION_ERROR)
+        /* Program the requested single check-bit injection. */
+        if (chkBit != NO_INJECTION_ERROR)
         {
             EMU_SetErrInjectChkbit(base, channel, chkBit);
         }
-    } else if (injectBitsType == EMU_INJECT_BITS_TYPE_DATA)
+    }
+    else if (injectBitsType == EMU_INJECT_BITS_TYPE_DATA)
     {
-        /* Set error inject data.*/
-        if(dataBit != NO_INJECTION_ERROR)
+        /* Program the requested single data-bit injection. */
+        if (dataBit != NO_INJECTION_ERROR)
         {
             EMU_SetErrInjectData(base, channel, dataBit);
         }
-    } else if (injectBitsType == EMU_INJECT_BITS_TYPE_MIXTURE)
+    }
+    else if (injectBitsType == EMU_INJECT_BITS_TYPE_MIXTURE)
     {
-        /* Set error inject check bit.*/
-        if(chkBit != NO_INJECTION_ERROR)
+        /* Program the requested check-bit portion of the mixed injection. */
+        if (chkBit != NO_INJECTION_ERROR)
         {
             EMU_SetErrInjectChkbit(base, channel, chkBit);
         }
-        /* Set error inject data bit.*/
-        if(dataBit != NO_INJECTION_ERROR)
+        /* Program the requested data-bit portion of the mixed injection. */
+        if (dataBit != NO_INJECTION_ERROR)
         {
             EMU_SetErrInjectData(base, channel, dataBit);
         }
-    }else
+    }
+    else
     {
-        /* Do nothing */
+        /* Leave the injection path unchanged for unsupported selector values. */
     }
 
     if (true == interruptEnable)
     {
-        /* Enable interrupt signal bit.*/
+        /* Enable both single-bit and double-bit interrupt signaling. */
         EMU_EnableInterruptSignalBit(base, channel);
-        /* Enable interrupt double bit.*/
         EMU_EnableInterruptDoubleBit(base, channel);
-    } else
+    }
+    else
     {
-        /* Disable interrupt signal bit.*/
+        /* Disable both single-bit and double-bit interrupt signaling. */
         EMU_DisableInterruptSignalBit(base, channel);
-        /* Disable interrupt double bit.*/
         EMU_DisableInterruptDoubleBit(base, channel);
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name :     EMU_DRV_InjectError
- * Description   :     This function inject error .
- * 
- *END**************************************************************************/
-void EMU_DRV_InjectError(uint32_t instance, uint32_t channel,uint32_t injectErrAddr,emu_databit_type dataMulti,emu_chkbit_type chkMulti)
-{
-    DEV_ASSERT(instance < EMU_INSTANCE_COUNT);
-    DEV_ASSERT(channel < EMU_EICHD_COUNT);
+/*******************************************************************************
+ * Initialization & De-initialization
+ ******************************************************************************/
 
-    EMU_Type *const base = g_emuBase[instance];
-
-    EMU_Disable(base, (uint8_t)channel);
-    
-    /* Set error injection address.*/
-    EMU_SetErrInjectAddr(base, (uint8_t)channel, injectErrAddr);
-   
-    /* Set multiple error injection check bits.*/
-    if(chkMulti != NO_INJECTION_ERROR)
-    {
-        EMU_SetErrInjectChkMulti(base, (uint8_t)channel, chkMulti);
-    }
-
-    /* Set multiple error injection data bits.*/
-    if(dataMulti != NO_INJECTION_ERROR)
-    {
-        EMU_SetErrInjectDataMulti(base, (uint8_t)channel, dataMulti);
-    }
-
-    EMU_Enable(base, (uint8_t)channel);
-}
-
-/*FUNCTION**********************************************************************
- *
- * Function Name :     EMU_DRV_Init
- * Description   :     This function first resets the source triggers of all EMU target modules
- * to their default values, then configures the EMU with all the user defined in-out mappings.
- * This example shows how to set up the emu_user_config_t parameters and how to call the
- * EMU_DRV_Init() function with the required parameters:
- *   emu_config_t             emuConfig;
- * 
- *   EMU_DRV_Init(instance, &trngConfig0);
- *END**************************************************************************/
+/*!
+ * @brief Reset an EMU instance, apply one channel configuration, and control
+ *        the initial enable state.
+ */
 void EMU_DRV_Init(uint32_t instance, const emu_config_t *configPtr, uint32_t startFlag)
 {
     DEV_ASSERT(instance < EMU_INSTANCE_COUNT);
@@ -148,45 +115,85 @@ void EMU_DRV_Init(uint32_t instance, const emu_config_t *configPtr, uint32_t sta
     EMU_Type *const base = g_emuBase[instance];
     uint8_t injectErrChannel = (uint8_t)configPtr->channel;
 
-    /* Reset all the register of EMU module. */
+    /* Restore the full EMU instance to reset state before programming it. */
     EMU_Init(base);
-    
+
+    /* Apply the caller-provided configuration for the selected channel. */
     EMU_DRV_SetConfig(instance, configPtr);
 
     if (startFlag == 1U)
     {
+        /* Start injection immediately for the configured channel. */
         EMU_Enable(base, injectErrChannel);
     }
     else
     {
+        /* Leave the configured channel disabled until the caller enables it. */
         EMU_Disable(base, injectErrChannel);
     }
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_DRV_Deinit
- * Description   : Reset to default values the source triggers corresponding to all target modules.
- *
- *END**************************************************************************/
+/*!
+ * @brief Disable the selected channel and restore the EMU instance to reset
+ *        state.
+ */
 void EMU_DRV_DeInit(uint32_t instance, uint32_t channel)
 {
     DEV_ASSERT(instance < EMU_INSTANCE_COUNT);
     DEV_ASSERT(channel < EMU_EICHD_COUNT);
 
     EMU_Type *const base = g_emuBase[instance];
-    /* Disable the EMU module. */
+
+    /* Disable the requested channel before clearing the instance state. */
     EMU_Disable(base, (uint8_t)channel);
-    /* Reset all the register of EMU module. */
+    /* Reset every EMU register back to its default value. */
     EMU_Init(base);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_DRV_GetErrReportChkbit
- * Description   : Get error report of check bit
- *
- *END**************************************************************************/
+/*******************************************************************************
+ * Error Injection Control
+ ******************************************************************************/
+
+/*!
+ * @brief Program raw multi-bit injection masks for one channel and re-enable
+ *        EMU injection.
+ */
+void EMU_DRV_InjectError(uint32_t instance, uint32_t channel, uint32_t injectErrAddr,
+                         emu_databit_type dataMulti, emu_chkbit_type chkMulti)
+{
+    DEV_ASSERT(instance < EMU_INSTANCE_COUNT);
+    DEV_ASSERT(channel < EMU_EICHD_COUNT);
+
+    EMU_Type *const base = g_emuBase[instance];
+
+    EMU_Disable(base, (uint8_t)channel);
+
+    /* Load the new target address for the injected error. */
+    EMU_SetErrInjectAddr(base, (uint8_t)channel, injectErrAddr);
+
+    /* Load the raw check-bit mask when the caller requests it. */
+    if (chkMulti != NO_INJECTION_ERROR)
+    {
+        EMU_SetErrInjectChkMulti(base, (uint8_t)channel, chkMulti);
+    }
+
+    /* Load the raw data-bit mask when the caller requests it. */
+    if (dataMulti != NO_INJECTION_ERROR)
+    {
+        EMU_SetErrInjectDataMulti(base, (uint8_t)channel, dataMulti);
+    }
+
+    EMU_Enable(base, (uint8_t)channel);
+}
+
+/*******************************************************************************
+ * Error Report & Counter Access
+ ******************************************************************************/
+
+/*!
+ * @brief Convert the latched syndrome for one channel into a reported
+ *        check-bit index.
+ */
 uint8_t EMU_DRV_GetErrReportChkbit(uint32_t instance, uint8_t channel)
 {
     uint8_t chkbit = 0;
@@ -201,7 +208,8 @@ uint8_t EMU_DRV_GetErrReportChkbit(uint32_t instance, uint8_t channel)
         if (value == 0U)
         {
             break;
-        } else
+        }
+        else
         {
             chkbit++;
         }
@@ -209,72 +217,9 @@ uint8_t EMU_DRV_GetErrReportChkbit(uint32_t instance, uint8_t channel)
     return chkbit;
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_DRV_ClearInterruptFlagSignalBit
- * Description   : Clear interrupt flag of signal bit.
- *
- *END**************************************************************************/
-void EMU_DRV_ClearInterruptFlagSignalBit(uint32_t instance, uint8_t channel)
-{
-    DEV_ASSERT(instance < EMU_INSTANCE_COUNT);
-    DEV_ASSERT(channel < EMU_EICHD_COUNT);
-    EMU_Type *const base = g_emuBase[instance];
-
-    EMU_ClearInterruptFlagSignalBit(base, channel);
-}
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_DRV_EnableInterruptDoubleBit
- * Description   : Enale interrupt  of double bit.
- *
- *END**************************************************************************/
-void EMU_DRV_EnableInterruptDoubleBit(uint32_t instance, uint8_t channel)
-{
-    DEV_ASSERT(instance < EMU_INSTANCE_COUNT);
-    DEV_ASSERT(channel < EMU_EICHD_COUNT);
-    EMU_Type *const base = g_emuBase[instance];
-
-    EMU_EnableInterruptDoubleBit(base, channel);
-}
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_DRV_DisableInterruptDoubleBit
- * Description   : Disable interrupt  of double bit.
- *
- *END**************************************************************************/
-void EMU_DRV_DisableInterruptDoubleBit(uint32_t instance, uint8_t channel)
-{
-    DEV_ASSERT(instance < EMU_INSTANCE_COUNT);
-    DEV_ASSERT(channel < EMU_EICHD_COUNT);
-    EMU_Type *const base = g_emuBase[instance];
-
-    EMU_DisableInterruptDoubleBit(base, channel);
-}
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_DRV_ClearInterruptFlagDoubleBit
- * Description   : Clear interrupt flag of double bit.
- *
- *END**************************************************************************/
-void EMU_DRV_ClearInterruptFlagDoubleBit(uint32_t instance, uint8_t channel)
-{
-    DEV_ASSERT(instance < EMU_INSTANCE_COUNT);
-    DEV_ASSERT(channel < EMU_EICHD_COUNT);
-    EMU_Type *const base = g_emuBase[instance];
-
-    EMU_ClearInterruptFlagDoubleBit(base, channel);
-}
-
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_DRV_GetErrReportCnt
- * Description   : Get error report count.
- *
- *END**************************************************************************/
+/*!
+ * @brief Read the error report counter for one channel.
+ */
 uint32_t EMU_DRV_GetErrReportCnt(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < EMU_INSTANCE_COUNT);
@@ -284,12 +229,9 @@ uint32_t EMU_DRV_GetErrReportCnt(uint32_t instance, uint8_t channel)
     return EMU_GetErrReportCnt(base, channel);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_DRV_ClearErrReportCnt
- * Description   : Clear error report count.
- *
- *END**************************************************************************/
+/*!
+ * @brief Clear the error report counter for one channel.
+ */
 void EMU_DRV_ClearErrReportCnt(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < EMU_INSTANCE_COUNT);
@@ -298,12 +240,9 @@ void EMU_DRV_ClearErrReportCnt(uint32_t instance, uint8_t channel)
     EMU_ClearErrReportCnt(base, channel);
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_DRV_GetErrReportAddr
- * Description   : Get error report address.
- *
- *END**************************************************************************/
+/*!
+ * @brief Read the address latched for the reported ECC event on one channel.
+ */
 uint32_t EMU_DRV_GetErrReportAddr(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < EMU_INSTANCE_COUNT);
@@ -311,15 +250,63 @@ uint32_t EMU_DRV_GetErrReportAddr(uint32_t instance, uint8_t channel)
 
     EMU_Type *const base = g_emuBase[instance];
     return EMU_GetErrReportAddr(base, channel);
-
 }
 
-/*FUNCTION**********************************************************************
- *
- * Function Name : EMU_GetChannelSBInterruptFlag
- * Description   : This function gets single bit error correct check interrupt flag.
- *
- *END**************************************************************************/
+/*******************************************************************************
+ * Interrupt Status & Control
+ ******************************************************************************/
+
+/*!
+ * @brief Clear the single-bit correction interrupt flag for one channel.
+ */
+void EMU_DRV_ClearInterruptFlagSignalBit(uint32_t instance, uint8_t channel)
+{
+    DEV_ASSERT(instance < EMU_INSTANCE_COUNT);
+    DEV_ASSERT(channel < EMU_EICHD_COUNT);
+    EMU_Type *const base = g_emuBase[instance];
+
+    EMU_ClearInterruptFlagSignalBit(base, channel);
+}
+
+/*!
+ * @brief Enable the double-bit interrupt path for one channel.
+ */
+void EMU_DRV_EnableInterruptDoubleBit(uint32_t instance, uint8_t channel)
+{
+    DEV_ASSERT(instance < EMU_INSTANCE_COUNT);
+    DEV_ASSERT(channel < EMU_EICHD_COUNT);
+    EMU_Type *const base = g_emuBase[instance];
+
+    EMU_EnableInterruptDoubleBit(base, channel);
+}
+
+/*!
+ * @brief Disable the double-bit interrupt path for one channel.
+ */
+void EMU_DRV_DisableInterruptDoubleBit(uint32_t instance, uint8_t channel)
+{
+    DEV_ASSERT(instance < EMU_INSTANCE_COUNT);
+    DEV_ASSERT(channel < EMU_EICHD_COUNT);
+    EMU_Type *const base = g_emuBase[instance];
+
+    EMU_DisableInterruptDoubleBit(base, channel);
+}
+
+/*!
+ * @brief Clear the double-bit interrupt flag for one channel.
+ */
+void EMU_DRV_ClearInterruptFlagDoubleBit(uint32_t instance, uint8_t channel)
+{
+    DEV_ASSERT(instance < EMU_INSTANCE_COUNT);
+    DEV_ASSERT(channel < EMU_EICHD_COUNT);
+    EMU_Type *const base = g_emuBase[instance];
+
+    EMU_ClearInterruptFlagDoubleBit(base, channel);
+}
+
+/*!
+ * @brief Query the single-bit correction interrupt flag for one channel.
+ */
 uint8_t EMU_DRV_GetChannelSBInterruptFlag(uint32_t instance, uint8_t channel)
 {
     DEV_ASSERT(instance < EMU_INSTANCE_COUNT);
